@@ -3,7 +3,8 @@ Require Import ZArith List String Omega.
 From Coq Require Import
  Setoids.Setoid
  Classes.Morphisms
- Relations.Relations.
+ Relations.Relations
+ Relations.Relation_Operators.
 
 From ExtLib Require Import
      Structures.Monads
@@ -15,9 +16,12 @@ Require Coq.Structures.OrderedTypeEx.
 Require Import ZMicromega.
 Require Import Heapster.Int64.
 
+Import ListNotations.
 Import MonadNotation.
 Open Scope monad_scope.
+Open Scope list_scope.
 
+Set Implicit Arguments.
 
 (* Maps from Z to values.  Used for contexts and environments *)
 Module ZM := FMapAVL.Make(Coq.Structures.OrderedTypeEx.Z_as_OT).
@@ -58,14 +62,13 @@ Definition tgt := (lbl * ctxt)%type.
 Inductive term :=
 | Jmp (t:tgt)
 | Brz (a:arg) (t1 t2:tgt)
-| Ret (a:arg).
+| Ret (a:arg)
+| Hlt (a:arg).
 
 Inductive cd  :=
 | T (t:term)
 | I (s:stmt) (c:cd)
 .
-
-Definition prog := ZMap cd.
 
 (* Operational Semantics ---------------------------------------------------- *)
 
@@ -85,7 +88,7 @@ Definition frame := (regs * tag * reg * cd)%type.
 
 Definition stack := list frame.
 
-Definition used := list Z.  (* Maybe make a set? *)
+Definition used := list tag.  (* Maybe make a set? *)
 
 Definition config := (heap * used * stack * regs * tag * cd)%type.
 
@@ -140,7 +143,7 @@ Inductive eval_arg (r:regs) (a:arg) : val -> Prop :=
 | eval_a : forall v (Heq: eval_arg_f r a = Some v), eval_arg r a v.
 
 
-Definition eval_binding (R:regs) (r:Z) (a:arg) (oR':option regs) : option regs := 
+Definition eval_binding (R:regs) (r:Z) (a:arg) (oR':option regs) : option regs :=
   v <- eval_arg_f R a ;;
   R' <- oR' ;;
   ret (ZM.add r v R').
@@ -159,7 +162,7 @@ Inductive eval_op : op -> val -> val -> val -> Prop :=
 | eval_ltt : forall (x y : i64) (Heq: Int64.lt x y = true), eval_op Lt x y Int64.one
 | eval_ltf : forall (x y : i64) (Heq: Int64.lt x y = false), eval_op Lt x y Int64.zero.
 
-Definition used_in_heapval (h:hv) (l:tag) : bool := 
+Definition used_in_heapval (h:hv) (l:tag) : bool :=
   match h with
   | Code _ => false
   | Uninit l' _ => Z.eqb l l'
@@ -174,8 +177,6 @@ Definition used_in_heap (H:heap) (l:tag) : bool :=
 
 Definition fresh_for_heap (H:heap) (l:tag) : bool :=
   negb (used_in_heap H l).
-
-Check List.fold_left.
 
 Definition lbls_in_stack (s:stack) : list tag :=
   List.map (fun '(_, l', _, _) => l') s.
@@ -285,6 +286,254 @@ Inductive step : config -> config -> Prop :=
 
 .
 
+(* NOTE: There is no transition rule for Hlt *)
+
+
+(* Defining characteristics of configurations ------------------------------- *)
+
+Definition cd_ (C:config) :=
+  let '(_, _, _, _, _, c) := C in c.
+
+Inductive finished (x:i64) : config -> Prop :=
+| finished_c : forall H u S R l a,
+    eval_arg R a x ->
+    finished x (H, u, S, R, l, T (Hlt a)).
+
+Definition pc_at_cd (c:cd) : config -> Prop :=
+  fun C => cd_ C = c.
+
+
+Definition stuck (c:config) :=
+ (~ exists x, finished x c) /\ ~ exists c', step c c'.
+
+(* Stream of configuration semantics ---------------------------------------- *)
+
+Inductive streamF {X:Type} (A:Type) :=
+| snil : streamF A
+| scons : A -> X -> streamF A.
+
+
+CoInductive stream (A:Type) := go {
+  observe : @streamF (stream A) A
+}.
+
+Notation "#" := (@go _ (@snil _ _)).
+Notation "x >> s" := (@go _ (@scons _ _ x s)) (at level 100).
+
+Inductive runF (P : config -> stream config -> Prop) : config -> stream config -> Prop :=
+ | run_done : forall c1 c2, ~ step c1 c2 -> runF P c1 (c1 >> #)
+ | run_step : forall c1 c2 s, step c1 c2 -> P c2 s -> runF P c1 (c1 >> s)
+.
+
+CoInductive runC (c:config) (s:stream config) : Prop := goRun {
+  run_ : runF runC c s
+}.
+
+
+Module Permissions.
+
+  (* Syntax of permission expression. *)
+
+  (* Should this be coinductive? *)
+  Inductive splitting_set : Set :=
+  | s_var (n:N)
+  | s_all
+  | s_none
+  | s_1 (s:splitting_set)
+  | s_0 (s:splitting_set)
+  | s_prod (s1 s2:splitting_set)
+  | s_diff (s1 s2:splitting_set)
+  .
+
+  Inductive cnd : Set :=
+  | cnd_eq (n:Z)
+  | cnd_neq (ns:list Z)
+  .
+
+  Inductive lifetime : Set :=
+  | l_before (t:tag)
+  | l_after  (t:tag)
+  | l_prod   (t1 t2:tag)
+  | l_always
+  .
+
+  Inductive value_perm : Set :=
+  | vp_word
+  | vp_none
+  | vp_ptr  (S:splitting_set) (θ:value_perm)
+  | vp_free (n:N)
+  | vp_cnd  (C:cnd) (θ:value_perm)
+  | vp_offs (e1 e2 : arg) (θ:value_perm)
+  | vp_life (L:lifetime) (θ:value_perm)
+  | vp_prod (θ1 θ2 : value_perm)
+  | vp_mu   (θ:value_perm)
+  | vp_fv   (x:nat)
+  | vp_bv   (y:nat)  (* de Bruijn index *)
+  .
+
+  Inductive perm_atom : Set :=
+  | p_val (r:reg) (θ:value_perm)    (* x : θ *)
+  | p_deref (x:reg) (e:arg)         (* x = *e *)
+  | p_eq  (r:reg) (e:arg)           (* r = e *)
+  | p_neq (r:reg) (e:arg)           (* r <> e *)
+  .
+
+  Definition perm_set := list perm_atom.
+
+
+  (* Denotation of permissions *)
+  Record perm := mkPerm {
+    view : config -> config -> Prop;  (* PER over configs *)
+    upd  : config -> config -> Prop;  (* allowed transitions *)
+  }.
+
+  Record goodPerm (p:perm) : Prop := {
+     view_PER   : PER config (view p) ;
+     upd_PO     : PreOrder (upd p) ;
+  }.
+
+  Record lte_perm (p q:perm) : Prop := {
+     view_inc : forall x y, (view q) x y -> (view p) x y;
+     upd_inc : forall x y, (upd p) x y -> (upd q) x y;
+  }.
+
+  Definition join_perm (p q:perm) : perm := {|
+     view := clos_trans config (fun x y => (view p x y) \/ (view q x y)) ;  (* disjunction *)
+     upd  := fun x y => (upd p x y) /\ (upd q x y) ;    (* conjunction *)
+  |}.
+
+  Definition bottom_perm : perm := {|
+     view := fun x y => False ;
+     upd  := fun x y => True ;
+  |}.
+
+  Definition top_perm : perm := {|
+     view := fun x y => True ;
+     upd  := fun x y => False ;
+  |}.
+
+  Record sep_at (p q:perm) (x:config) : Prop := {
+    upd1: forall y:config, (upd p) x y -> (view q) x y;
+    upd2: forall y:config, (upd q) x y -> (view p) x y;
+  }.
+
+  Definition separate (p q : perm) : Prop := forall x, sep_at p q x.
+
+  Inductive pairwise {A:Type} (P : A -> A -> Prop) : list A -> Prop :=
+  | pw_nil : pairwise P nil
+  | pw_one : forall (a:A), pairwise P [a]
+  | pw_cons : forall (a:A) (l:list A), pairwise P l -> (forall b, In b l -> P a b) -> pairwise P (a::l)
+  .
+
+  Record goodPermSet (Π : list perm ) : Prop := {
+    good_atoms : forall p, In p Π -> goodPerm p ;
+    apart : pairwise separate Π ;
+  }.
+
+  Lemma separate_anti_monotone : forall (p1 p2 q : perm) (HSep: separate p2 q) (Hlt: lte_perm p1 p2),
+      separate p1 q.
+  Proof.
+    intros p1 p2 q HSep Hlt.
+    destruct Hlt.
+    unfold separate in HSep.
+    unfold separate.
+    intros. constructor; intuition.
+    apply HSep. intuition.
+    apply view_inc0. apply HSep. assumption.
+  Qed.
+
+  (* Permission difference:  if p <= q then q - p is defined and p * (q - p) = q *)
+  (* implies fractional permission *)
+
+  (* TODO: denotation of permission syntax *)
+  Inductive perm_denote : perm_atom -> perm -> Prop := .
+
+
+End Permissions.
+
+Import Permissions.
+Section RelationalSemantics.
+  (* Definition config := (heap * used * stack * regs * tag * cd)%type. *)
+
+Definition judgment X := perm_set -> X -> perm_set -> Prop.
+
+Inductive term_judgment : judgment term :=
+    (* Should have:  Π |- a *)
+  | j_halt : forall (x:val) Π, term_judgment Π (Hlt (Lit x)) Π.
+
+
+(* VACUOUS, SO TRIVIALLY SOUND! *)
+Inductive stmt_judgment : judgment stmt := .
+
+(*
+Definition judgment X := perm_set -> X -> list perm_set -> Prop.
+Inductive code_judgment : judgment cd :=
+| trm_judgment : forall Π Πl t, term_judgment Π t Πl -> code_judgment Π (T t) Πl
+| stm_judgment : forall Π1 Πl1 Πl2 s cd, stmt_judgment Π1 s Πl1
+                               -> (forall Π Πl, In Π Πl1 -> code_judgment Π cd Πl /\
+                                                    (forall x, In x Πl -> In x Πl2))
+                               -> code_judgment Π1 (I s cd) Πl2
+.
+*)
+
+Inductive code_judgment : judgment cd :=
+| trm_judgment : forall Π Πl t, term_judgment Π t Πl -> code_judgment Π (T t) Πl
+| stm_judgment : forall Π1 Π2 Π3 s cd, stmt_judgment Π1 s Π2
+                                    -> code_judgment Π2 cd Π3
+                                    -> code_judgment Π1 (I s cd) Π3
+.
+
+Definition list_equiv {A} (X Y : list A) := List.incl X Y /\ List.incl Y X.
+
+Definition sound_code_judgment : (judgment cd) -> Prop :=
+  fun J : judgment cd =>
+    forall Πin prog Πout, J Πin (prog:cd) Πout ->
+      forall (P : perm_atom), In P Πin ->
+                    forall (p:perm), perm_denote P p ->
+                                forall (C:config)
+                                  (Hcd: cd_ C = prog)
+                                  (HC: (view p) C C),
+         (exists x, finished x C /\ list_equiv Πin Πout)
+         \/
+         (forall (q:perm), sep_at p q C ->
+                      forall C', step C C' ->
+                            exists Π' P', In P' Π'
+                                     /\ J Π' (cd_ C') Πout
+                                     /\ (upd p C C')
+                                     /\ forall (p':perm), perm_denote P' p'
+                                                    -> (view p') C' C'
+                                                      /\ sep_at p' q C').
+
+
+End RelationalSemantics.
+
+Lemma sound_code_judgment_Rules : sound_code_judgment code_judgment.
+Proof.
+  unfold sound_code_judgment.
+  intros.
+  induction H.
+  - inversion H. left. exists x. split. 
+    destruct C as [[[[[Hp u] stk]  R] l] cd ]. subst. simpl in Hcd. subst.
+    econstructor. econstructor. simpl. reflexivity.
+    split. apply incl_refl. apply incl_refl.
+
+  - right. intros. inversion H. (* stmt_judgment is VACUOUS!! *)
+Abort.
+
+Section Examples.
+
+
+Lemma looping_config :
+  forall H lbl args u s R l,
+    lookup lbl H = Some (Code (T (Jmp (lbl, args)))) ->
+    eval_ctxt R args R ->
+    step (H, u, s, R, l, T (Jmp (lbl, args))) (H, u, s, R, l, T (Jmp (lbl, args))).
+Proof.
+  intros H lbl0 args u s R l H0 H1.
+  apply step_jmp; assumption.
+Qed.
+
+
 
 Lemma used_store_f_monotonic : forall H a v l H'
                                  (Hused: used_in_heap H l = true)
@@ -328,92 +577,3 @@ Proof.
     destruct (used_in_heap H' l) eqn:Hheap'.
     reflexivity. assumption.
 Admitted.
-
-Inductive finished (x:i64) : config -> Prop :=
-| finished_c : forall H u R l a,
-    eval_arg R a x ->
-    finished x (H, u, nil, R, l, T (Ret a)).
-
-Definition stuck (c:config) :=
- (~ exists x, finished x c) /\ ~ exists c', step c c'.
-
-Inductive streamF (A:Type) (X:Type) :=
-| snil : streamF A X
-| scons : A -> X -> streamF A X.
-
-
-CoInductive stream (A:Type) := go {
-  observe : streamF A (stream A)
-}.
-
-Set Implicit Arguments.
-
-Notation "#" := (go _ (snil _ _)).
-Notation "x >> s" := (go _ (scons _ _ x s)) (at level 100).
-
-
-Inductive runF (P : config -> stream config -> Prop) : config -> stream config -> Prop :=
- | run_finished : forall c1 x, finished x c1 -> runF P c1 (c1 >> #)
- | run_step : forall c1 c2 s, step c1 c2 -> P c2 s -> runF P c1 (c1 >> s)
-.
-
-CoInductive runC (c:config) (s:stream config) : Prop := goRun {
-  run_ : runF runC c s
-}.
-
-
-Lemma looping_config :
-  forall H lbl args u s R l,
-    lookup lbl H = Some (Code (T (Jmp (lbl, args)))) ->
-    eval_ctxt R args R ->
-    step (H, u, s, R, l, T (Jmp (lbl, args))) (H, u, s, R, l, T (Jmp (lbl, args))).
-Proof.
-  intros H lbl0 args u s R l H0 H1.
-  apply step_jmp; assumption.
-Qed.
-
-
-Section Permissions.
-
-  Record perm := mkPerm {
-    view : heap -> heap -> Prop;  (* PER over heaps *)
-    upd : heap -> heap -> Prop;   (* allowed transitions *)
-  }.
-
-  Record goodPerm (p:perm) : Prop := {
-     view_PER   : PER heap (view p) ;
-     upd_PO     : PreOrder (upd p) ;
-     upd_proper : Proper ((view p) ==> (view p) ==> iff) (upd p);
-  }.
-
-
-
-  Record lte_perm (p q:perm) : Prop := {
-     view_inc : forall x y, (view q) x y -> (view p) x y;
-     upd_inc : forall x y, (upd p) x y -> (upd q) x y;
-  }.
-
-  Record sep_at (p q:perm) (x:heap) : Prop := {
-    upd1: forall y:heap, (upd p) x y -> (view q) x y;
-    upd2: forall y:heap, (upd q) x y -> (view p) x y;
-  }.
-
-
-  Definition separate (p q : perm) : Prop := forall x, sep_at p q x.
-
-  Lemma separate_anti_monotone : forall (p1 p2 q : perm) (HSep: separate p2 q) (Hlt: lte_perm p1 p2),
-      separate p1 q.
-  Proof.
-    intros p1 p2 q HSep Hlt.
-    destruct Hlt.
-    unfold separate in HSep.
-    unfold separate.
-    intros. constructor; intuition.
-    apply HSep. intuition.
-    apply view_inc0. apply HSep. assumption.
-  Qed.
-
-
-
-
-End Permissions.
