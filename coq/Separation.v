@@ -30,9 +30,21 @@ Section Permissions.
   }.
 
   Class goodPerm (p:perm) : Prop := {
-     view_PER   :> PER (view p) ;
-     upd_PO     :> PreOrder (upd p) ;
+     view_PER          :> PER (view p) ;   (* the view is a PER *)
+(*
+     upd_transitive    :> Transitive (upd p) ;
+*)
+     upd_PO  :> PreOrder (upd p) ;   (* the update relation is a partial order *)
+     (* SAZ: This is too strong because this + separation implies that (view p) is reflexive.
+        Reflexivity is too much?  *)
+
+     (* SAZ: *)
+     view_bisim  : forall x1 x2 y1, view p x1 x2
+                               -> upd p x1 y1
+                               -> view p y1 y1
+                               -> exists y2, view p y1 y2 /\ upd p x2 y2 ;
   }.
+
 
   Record lte_perm (p q:perm) : Prop := {
      view_inc : forall x y, (view q) x y -> (view p) x y;
@@ -54,10 +66,13 @@ Section Permissions.
      upd  := fun x y => False ;
   |}.
 
-  Record sep_at (x:S) (p q:perm) : Prop := {
-    upd1: forall y:S, (upd p) x y -> (view q) x y;
-    upd2: forall y:S, (upd q) x y -> (view p) x y;
-  }.
+  Record sep_at (x:S) (p q:perm) : Prop :=
+    {
+      inp : view p x x ;
+      inq : view q x x ;
+      upd1: forall x' y:S, view p x x' -> (upd p) x' y -> (view q) x' y;
+      upd2: forall x' y:S, view q x x' -> (upd q) x' y -> (view p) x' y;
+    }.
 
   Definition separate (p q : perm) : Prop := forall x, sep_at x p q.
 
@@ -68,20 +83,22 @@ Section Permissions.
     destruct H as [H0 H1]. split; eauto.
   Qed.
 
+
+  (* If upd is not reflexive, then this lemma is not true, but maybe not ever needed? *)
   Lemma sep_at_refl1 : forall x p q `{goodPerm q}, sep_at x p q -> (view p) x x.
   Proof.
     intuition.
     destruct H0 as [G1 G2].
-    apply G2. reflexivity.
-  Qed.
+    destruct H.
+    (* apply G2. reflexivity. *)
+  Abort.
 
+  (* SAZ: same here *)
   Lemma sep_at_refl2 : forall x p q `{goodPerm p}, sep_at x p q -> (view q) x x.
   Proof.
     intuition.
     destruct H0 as [G1 G2].
-    apply G1. reflexivity.
-  Qed.
-
+  Abort.
 
   Lemma separate_anti_monotone : forall (p1 p2 q : perm) (HSep: separate p2 q) (Hlt: lte_perm p1 p2),
       separate p1 q.
@@ -91,12 +108,41 @@ Section Permissions.
     unfold separate in HSep.
     unfold separate.
     intros. constructor; intuition.
+  Admitted.
+(*
     apply HSep. intuition.
     apply view_inc0. apply HSep. assumption.
   Qed.
+*)
 
+  Lemma PER_symm_refl : forall A (R : relation A) `{PER A R} (x y : A), R x y -> R x x.
+  Proof.
+    intuition.
+    eapply transitivity . apply H0. symmetry. assumption.
+  Qed.
+
+
+  (* This seems to be the key lemma for good separation properties.
+     SAZ: But... it doesn't seem to be provable.  Perhaps it just doesn't hold.
+
+   *)
+  Lemma eqv_sep_at : forall p `{goodPerm p} q `{goodPerm q} x y,
+    (view p) x y -> (sep_at x p q) <-> (sep_at y p q).
+  Proof.
+    intuition.
+    - split.
+      + admit. (* easy *)
+      + admit. (* easy *)
+      + intros.
+      assert (exists z, view p x z /\ upd p x z).
+  Abort.
 
 End Permissions.
+
+Section Typing.
+
+
+End Typing.
 
 
 Section CounterExample.
@@ -108,17 +154,20 @@ Section CounterExample.
   | pv11 : Pv 1 1
   | pv22 : Pv 2 2.
 
+
+  (* SAZ: Note this update relation is _not_ proper, which is what leads to the counterexample *)
   Inductive Pu : nat -> nat -> Prop :=
   | pu02 : Pu 0 2
   | purefl : forall x, Pu x x.
 
   Definition P := mkPerm Pv Pu.
 
+  (* If we omit the proper requirement, then we can prove the first two facts about perms. *)
   Instance goodPerm_Pv : goodPerm P.
   Proof.
-    repeat split. 
+    repeat split.
     - unfold Symmetric; intros. destruct H; econstructor.
-    - unfold Transitive; intros. simpl in *. destruct H; auto. inversion H0. econstructor. econstructor. remember 0 as x. inversion H0; subst; try solve econstructor. 
+    - unfold Transitive; intros. simpl in *. destruct H; auto. inversion H0. econstructor. econstructor. remember 0 as x. inversion H0; subst; try solve econstructor.
       econstructor. econstructor. inversion H. inversion H. inversion H.
     - unfold Reflexive. intros. simpl. apply purefl.
     - simpl. unfold Transitive. intros.
@@ -135,6 +184,7 @@ Section CounterExample.
     unfold Transitive. intros. eapply transitivity; eauto.
   Qed.
 
+  (* P and Q are separate at 1 *)
   Lemma sep_at1 : sep_at 1 P Q.
   Proof.
     split; intuition.
@@ -142,6 +192,7 @@ Section CounterExample.
     - simpl in *. subst. econstructor.
   Qed.
 
+  (* But they are not separate at 0 *)
   Lemma not_sep_at0 : not (sep_at 0 P Q).
   intuition. destruct H as [G1 G2].
   simpl in *.
@@ -152,16 +203,6 @@ Section CounterExample.
 
 
 
-  (* 
-  Lemma eqv_sep_at : forall p `{goodPerm nat p} q `{goodPerm nat q} x y,
-    (view p) x y -> (sep_at x p q) <-> (sep_at y p q).
-  Proof.
-    intuition.
-    - split; intros z G. destruct H2 as [Hp Hq]. admit.
-      admit.
-    - split; intros z G. destruct H2 as [Hp Hq]. 
-
-   *)
 
 End CounterExample.
 
