@@ -2,11 +2,12 @@ From Coq Require Import
      (* Classes.RelationClasses *)
      Relations.Relations
      Relations.Relation_Operators
-     Lists.List.
+     Lists.List
+     Logic.FunctionalExtensionality
+     Setoids.Setoid.
 
 Import ListNotations.
 
-Parameter T : Type.
 Parameter config : Type.
 
 (* Denotation of permissions *)
@@ -31,7 +32,7 @@ Record lte_perm (p q:perm) : Prop :=
 Definition join_perm (p q:perm) : perm :=
   {|
     view := fun x y => (view p x y) /\ (view q x y) ;
-    upd  := fun x y => clos_trans _ (fun x y => (upd p x y) \/ (upd q x y)) x y ;
+    upd  := clos_trans _ (fun x y => (upd p x y) \/ (upd q x y)) ;
   |}.
 
 Lemma join_good : forall p q,
@@ -48,11 +49,14 @@ Proof.
       constructor; auto.
     + destruct Hgoodp as [_ [_ ?]]. destruct Hgoodq as [_ [_ ?]].
       red. intros.
-      induction H.
-      * inversion H0; subst.
-Abort.
+      induction H; induction H0.
+      * destruct H, H0; econstructor 2; constructor; eauto.
+      * econstructor 2; eauto.
+      * econstructor 2; eauto. apply IHclos_trans2. constructor; auto.
+      * repeat (econstructor 2; eauto).
+Qed.
 
-Lemma join_lte_l : forall p q,
+Lemma lte_l_join : forall p q,
     lte_perm p (join_perm p q).
 Proof.
   intros. constructor.
@@ -60,12 +64,56 @@ Proof.
   - left; auto.
 Qed.
 
-Lemma join_lte_r : forall p q,
+Lemma lte_r_join : forall p q,
     lte_perm q (join_perm p q).
 Proof.
   intros. constructor.
   - intros x y []; auto.
   - left; auto.
+Qed.
+
+Definition meet_perm (p q:perm) : perm :=
+  {|
+    view := clos_trans _ (fun x y => (view p x y) \/ (view q x y)) ;
+    upd  := fun x y => (upd p x y) /\ (upd q x y) ;
+  |}.
+
+Lemma lte_meet_l : forall p q,
+    lte_perm (meet_perm p q) p.
+Proof.
+  intros. constructor.
+  - left; auto.
+  - intros x y []; auto.
+Qed.
+Lemma lte_meet_r : forall p q,
+    lte_perm (meet_perm p q) q.
+Proof.
+  intros. constructor.
+  - left; auto.
+  - intros x y []; auto.
+Qed.
+
+Lemma meet_good : forall p q,
+    goodPerm p -> goodPerm q -> goodPerm (meet_perm p q).
+Proof.
+  intros p q Hgoodp Hgoodq. constructor; simpl.
+  - constructor.
+    + destruct Hgoodp as [[? _] _]. destruct Hgoodq as [[? _] _].
+      intros x y H. induction H.
+      * constructor. destruct H; auto.
+      * econstructor 2; eauto.
+    + destruct Hgoodp as [[_ ?] _]. destruct Hgoodq as [[_ ?] _].
+      red. intros.
+      induction H; induction H0.
+      * destruct H, H0; econstructor 2; constructor; eauto.
+      * econstructor 2; eauto.
+      * econstructor 2; eauto. apply IHclos_trans2. constructor; auto.
+      * repeat (econstructor 2; eauto).
+  - constructor.
+    + destruct Hgoodp as [_ [? _]]. destruct Hgoodq as [_ [? _]].
+      constructor; auto.
+    + destruct Hgoodp as [_ [_ ?]]. destruct Hgoodq as [_ [_ ?]].
+      intros x y z [] []. split; eauto.
 Qed.
 
 Definition bottom_perm : perm :=
@@ -95,7 +143,70 @@ Record separate (p q:perm) : Prop :=
 Lemma separate_anti_monotone : forall (p1 p2 q : perm) (HSep: separate p2 q) (Hlt: lte_perm p1 p2),
     separate p1 q.
 Proof.
-  intros p1 p2 q HSep Hlt.
-  destruct HSep. destruct Hlt.
+  intros p1 p2 q [] [].
   constructor; auto.
+Qed.
+
+Record sep_at (p q:perm) (x:config) : Prop :=
+  {
+    upd1': forall y:config, (upd p) x y -> (view q) x y;
+    upd2': forall y:config, (upd q) x y -> (view p) x y;
+  }.
+
+Definition separate' (p q : perm) : Prop := forall x, sep_at p q x.
+
+Record eq_perm (p q : perm) : Prop :=
+  {
+    view_eq : forall x y, view q x y <-> view p x y;
+    upd_eq: forall x y, upd p x y <-> upd q x y;
+  }.
+Lemma eq_lte : forall p q, eq_perm p q <-> lte_perm p q /\ lte_perm q p.
+Proof.
+  intros [] [].
+  split; intros.
+  {
+    inversion H.
+    split; inversion H; constructor; intros; simpl in *.
+    rewrite <- view_eq0; auto.
+    rewrite <- upd_eq0; auto.
+    rewrite view_eq0; auto.
+    rewrite upd_eq0; auto.
+  }
+  {
+    destruct H. inversion H. inversion H0. constructor; simpl in *; split; intros; auto.
+  }
+Qed.
+
+Lemma sep_at_bottom: forall p x, sep_at bottom_perm p x.
+Proof.
+  intros. unfold bottom_perm. destruct p. constructor; simpl in *; intuition.
+Qed.
+
+Definition sep (p q : perm) : perm :=
+  {|
+    view := fun x y => (view p x y) /\ (view q x y) /\ sep_at p q x /\ sep_at p q y ;
+    upd := clos_trans _ (fun x y => (upd p x y) \/ (upd q x y)) ;
+  |}.
+
+Lemma sep_top : forall p, eq_perm (sep top_perm p) top_perm.
+Proof.
+  intros. unfold sep. destruct p. unfold top_perm. constructor; intros; simpl.
+  - split; intros; try contradiction.
+    destruct H. contradiction.
+  - split; intros.
+    + induction H; auto.
+    + constructor. left. auto.
+Qed.
+
+Lemma sep_bottom : forall p, goodPerm p -> eq_perm (sep bottom_perm p) p.
+Proof.
+  intros p Hgood. unfold sep. destruct p. unfold bottom_perm. constructor; intros; simpl.
+  - split; intros; auto.
+    + repeat split; auto; intros; simpl in *; contradiction.
+    + destruct H as [? [? ?]]; auto.
+  - split; intros; auto.
+    + induction H.
+      * destruct H; auto; contradiction.
+      * destruct Hgood. destruct upd_PO0. simpl in *. eapply preord_trans; eauto.
+    + constructor. right. auto.
 Qed.
