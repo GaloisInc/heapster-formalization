@@ -71,6 +71,15 @@ Proof.
   - intros x y []; auto.
   - left; auto.
 Qed.
+Lemma join_min : forall p q r (Hgood: goodPerm r),
+    lte_perm p r ->
+    lte_perm q r ->
+    lte_perm (join_perm p q) r.
+Proof.
+  intros p q r [_ [_ ?]] [] []. constructor; intros; simpl in *; auto.
+  induction H; eauto.
+  destruct H; auto.
+Qed.
 
 Definition meet_perm (p q:perm) : perm :=
   {|
@@ -91,6 +100,15 @@ Proof.
   intros. constructor.
   - left; auto.
   - intros x y []; auto.
+Qed.
+Lemma meet_max : forall p q r (Hgood : goodPerm r),
+    lte_perm r p ->
+    lte_perm r q ->
+    lte_perm r (meet_perm p q).
+Proof.
+  intros p q r [[_ ?] _] [] []. constructor; intros; simpl in *; auto.
+  induction H; eauto.
+  destruct H; auto.
 Qed.
 
 Lemma meet_good : forall p q,
@@ -182,15 +200,34 @@ Proof.
   intros. unfold bottom_perm. destruct p. constructor; simpl in *; intuition.
 Qed.
 
-Definition sep (p q : perm) : perm :=
+Definition sep_conj (p q : perm) : perm :=
   {|
     view := fun x y => (view p x y) /\ (view q x y) /\ sep_at p q x /\ sep_at p q y ;
     upd := clos_trans _ (fun x y => (upd p x y) \/ (upd q x y)) ;
   |}.
 
-Lemma sep_top : forall p, eq_perm (sep top_perm p) top_perm.
+Lemma separate_join_is_sep_conj: forall p q, separate' p q -> eq_perm (join_perm p q) (sep_conj p q).
 Proof.
-  intros. unfold sep. destruct p. unfold top_perm. constructor; intros; simpl.
+  intros. red in H. constructor; intros.
+  {
+    split; intros; simpl in *.
+    - destruct H0 as [? [? ?]]. auto.
+    - destruct H0. auto.
+  }
+  {
+    split; intros; simpl in *.
+    - induction H0.
+      + destruct H0; constructor; auto.
+      + econstructor 2; eauto.
+    - induction H0.
+      + destruct H0; constructor; auto.
+      + econstructor 2; eauto.
+  }
+Qed.
+
+Lemma sep_conj_top : forall p, eq_perm (sep_conj top_perm p) top_perm.
+Proof.
+  intros. unfold sep_conj. destruct p. unfold top_perm. constructor; intros; simpl.
   - split; intros; try contradiction.
     destruct H. contradiction.
   - split; intros.
@@ -198,9 +235,9 @@ Proof.
     + constructor. left. auto.
 Qed.
 
-Lemma sep_bottom : forall p, goodPerm p -> eq_perm (sep bottom_perm p) p.
+Lemma sep_conj_bottom : forall p, goodPerm p -> eq_perm (sep_conj bottom_perm p) p.
 Proof.
-  intros p Hgood. unfold sep. destruct p. unfold bottom_perm. constructor; intros; simpl.
+  intros p Hgood. unfold sep_conj. destruct p. unfold bottom_perm. constructor; intros; simpl.
   - split; intros; auto.
     + repeat split; auto; intros; simpl in *; contradiction.
     + destruct H as [? [? ?]]; auto.
@@ -209,4 +246,21 @@ Proof.
       * destruct H; auto; contradiction.
       * destruct Hgood. destruct upd_PO0. simpl in *. eapply preord_trans; eauto.
     + constructor. right. auto.
+Qed.
+
+Definition sep_disj (p q : perm) : perm :=
+  {|
+    view := fun x y => (clos_trans _ (fun x y => (view p x y) \/ (view q x y))) x y /\ sep_at p q x /\ sep_at p q y ;
+    upd := fun x y => (upd p x y) /\ (upd q x y) ;
+  |}.
+Lemma separate_meet_is_sep_disj: forall p q, separate' p q -> eq_perm (meet_perm p q) (sep_disj p q).
+Proof.
+  intros. red in H. constructor; intros.
+  {
+    split; intros; simpl in *; auto.
+    destruct H0 as [? [? ?]]. auto.
+  }
+  {
+    split; intros; simpl in *; auto.
+  }
 Qed.
