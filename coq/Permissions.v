@@ -173,6 +173,17 @@ Record sep_at (p q:perm) (x:config) : Prop :=
 
 Definition separate' (p q : perm) : Prop := forall x, sep_at p q x.
 
+Lemma separate_defns : forall p q, separate p q <-> separate' q p.
+Proof.
+  split; intros.
+  {
+    intro. destruct p, q. inversion H. constructor; auto.
+  }
+  {
+    red in H. destruct p, q. constructor; intros; apply H; auto.
+  }
+Qed.
+
 Record eq_perm (p q : perm) : Prop :=
   {
     view_eq : forall x y, view q x y <-> view p x y;
@@ -199,6 +210,8 @@ Lemma sep_at_bottom: forall p x, sep_at bottom_perm p x.
 Proof.
   intros. unfold bottom_perm. destruct p. constructor; simpl in *; intuition.
 Qed.
+Lemma separate_bottom : forall p, separate' bottom_perm p.
+Proof. intros p x. apply sep_at_bottom. Qed.
 
 Definition sep_conj (p q : perm) : perm :=
   {|
@@ -225,7 +238,7 @@ Proof.
   }
 Qed.
 
-Lemma sep_conj_top : forall p, eq_perm (sep_conj top_perm p) top_perm.
+Lemma sep_conj_top_absorb : forall p, eq_perm (sep_conj top_perm p) top_perm.
 Proof.
   intros. unfold sep_conj. destruct p. unfold top_perm. constructor; intros; simpl.
   - split; intros; try contradiction.
@@ -235,7 +248,7 @@ Proof.
     + constructor. left. auto.
 Qed.
 
-Lemma sep_conj_bottom : forall p, goodPerm p -> eq_perm (sep_conj bottom_perm p) p.
+Lemma sep_conj_bottom_identity : forall p, goodPerm p -> eq_perm (sep_conj bottom_perm p) p.
 Proof.
   intros p Hgood. unfold sep_conj. destruct p. unfold bottom_perm. constructor; intros; simpl.
   - split; intros; auto.
@@ -264,3 +277,28 @@ Proof.
     split; intros; simpl in *; auto.
   }
 Qed.
+Lemma sep_disj_bottom_absorb : forall p, eq_perm (sep_disj bottom_perm p) bottom_perm.
+Proof.
+  intros. unfold sep_disj. destruct p. unfold bottom_perm. constructor; intros; simpl.
+  - split; intros; try contradiction; auto.
+    repeat split; simpl; auto; intros; try contradiction.
+    constructor. left. auto.
+  - split; intros; try contradiction.
+    destruct H. contradiction.
+Qed.
+
+(* Lemma sep_disj_top_identity : forall p, goodPerm p -> eq_perm (sep_disj top_perm p) p. *)
+(* Proof. *)
+(*   intros p Hgood. unfold sep_disj. destruct p. unfold top_perm. constructor; intros; simpl. *)
+(*   - split; intros; auto. *)
+(*     + split. *)
+(*       constructor. right. auto. *)
+(*       split; constructor; intros; simpl in *; auto. *)
+(*       * simpl. *)
+(*     + destruct H as [? [? ?]]; auto. *)
+(*   - split; intros; auto. *)
+(*     + induction H. *)
+(*       * destruct H; auto; contradiction. *)
+(*       * destruct Hgood. destruct upd_PO0. simpl in *. eapply preord_trans; eauto. *)
+(*     + constructor. right. auto. *)
+(* Qed. *)
