@@ -1,5 +1,5 @@
 From Coq Require Import
-     (* Classes.RelationClasses *)
+     Classes.RelationClasses
      Relations.Relations
      Relations.Relation_Operators
      Lists.List
@@ -17,7 +17,7 @@ Record perm :=
       upd  : config -> config -> Prop;  (* allowed transitions *)
     }.
 
-Record goodPerm (p:perm) : Prop :=
+Record good_perm (p:perm) : Prop :=
   {
     view_PER   : PER _ (view p) ;
     upd_PO     : preorder _ (upd p) ;
@@ -36,7 +36,7 @@ Definition join_perm (p q:perm) : perm :=
   |}.
 
 Lemma join_good : forall p q,
-    goodPerm p -> goodPerm q -> goodPerm (join_perm p q).
+    good_perm p -> good_perm q -> good_perm (join_perm p q).
 Proof.
   intros p q Hgoodp Hgoodq. constructor; simpl.
   - constructor.
@@ -71,7 +71,7 @@ Proof.
   - intros x y []; auto.
   - left; auto.
 Qed.
-Lemma join_min : forall p q r (Hgood: goodPerm r),
+Lemma join_min : forall p q r (Hgood: good_perm r),
     lte_perm p r ->
     lte_perm q r ->
     lte_perm (join_perm p q) r.
@@ -101,7 +101,7 @@ Proof.
   - left; auto.
   - intros x y []; auto.
 Qed.
-Lemma meet_max : forall p q r (Hgood : goodPerm r),
+Lemma meet_max : forall p q r (Hgood : good_perm r),
     lte_perm r p ->
     lte_perm r q ->
     lte_perm r (meet_perm p q).
@@ -112,7 +112,7 @@ Proof.
 Qed.
 
 Lemma meet_good : forall p q,
-    goodPerm p -> goodPerm q -> goodPerm (meet_perm p q).
+    good_perm p -> good_perm q -> good_perm (meet_perm p q).
 Proof.
   intros p q Hgoodp Hgoodq. constructor; simpl.
   - constructor.
@@ -158,7 +158,7 @@ Record separate (p q:perm) : Prop :=
     upd2: forall x y:config, (upd q) x y -> (view p) x y;
   }.
 
-Lemma separate_anti_monotone : forall (p1 p2 q : perm) (HSep: separate p2 q) (Hlt: lte_perm p1 p2),
+Lemma separate_anti_monotone : forall (p1 p2 q : perm) (HSep: separate p2 q) (Hlte: lte_perm p1 p2),
     separate p1 q.
 Proof.
   intros p1 p2 q [] [].
@@ -248,7 +248,7 @@ Proof.
     + constructor. left. auto.
 Qed.
 
-Lemma sep_conj_bottom_identity : forall p, goodPerm p -> eq_perm (sep_conj bottom_perm p) p.
+Lemma sep_conj_bottom_identity : forall p, good_perm p -> eq_perm (sep_conj bottom_perm p) p.
 Proof.
   intros p Hgood. unfold sep_conj. destruct p. unfold bottom_perm. constructor; intros; simpl.
   - split; intros; auto.
@@ -261,33 +261,33 @@ Proof.
     + constructor. right. auto.
 Qed.
 
-Definition sep_disj (p q : perm) : perm :=
-  {|
-    view := fun x y => (clos_trans _ (fun x y => (view p x y) \/ (view q x y))) x y /\ sep_at p q x /\ sep_at p q y ;
-    upd := fun x y => (upd p x y) /\ (upd q x y) ;
-  |}.
-Lemma separate_meet_is_sep_disj: forall p q, separate' p q -> eq_perm (meet_perm p q) (sep_disj p q).
-Proof.
-  intros. red in H. constructor; intros.
-  {
-    split; intros; simpl in *; auto.
-    destruct H0 as [? [? ?]]. auto.
-  }
-  {
-    split; intros; simpl in *; auto.
-  }
-Qed.
-Lemma sep_disj_bottom_absorb : forall p, eq_perm (sep_disj bottom_perm p) bottom_perm.
-Proof.
-  intros. unfold sep_disj. destruct p. unfold bottom_perm. constructor; intros; simpl.
-  - split; intros; try contradiction; auto.
-    repeat split; simpl; auto; intros; try contradiction.
-    constructor. left. auto.
-  - split; intros; try contradiction.
-    destruct H. contradiction.
-Qed.
+(* Definition sep_disj (p q : perm) : perm := *)
+(*   {| *)
+(*     view := fun x y => (clos_trans _ (fun x y => (view p x y) \/ (view q x y))) x y /\ sep_at p q x /\ sep_at p q y ; *)
+(*     upd := fun x y => (upd p x y) /\ (upd q x y) ; *)
+(*   |}. *)
+(* Lemma separate_meet_is_sep_disj: forall p q, separate' p q -> eq_perm (meet_perm p q) (sep_disj p q). *)
+(* Proof. *)
+(*   intros. red in H. constructor; intros. *)
+(*   { *)
+(*     split; intros; simpl in *; auto. *)
+(*     destruct H0 as [? [? ?]]. auto. *)
+(*   } *)
+(*   { *)
+(*     split; intros; simpl in *; auto. *)
+(*   } *)
+(* Qed. *)
+(* Lemma sep_disj_bottom_absorb : forall p, eq_perm (sep_disj bottom_perm p) bottom_perm. *)
+(* Proof. *)
+(*   intros. unfold sep_disj. destruct p. unfold bottom_perm. constructor; intros; simpl. *)
+(*   - split; intros; try contradiction; auto. *)
+(*     repeat split; simpl; auto; intros; try contradiction. *)
+(*     constructor. left. auto. *)
+(*   - split; intros; try contradiction. *)
+(*     destruct H. contradiction. *)
+(* Qed. *)
 
-(* Lemma sep_disj_top_identity : forall p, goodPerm p -> eq_perm (sep_disj top_perm p) p. *)
+(* Lemma sep_disj_top_identity : forall p, good_perm p -> eq_perm (sep_disj top_perm p) p. *)
 (* Proof. *)
 (*   intros p Hgood. unfold sep_disj. destruct p. unfold top_perm. constructor; intros; simpl. *)
 (*   - split; intros; auto. *)
@@ -302,3 +302,63 @@ Qed.
 (*       * destruct Hgood. destruct upd_PO0. simpl in *. eapply preord_trans; eauto. *)
 (*     + constructor. right. auto. *)
 (* Qed. *)
+
+Definition Perm := perm -> Prop.
+
+Definition lte_Perm (P Q : Perm) : Prop :=
+  forall p, P p -> (exists q, Q q /\ lte_perm p q).
+
+(* Ideal *)
+Record goodPerm (P : Perm) : Prop :=
+  {
+    Perm_nonempty: exists p, P p;
+    Perm_good: forall p, P p -> good_perm p;
+    Perm_downward_closed: forall p q, P p -> lte_perm q p -> P q;
+    Perm_directed: forall p q, P p -> P q -> exists r, P r /\ lte_perm p r /\ lte_perm q r
+  }.
+
+Definition join_Perm (P Q : Perm) : Perm :=
+  fun p => P p \/ Q p.
+
+Lemma lte_join_Perm_l : forall P Q (HgoodP: goodPerm P) (HgoodQ: goodPerm Q),
+    lte_Perm P (join_Perm P Q).
+Proof.
+  intros P Q [] []. red. destruct Perm_nonempty0 as [p Hp].
+  intros r ?. exists r. split; auto. left. auto. constructor; auto.
+Qed.
+Lemma lte_join_Perm_r : forall P Q (HgoodP: goodPerm P) (HgoodQ: goodPerm Q),
+    lte_Perm Q (join_Perm P Q).
+Proof.
+  intros P Q [] []. red. destruct Perm_nonempty1 as [q Hq].
+  intros r ?. exists r. split; auto. right. auto. constructor; auto.
+Qed.
+Lemma join_Perm_min : forall P Q R (HgoodP: goodPerm P) (HgoodQ: goodPerm Q) (HgoodR: goodPerm R),
+    lte_Perm P R ->
+    lte_Perm Q R ->
+    lte_Perm (join_Perm P Q) R.
+Proof.
+  intros P Q R [] [] [] ? ? ? ?.
+  destruct H1; auto.
+Qed.
+
+Definition bottom_Perm : Perm :=
+  fun p => p = bottom_perm.
+Lemma bottom_Perm_is_bot : forall P (Hgood: goodPerm P), lte_Perm bottom_Perm P.
+Proof.
+  intros P Hgood p Hp. exists bottom_perm.
+  split.
+  - destruct Hgood. destruct Perm_nonempty0.
+    eapply Perm_downward_closed0; eauto. apply bottom_perm_is_bot.
+  - inversion Hp. constructor; auto.
+Qed.
+Definition separate_Perm (P Q : Perm) : Prop :=
+  forall p q, P p -> Q q -> separate p q.
+
+Lemma separate_Perm_anti_monotone : forall (P1 P2 Q : Perm)
+                                      (HSep : separate_Perm P2 Q)
+                                      (Hlte : lte_Perm P1 P2),
+    separate_Perm P1 Q.
+Proof.
+  intros P1 P2 Q ? ? p q ? ?. specialize (Hlte _ H). destruct Hlte as [p2 [? ?]].
+  eapply separate_anti_monotone; eauto.
+Qed.
