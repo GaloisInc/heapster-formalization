@@ -109,7 +109,9 @@ Inductive load (H:heap) (a:val) : val -> Prop :=
 (* Note: unalloacted and code cause loads to crash.  Could cause Load to be nondet for code. *)
 
 (* bits is the _logarithm_ of the alignment, which must be a power of 2
-   So, aligned p 3 means that *)
+   So, aligned p 3 bits means that the lower 3 bits of bits are 0, i.e. 
+   bits is a multiple of 8.
+*)
 Definition aligned (p:i64) (bits:Z) : bool :=
   let z := Int64.repr bits in
   Int64.eq p (Int64.shl (Int64.shru p z) z).

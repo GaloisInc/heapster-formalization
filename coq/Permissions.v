@@ -29,6 +29,11 @@ Record lte_perm (p q:perm) : Prop :=
     upd_inc : forall x y, (upd p) x y -> (upd q) x y;
   }.
 
+Lemma lte_refl : forall (p:perm), lte_perm p p.
+Proof.
+  intros; split; intros; tauto.
+Qed.
+
 Definition join_perm (p q:perm) : perm :=
   {|
     view := fun x y => (view p x y) /\ (view q x y) ;
@@ -316,6 +321,22 @@ Record goodPerm (P : Perm) : Prop :=
     Perm_downward_closed: forall p q, P p -> lte_perm q p -> P q;
     Perm_directed: forall p q, P p -> P q -> exists r, P r /\ lte_perm p r /\ lte_perm q r
   }.
+
+Lemma lte_Perm_subset : forall P Q (GP:goodPerm P) (GQ:goodPerm Q),
+    lte_Perm P Q <-> (forall p, P p -> Q p).
+Proof.
+  intros P Q GP GQ.
+  split; intros H.
+  - intros p Hp.
+    apply H in Hp.
+    destruct Hp as [q [HQ HLT]].
+    eapply (GQ.(Perm_downward_closed _)).
+    apply HQ.
+    assumption.
+  - unfold lte_Perm.
+    intros p Hp.
+    exists p. split. apply H. assumption. apply lte_refl.
+Qed.
 
 Definition join_Perm (P Q : Perm) : Perm :=
   fun p => P p \/ Q p.
