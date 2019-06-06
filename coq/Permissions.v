@@ -29,7 +29,9 @@ Record lte_perm (p q:perm) : Prop :=
     upd_inc : forall x y, (upd p) x y -> (upd q) x y;
   }.
 
-Lemma lte_refl : forall (p:perm), lte_perm p p.
+Notation "p <= q" := (lte_perm p q).
+
+Lemma lte_refl : forall (p:perm), p <= p.
 Proof.
   intros; split; intros; tauto.
 Qed.
@@ -62,7 +64,7 @@ Proof.
 Qed.
 
 Lemma lte_l_join : forall p q,
-    lte_perm p (join_perm p q).
+    p <= (join_perm p q).
 Proof.
   intros. constructor.
   - intros x y []; auto.
@@ -70,16 +72,16 @@ Proof.
 Qed.
 
 Lemma lte_r_join : forall p q,
-    lte_perm q (join_perm p q).
+    q <= (join_perm p q).
 Proof.
   intros. constructor.
   - intros x y []; auto.
   - left; auto.
 Qed.
 Lemma join_min : forall p q r (Hgood: good_perm r),
-    lte_perm p r ->
-    lte_perm q r ->
-    lte_perm (join_perm p q) r.
+    p <= r ->
+    q <= r ->
+    join_perm p q <= r.
 Proof.
   intros p q r [_ [_ ?]] [] []. constructor; intros; simpl in *; auto.
   induction H; eauto.
@@ -93,23 +95,23 @@ Definition meet_perm (p q:perm) : perm :=
   |}.
 
 Lemma lte_meet_l : forall p q,
-    lte_perm (meet_perm p q) p.
+    meet_perm p q <= p.
 Proof.
   intros. constructor.
   - left; auto.
   - intros x y []; auto.
 Qed.
 Lemma lte_meet_r : forall p q,
-    lte_perm (meet_perm p q) q.
+    meet_perm p q <= q.
 Proof.
   intros. constructor.
   - left; auto.
   - intros x y []; auto.
 Qed.
 Lemma meet_max : forall p q r (Hgood : good_perm r),
-    lte_perm r p ->
-    lte_perm r q ->
-    lte_perm r (meet_perm p q).
+    r <= p ->
+    r <= q ->
+    r <= meet_perm p q.
 Proof.
   intros p q r [[_ ?] _] [] []. constructor; intros; simpl in *; auto.
   induction H; eauto.
@@ -145,7 +147,7 @@ Definition bottom_perm : perm :=
     upd  := fun x y => False ;
   |}.
 
-Lemma bottom_perm_is_bot : forall p, lte_perm bottom_perm p.
+Lemma bottom_perm_is_bot : forall p, bottom_perm <= p.
 Proof. constructor; simpl; intuition. Qed.
 
 Definition top_perm : perm :=
@@ -154,7 +156,7 @@ Definition top_perm : perm :=
     upd  := fun x y => True ;
   |}.
 
-Lemma top_perm_is_top : forall p, lte_perm p top_perm.
+Lemma top_perm_is_top : forall p, p <= top_perm.
 Proof. constructor; simpl; intuition. Qed.
 
 Record separate (p q:perm) : Prop :=
@@ -163,7 +165,7 @@ Record separate (p q:perm) : Prop :=
     upd2: forall x y:config, (upd q) x y -> (view p) x y;
   }.
 
-Lemma separate_anti_monotone : forall (p1 p2 q : perm) (HSep: separate p2 q) (Hlte: lte_perm p1 p2),
+Lemma separate_anti_monotone : forall (p1 p2 q : perm) (HSep: separate p2 q) (Hlte: p1 <= p2),
     separate p1 q.
 Proof.
   intros p1 p2 q [] [].
@@ -194,7 +196,7 @@ Record eq_perm (p q : perm) : Prop :=
     view_eq : forall x y, view q x y <-> view p x y;
     upd_eq: forall x y, upd p x y <-> upd q x y;
   }.
-Lemma eq_lte : forall p q, eq_perm p q <-> lte_perm p q /\ lte_perm q p.
+Lemma eq_lte : forall p q, eq_perm p q <-> p <= q /\ q <= p.
 Proof.
   intros [] [].
   split; intros.
@@ -310,76 +312,92 @@ Qed.
 
 Definition Perm := perm -> Prop.
 
+(* maybe forall q in Q, exists smaller p ? hmm *)
 Definition lte_Perm (P Q : Perm) : Prop :=
-  forall p, P p -> (exists q, Q q /\ lte_perm p q).
+  forall q, Q q -> (exists p, P p /\ p <= q).
+
+Notation "P ⊑ Q" := (lte_Perm P Q) (at level 80, right associativity).
 
 (* Ideal *)
 Record goodPerm (P : Perm) : Prop :=
   {
-    Perm_nonempty: exists p, P p;
+    (* Perm_nonempty: exists p, P p; *)
     Perm_good: forall p, P p -> good_perm p;
-    Perm_downward_closed: forall p q, P p -> lte_perm q p -> P q;
-    Perm_directed: forall p q, P p -> P q -> exists r, P r /\ lte_perm p r /\ lte_perm q r
+    Perm_upward_closed: forall p q, P q -> q <= p -> P p
+    (* Perm_directed: forall p q, P p -> P q -> exists r, P r /\ lte_perm p r /\ lte_perm q r *)
   }.
 
-Lemma lte_Perm_subset : forall P Q (GP:goodPerm P) (GQ:goodPerm Q),
-    lte_Perm P Q <-> (forall p, P p -> Q p).
-Proof.
-  intros P Q GP GQ.
-  split; intros H.
-  - intros p Hp.
-    apply H in Hp.
-    destruct Hp as [q [HQ HLT]].
-    eapply (GQ.(Perm_downward_closed _)).
-    apply HQ.
-    assumption.
-  - unfold lte_Perm.
-    intros p Hp.
-    exists p. split. apply H. assumption. apply lte_refl.
-Qed.
+(* Lemma lte_Perm_subset : forall P Q (GP:goodPerm P) (GQ:goodPerm Q), *)
+(*     lte_Perm P Q <-> (forall p, P p -> Q p). *)
+(* Proof. *)
+(*   intros P Q GP GQ. *)
+(*   split; intros H. *)
+(*   - intros p Hp. *)
+(*     apply H in Hp. *)
+(*     destruct Hp as [q [HQ HLT]]. *)
+(*     eapply (GQ.(Perm_downward_closed _)). *)
+(*     apply HQ. *)
+(*     assumption. *)
+(*   - unfold lte_Perm. *)
+(*     intros p Hp. *)
+(*     exists p. split. apply H. assumption. apply lte_refl. *)
+(* Qed. *)
 
 Definition join_Perm (P Q : Perm) : Perm :=
-  fun p => P p \/ Q p.
+  fun p => P p /\ Q p.
 
 Lemma lte_join_Perm_l : forall P Q (HgoodP: goodPerm P) (HgoodQ: goodPerm Q),
-    lte_Perm P (join_Perm P Q).
+    P ⊑ join_Perm P Q.
 Proof.
-  intros P Q [] []. red. destruct Perm_nonempty0 as [p Hp].
-  intros r ?. exists r. split; auto. left. auto. constructor; auto.
+  intros P Q [] []. red. intros. destruct H. exists q. split; auto. constructor; auto.
 Qed.
 Lemma lte_join_Perm_r : forall P Q (HgoodP: goodPerm P) (HgoodQ: goodPerm Q),
-    lte_Perm Q (join_Perm P Q).
+    Q ⊑ join_Perm P Q.
 Proof.
-  intros P Q [] []. red. destruct Perm_nonempty1 as [q Hq].
-  intros r ?. exists r. split; auto. right. auto. constructor; auto.
+  intros P Q [] []. red. intros. destruct H. exists q. split; auto. constructor; auto.
 Qed.
 Lemma join_Perm_min : forall P Q R (HgoodP: goodPerm P) (HgoodQ: goodPerm Q) (HgoodR: goodPerm R),
-    lte_Perm P R ->
-    lte_Perm Q R ->
-    lte_Perm (join_Perm P Q) R.
+    P ⊑ R ->
+    Q ⊑ R ->
+    join_Perm P Q ⊑ R.
 Proof.
   intros P Q R [] [] [] ? ? ? ?.
-  destruct H1; auto.
+  destruct (H _ H1) as [? [? ?]]. destruct (H0 _ H1) as [? [? ?]].
+  specialize (Perm_upward_closed0 _ _ H2 H3).
+  specialize (Perm_upward_closed1 _ _ H4 H5).
+  exists q. split; try red; try constructor; auto.
 Qed.
 
 Definition bottom_Perm : Perm :=
-  fun p => p = bottom_perm.
-Lemma bottom_Perm_is_bot : forall P (Hgood: goodPerm P), lte_Perm bottom_Perm P.
+  fun p => True.
+Lemma bottom_Perm_is_bot : forall P (Hgood: goodPerm P), bottom_Perm ⊑ P.
 Proof.
   intros P Hgood p Hp. exists bottom_perm.
-  split.
-  - destruct Hgood. destruct Perm_nonempty0.
-    eapply Perm_downward_closed0; eauto. apply bottom_perm_is_bot.
-  - inversion Hp. constructor; auto.
+  split; try red; auto.
+  apply bottom_perm_is_bot.
 Qed.
+
+Definition top_Perm : Perm :=
+  fun p => False.
+Lemma top_Perm_is_top : forall P (Hgood: goodPerm P), P ⊑ top_Perm.
+Proof.
+  intros P Hgood p Hp. inversion Hp.
+Qed.
+
 Definition separate_Perm (P Q : Perm) : Prop :=
   forall p q, P p -> Q q -> separate p q.
 
+(* Doesn't hold, P1 must contain stuff such that P1 ⊑ P2, but aside from that
+   it can contain anything. *)
 Lemma separate_Perm_anti_monotone : forall (P1 P2 Q : Perm)
                                       (HSep : separate_Perm P2 Q)
-                                      (Hlte : lte_Perm P1 P2),
+                                      (Hlte : P1 ⊑ P2),
     separate_Perm P1 Q.
 Proof.
-  intros P1 P2 Q ? ? p q ? ?. specialize (Hlte _ H). destruct Hlte as [p2 [? ?]].
-  eapply separate_anti_monotone; eauto.
-Qed.
+  intros P1 P2 Q ? ? p q ? ?.
+  (* red in HSep. *)
+  (* red in Hlte. specialize (Hlte _ H). destruct Hlte as [p2 [? ?]]. *)
+  (* eapply separate_anti_monotone; eauto. *)
+Abort.
+
+(* sep conj is pointwise ? *)
