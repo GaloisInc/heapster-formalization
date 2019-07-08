@@ -1,29 +1,26 @@
 From Coq Require Import
-     Classes.RelationClasses
-     Relations.Relations
-     Relations.Relation_Operators
+     Classes.Morphisms
      Lists.List
-     Logic.FunctionalExtensionality
-     Setoids.Setoid.
+     Relations.Relation_Operators.
 
 Import ListNotations.
 
 Parameter config : Type.
 
-(* Denotation of permissions *)
-Record perm :=
+(* A single permission *)
+Record perm1 :=
   mkPerm {
       view : config -> config -> Prop;  (* PER over configs *)
+      view_PER : PER view;
       upd  : config -> config -> Prop;  (* allowed transitions *)
+      upd_PO : PreOrder upd;
     }.
 
-Record good_perm (p:perm) : Prop :=
-  {
-    view_PER   : PER _ (view p) ;
-    upd_PO     : preorder _ (upd p) ;
-  }.
+Instance view_is_PER p : PER (view p) := view_PER p.
+Instance upd_is_preorder p : PreOrder (upd p) := upd_PO p.
 
-Record lte_perm (p q:perm) : Prop :=
+
+Record lte_perm (p q:perm1) : Prop :=
   {
     view_inc : forall x y, (view q) x y -> (view p) x y;
     upd_inc : forall x y, (upd p) x y -> (upd q) x y;
@@ -31,17 +28,29 @@ Record lte_perm (p q:perm) : Prop :=
 
 Notation "p <= q" := (lte_perm p q).
 
-Lemma lte_refl : forall (p:perm), p <= p.
+Instance lte_perm_is_PreOrder : PreOrder lte_perm.
+Proof.
+  admit.
+Admitted.
+
+Lemma lte_refl : forall (p:perm1), p <= p.
 Proof.
   intros; split; intros; tauto.
 Qed.
 
-Definition join_perm (p q:perm) : perm :=
+Program Definition join_perm (p q:perm1) : perm1 :=
   {|
     view := fun x y => (view p x y) /\ (view q x y) ;
     upd  := clos_trans _ (fun x y => (upd p x y) \/ (upd q x y)) ;
   |}.
+Next Obligation.
+  admit.
+Admitted.
+Next Obligation.
+  admit.
+Admitted.
 
+(*
 Lemma join_good : forall p q,
     good_perm p -> good_perm q -> good_perm (join_perm p q).
 Proof.
@@ -62,6 +71,7 @@ Proof.
       * econstructor 2; eauto. apply IHclos_trans2. constructor; auto.
       * repeat (econstructor 2; eauto).
 Qed.
+*)
 
 Lemma lte_l_join : forall p q,
     p <= (join_perm p q).
@@ -78,21 +88,32 @@ Proof.
   - intros x y []; auto.
   - left; auto.
 Qed.
-Lemma join_min : forall p q r (Hgood: good_perm r),
+
+Lemma join_min : forall p q r,
     p <= r ->
     q <= r ->
     join_perm p q <= r.
 Proof.
-  intros p q r [_ [_ ?]] [] []. constructor; intros; simpl in *; auto.
+  admit.
+Admitted.
+(*
+  intros p q r [] []. constructor; intros; simpl in *; auto.
   induction H; eauto.
   destruct H; auto.
 Qed.
+ *)
 
-Definition meet_perm (p q:perm) : perm :=
+Program Definition meet_perm (p q:perm1) : perm1 :=
   {|
     view := clos_trans _ (fun x y => (view p x y) \/ (view q x y)) ;
     upd  := fun x y => (upd p x y) /\ (upd q x y) ;
   |}.
+Next Obligation.
+  admit.
+Admitted.
+Next Obligation.
+  admit.
+Admitted.
 
 Lemma lte_meet_l : forall p q,
     meet_perm p q <= p.
@@ -108,16 +129,21 @@ Proof.
   - left; auto.
   - intros x y []; auto.
 Qed.
-Lemma meet_max : forall p q r (Hgood : good_perm r),
+Lemma meet_max : forall p q r,
     r <= p ->
     r <= q ->
     r <= meet_perm p q.
 Proof.
+  admit.
+Admitted.
+(*
   intros p q r [[_ ?] _] [] []. constructor; intros; simpl in *; auto.
   induction H; eauto.
   destruct H; auto.
 Qed.
+ *)
 
+(*
 Lemma meet_good : forall p q,
     good_perm p -> good_perm q -> good_perm (meet_perm p q).
 Proof.
@@ -140,58 +166,102 @@ Proof.
     + destruct Hgoodp as [_ [_ ?]]. destruct Hgoodq as [_ [_ ?]].
       intros x y z [] []. split; eauto.
 Qed.
+ *)
 
-Definition bottom_perm : perm :=
+Program Definition bottom_perm : perm1 :=
   {|
     view := fun x y => True ;
-    upd  := fun x y => False ;
+    upd  := fun x y => x = y ;
   |}.
+Next Obligation.
+  constructor; intro; intros; trivial.
+Defined.
+Next Obligation.
+  constructor; intro; intros; [ trivial | transitivity y; assumption ].
+Defined.
 
 Lemma bottom_perm_is_bot : forall p, bottom_perm <= p.
-Proof. constructor; simpl; intuition. Qed.
+Proof. constructor; simpl; intuition. rewrite H. reflexivity. Qed.
 
-Definition top_perm : perm :=
+Program Definition top_perm : perm1 :=
   {|
     view := fun x y => False ;
     upd  := fun x y => True ;
   |}.
+Next Obligation.
+  constructor; intro; intros; trivial.
+Defined.
+Next Obligation.
+  constructor; intro; intros; trivial.
+Defined.
 
 Lemma top_perm_is_top : forall p, p <= top_perm.
 Proof. constructor; simpl; intuition. Qed.
 
-Record separate (p q:perm) : Prop :=
+(*
+NOTE: turns out, the general notion of "separate"  does not really make sense!
+
+We need to define it this way, because, if we don't have the view x x,
+precondition it implies that each view is reflexive, since each upd is. But then
+this notion of separateness is not anti-monotone!
+
+Record separate (p q:perm1) : Prop :=
   {
-    upd1: forall x y:config, (upd p) x y -> (view q) x y;
-    upd2: forall x y:config, (upd q) x y -> (view p) x y;
+    upd1: forall x y:config,
+      (view q) x x -> (upd p) x y -> (view q) x y;
+    upd2: forall x y:config,
+      (view p) x x -> (upd q) x y -> (view p) x y;
   }.
 
-Lemma separate_anti_monotone : forall (p1 p2 q : perm) (HSep: separate p2 q) (Hlte: p1 <= p2),
+Lemma separate_anti_monotone : forall (p1 p2 q : perm1) (HSep: separate p2 q) (Hlte: p1 <= p2),
     separate p1 q.
 Proof.
-  intros p1 p2 q [] [].
-  constructor; auto.
-Qed.
+  intros p1 p2 q [sep1 sep2] [lte1 lte2].
+  constructor; intros.
+  - apply sep1; try assumption. apply lte2. assumption.
+  - NOTE: here is where we get stuck!
+ *)
 
-Record sep_at (p q:perm) (x:config) : Prop :=
+Record sep_at (x:config) (p q:perm1) : Prop :=
   {
-    upd1': forall y:config, (upd p) x y -> (view q) x y;
-    upd2': forall y:config, (upd q) x y -> (view p) x y;
+    upd1': forall y:config, (view q) x x -> (upd p) x y -> (view q) x y;
+    upd2': forall y:config, (view p) x x -> (upd q) x y -> (view p) x y;
   }.
 
-Definition separate' (p q : perm) : Prop := forall x, sep_at p q x.
+Lemma sep_at_anti_monotone : forall x p1 p2 q,
+    view p2 x x -> sep_at x p2 q -> p1 <= p2 -> sep_at x p1 q.
+Proof.
+  intros x p1 p2 q v_ok [sep1 sep2] [lte1 lte2]; constructor; intros.
+  - apply sep1; try assumption. apply lte2; assumption.
+  - apply lte1. apply sep2; assumption.
+Qed.
 
+Definition separate' (p q : perm1) : Prop := forall x, sep_at x p q.
+
+(*
 Lemma separate_defns : forall p q, separate p q <-> separate' q p.
 Proof.
-  split; intros.
+  split; intros [sep1 sep2].
   {
-    intro. destruct p, q. inversion H. constructor; auto.
+    constructor; intros; [ apply sep2 | apply sep2 ].
+
+; constructor; intros;
+    try apply sep1; try apply sep2; try assumption.
+  {
+    destruct H; constructor; intros.
+
+    intro. destruct p, q. inversion H. constructor; intros; auto.
   }
   {
     red in H. destruct p, q. constructor; intros; apply H; auto.
   }
 Qed.
+*)
 
-Record eq_perm (p q : perm) : Prop :=
+Definition eq_perm p q : Prop := p <= q /\ q <= p.
+
+(*
+Record eq_perm (p q : perm1) : Prop :=
   {
     view_eq : forall x y, view q x y <-> view p x y;
     upd_eq: forall x y, upd p x y <-> upd q x y;
@@ -212,22 +282,39 @@ Proof.
     destruct H. inversion H. inversion H0. constructor; simpl in *; split; intros; auto.
   }
 Qed.
+*)
 
-Lemma sep_at_bottom: forall p x, sep_at bottom_perm p x.
+Lemma sep_at_bottom: forall p x, sep_at x bottom_perm p.
 Proof.
-  intros. unfold bottom_perm. destruct p. constructor; simpl in *; intuition.
+  intros. unfold bottom_perm. constructor; simpl; intros.
+  - rewrite <- H0. assumption.
+  - trivial.
 Qed.
+
+(*
 Lemma separate_bottom : forall p, separate' bottom_perm p.
 Proof. intros p x. apply sep_at_bottom. Qed.
+*)
 
-Definition sep_conj (p q : perm) : perm :=
+Program Definition sep_conj (p q : perm1) : perm1 :=
   {|
-    view := fun x y => (view p x y) /\ (view q x y) /\ sep_at p q x /\ sep_at p q y ;
-    upd := clos_trans _ (fun x y => (upd p x y) \/ (upd q x y)) ;
+    view := fun x y =>
+              (view p x y) /\ (view q x y) /\ sep_at x p q /\ sep_at y p q;
+    upd := clos_trans _ (fun x y => (upd p x y) \/ (upd q x y));
   |}.
+Next Obligation.
+  admit.
+Admitted.
+Next Obligation.
+  admit.
+Admitted.
+
 
 Lemma separate_join_is_sep_conj: forall p q, separate' p q -> eq_perm (join_perm p q) (sep_conj p q).
 Proof.
+  admit.
+Admitted.
+(*
   intros. red in H. constructor; intros.
   {
     split; intros; simpl in *.
@@ -244,9 +331,13 @@ Proof.
       + econstructor 2; eauto.
   }
 Qed.
+ *)
 
 Lemma sep_conj_top_absorb : forall p, eq_perm (sep_conj top_perm p) top_perm.
 Proof.
+  admit.
+Admitted.
+(*
   intros. unfold sep_conj. destruct p. unfold top_perm. constructor; intros; simpl.
   - split; intros; try contradiction.
     destruct H. contradiction.
@@ -254,9 +345,13 @@ Proof.
     + induction H; auto.
     + constructor. left. auto.
 Qed.
+*)
 
-Lemma sep_conj_bottom_identity : forall p, good_perm p -> eq_perm (sep_conj bottom_perm p) p.
+Lemma sep_conj_bottom_identity : forall p, eq_perm (sep_conj bottom_perm p) p.
 Proof.
+  admit.
+Admitted.
+(*
   intros p Hgood. unfold sep_conj. destruct p. unfold bottom_perm. constructor; intros; simpl.
   - split; intros; auto.
     + repeat split; auto; intros; simpl in *; contradiction.
@@ -267,6 +362,7 @@ Proof.
       * destruct Hgood. destruct upd_PO0. simpl in *. eapply preord_trans; eauto.
     + constructor. right. auto.
 Qed.
+ *)
 
 (* Definition sep_disj (p q : perm) : perm := *)
 (*   {| *)
@@ -310,38 +406,49 @@ Qed.
 (*     + constructor. right. auto. *)
 (* Qed. *)
 
-Definition Perm := perm -> Prop.
-
-(* maybe forall q in Q, exists smaller p ? hmm *)
-Definition lte_Perm (P Q : Perm) : Prop :=
-  forall q, Q q -> (exists p, P p /\ p <= q).
-
-Notation "P ⊑ Q" := (lte_Perm P Q) (at level 80, right associativity).
-
-(* Ideal *)
-Record goodPerm (P : Perm) : Prop :=
+(* Perms = upwards-closed sets of single permissions *)
+Record Perms :=
   {
-    (* Perm_nonempty: exists p, P p; *)
-    Perm_good: forall p, P p -> good_perm p;
-    Perm_upward_closed: forall p q, P q -> q <= p -> P p
-    (* Perm_directed: forall p q, P p -> P q -> exists r, P r /\ lte_perm p r /\ lte_perm q r *)
+    in_Perms : perm1 -> Prop;
+    Perms_upwards_closed : forall p1 p2, in_Perms p1 -> p1 <= p2 -> in_Perms p2
   }.
 
-(* Lemma lte_Perm_subset : forall P Q (GP:goodPerm P) (GQ:goodPerm Q), *)
-(*     lte_Perm P Q <-> (forall p, P p -> Q p). *)
-(* Proof. *)
-(*   intros P Q GP GQ. *)
-(*   split; intros H. *)
-(*   - intros p Hp. *)
-(*     apply H in Hp. *)
-(*     destruct Hp as [q [HQ HLT]]. *)
-(*     eapply (GQ.(Perm_downward_closed _)). *)
-(*     apply HQ. *)
-(*     assumption. *)
-(*   - unfold lte_Perm. *)
-(*     intros p Hp. *)
-(*     exists p. split. apply H. assumption. apply lte_refl. *)
-(* Qed. *)
+(* The ordering on Perms sets is the superset ordering *)
+Definition lte_Perms (P Q : Perms) : Prop :=
+  forall p, in_Perms Q p -> in_Perms P p.
+
+Notation "P ⊑ Q" := (lte_Perms P Q) (at level 80, right associativity).
+
+(* The least Perms set containing a given p *)
+Program Definition singleton_Perms p : Perms :=
+  {|
+    in_Perms := fun q => p <= q
+  |}.
+Next Obligation.
+  transitivity p1; assumption.
+Defined.
+
+(* Complete meet of Perms sets = union *)
+Program Definition meet_Perms (Ps : Perms -> Prop) : Perms :=
+  {|
+    in_Perms := fun p => exists P, Ps P -> in_Perms P p
+  |}.
+Next Obligation.
+  exists H. intro.
+  apply (Perms_upwards_closed _ p1); try assumption.
+  apply H1. assumption.
+Qed.
+
+
+(*
+FIXME:
+- Prove that meet_Perms is a greatest lower bound
+- Define binary meet as a special case
+- Define conjunction of Perms pointwise
+- Define the top and bottom Perms sets
+- Define entailment as the inverse of lte_Perms
+- Define impl_Perms as the adjoint (w.r.t. entailment) of conjunction
+
 
 Definition join_Perm (P Q : Perm) : Perm :=
   fun p => P p /\ Q p.
@@ -401,3 +508,5 @@ Proof.
 Abort.
 
 (* sep conj is pointwise ? *)
+
+ *)
