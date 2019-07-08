@@ -224,71 +224,40 @@ Proof.
 
 Record sep_at (x:config) (p q:perm1) : Prop :=
   {
-    upd1': forall y:config, (view q) x x -> (upd p) x y -> (view q) x y;
-    upd2': forall y:config, (view p) x x -> (upd q) x y -> (view p) x y;
+    sep_at_view_l : view p x x;
+    sep_at_view_r : view q x x;
+    sep_at_upd_l : forall y:config, (upd p) x y -> (view q) x y;
+    sep_at_upd_r : forall y:config, (upd q) x y -> (view p) x y;
   }.
+
+Arguments sep_at_view_l [x p q].
+Arguments sep_at_view_r [x p q].
+Arguments sep_at_upd_l [x p q].
+Arguments sep_at_upd_r [x p q].
 
 Lemma sep_at_anti_monotone : forall x p1 p2 q,
-    view p2 x x -> sep_at x p2 q -> p1 <= p2 -> sep_at x p1 q.
+    sep_at x p2 q -> p1 <= p2 -> sep_at x p1 q.
 Proof.
-  intros x p1 p2 q v_ok [sep1 sep2] [lte1 lte2]; constructor; intros.
-  - apply sep1; try assumption. apply lte2; assumption.
-  - apply lte1. apply sep2; assumption.
+  intros x p1 p2 q sepat [lte_view lte_upd]; constructor; intros.
+  - apply lte_view. apply (sep_at_view_l sepat); assumption.
+  - apply (sep_at_view_r sepat).
+  - apply (sep_at_upd_l sepat). apply lte_upd. assumption.
+  - apply lte_view. apply (sep_at_upd_r sepat). assumption.
 Qed.
 
+(* NOTE: this implies that the fields of p and q are complete; maybe this
+definition would be better if we quantified over all x in the fields (i.e., the
+fields on the PERs) of p and q?  *)
 Definition separate' (p q : perm1) : Prop := forall x, sep_at x p q.
 
-(*
-Lemma separate_defns : forall p q, separate p q <-> separate' q p.
-Proof.
-  split; intros [sep1 sep2].
-  {
-    constructor; intros; [ apply sep2 | apply sep2 ].
-
-; constructor; intros;
-    try apply sep1; try apply sep2; try assumption.
-  {
-    destruct H; constructor; intros.
-
-    intro. destruct p, q. inversion H. constructor; intros; auto.
-  }
-  {
-    red in H. destruct p, q. constructor; intros; apply H; auto.
-  }
-Qed.
-*)
-
+(* Equality of permissions = the symmetric closure of the ordering *)
 Definition eq_perm p q : Prop := p <= q /\ q <= p.
 
-(*
-Record eq_perm (p q : perm1) : Prop :=
-  {
-    view_eq : forall x y, view q x y <-> view p x y;
-    upd_eq: forall x y, upd p x y <-> upd q x y;
-  }.
-Lemma eq_lte : forall p q, eq_perm p q <-> p <= q /\ q <= p.
+(* Bottom is separate from everything *)
+Lemma sep_at_bottom: forall p x, view p x x -> sep_at x bottom_perm p.
 Proof.
-  intros [] [].
-  split; intros.
-  {
-    inversion H.
-    split; inversion H; constructor; intros; simpl in *.
-    rewrite <- view_eq0; auto.
-    rewrite <- upd_eq0; auto.
-    rewrite view_eq0; auto.
-    rewrite upd_eq0; auto.
-  }
-  {
-    destruct H. inversion H. inversion H0. constructor; simpl in *; split; intros; auto.
-  }
-Qed.
-*)
-
-Lemma sep_at_bottom: forall p x, sep_at x bottom_perm p.
-Proof.
-  intros. unfold bottom_perm. constructor; simpl; intros.
-  - rewrite <- H0. assumption.
-  - trivial.
+  intros. unfold bottom_perm. constructor; simpl; intros; try trivial.
+  rewrite <- H0. assumption.
 Qed.
 
 (*
