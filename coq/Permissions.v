@@ -8,7 +8,7 @@ Import ListNotations.
 Parameter config : Type.
 
 (* A single permission *)
-Record perm1 :=
+Record perm :=
   mkPerm {
       view : config -> config -> Prop;  (* PER over configs *)
       view_PER : PER view;
@@ -20,7 +20,7 @@ Instance view_is_PER p : PER (view p) := view_PER p.
 Instance upd_is_preorder p : PreOrder (upd p) := upd_PO p.
 
 
-Record lte_perm (p q:perm1) : Prop :=
+Record lte_perm (p q:perm) : Prop :=
   {
     view_inc : forall x y, (view q) x y -> (view p) x y;
     upd_inc : forall x y, (upd p) x y -> (upd q) x y;
@@ -33,12 +33,12 @@ Proof.
   admit.
 Admitted.
 
-Lemma lte_refl : forall (p:perm1), p <= p.
+Lemma lte_refl : forall (p:perm), p <= p.
 Proof.
   intros; split; intros; tauto.
 Qed.
 
-Program Definition join_perm (p q:perm1) : perm1 :=
+Program Definition join_perm (p q:perm) : perm :=
   {|
     view := fun x y => (view p x y) /\ (view q x y) ;
     upd  := clos_trans _ (fun x y => (upd p x y) \/ (upd q x y)) ;
@@ -103,7 +103,7 @@ Admitted.
 Qed.
  *)
 
-Program Definition meet_perm (p q:perm1) : perm1 :=
+Program Definition meet_perm (p q:perm) : perm :=
   {|
     view := clos_trans _ (fun x y => (view p x y) \/ (view q x y)) ;
     upd  := fun x y => (upd p x y) /\ (upd q x y) ;
@@ -168,7 +168,7 @@ Proof.
 Qed.
  *)
 
-Program Definition bottom_perm : perm1 :=
+Program Definition bottom_perm : perm :=
   {|
     view := fun x y => True ;
     upd  := fun x y => x = y ;
@@ -183,7 +183,7 @@ Defined.
 Lemma bottom_perm_is_bot : forall p, bottom_perm <= p.
 Proof. constructor; simpl; intuition. rewrite H. reflexivity. Qed.
 
-Program Definition top_perm : perm1 :=
+Program Definition top_perm : perm :=
   {|
     view := fun x y => False ;
     upd  := fun x y => True ;
@@ -205,7 +205,7 @@ We need to define it this way, because, if we don't have the view x x,
 precondition it implies that each view is reflexive, since each upd is. But then
 this notion of separateness is not anti-monotone!
 
-Record separate (p q:perm1) : Prop :=
+Record separate (p q:perm) : Prop :=
   {
     upd1: forall x y:config,
       (view q) x x -> (upd p) x y -> (view q) x y;
@@ -213,7 +213,7 @@ Record separate (p q:perm1) : Prop :=
       (view p) x x -> (upd q) x y -> (view p) x y;
   }.
 
-Lemma separate_anti_monotone : forall (p1 p2 q : perm1) (HSep: separate p2 q) (Hlte: p1 <= p2),
+Lemma separate_anti_monotone : forall (p1 p2 q : perm) (HSep: separate p2 q) (Hlte: p1 <= p2),
     separate p1 q.
 Proof.
   intros p1 p2 q [sep1 sep2] [lte1 lte2].
@@ -222,7 +222,7 @@ Proof.
   - NOTE: here is where we get stuck!
  *)
 
-Record sep_at (x:config) (p q:perm1) : Prop :=
+Record sep_at (x:config) (p q:perm) : Prop :=
   {
     sep_at_view_l : view p x x;
     sep_at_view_r : view q x x;
@@ -248,7 +248,7 @@ Qed.
 (* NOTE: this implies that the fields of p and q are complete; maybe this
 definition would be better if we quantified over all x in the fields (i.e., the
 fields on the PERs) of p and q?  *)
-Definition separate' (p q : perm1) : Prop := forall x, sep_at x p q.
+Definition separate' (p q : perm) : Prop := forall x, sep_at x p q.
 
 (* Equality of permissions = the symmetric closure of the ordering *)
 Definition eq_perm p q : Prop := p <= q /\ q <= p.
@@ -265,7 +265,7 @@ Lemma separate_bottom : forall p, separate' bottom_perm p.
 Proof. intros p x. apply sep_at_bottom. Qed.
 *)
 
-Program Definition sep_conj (p q : perm1) : perm1 :=
+Program Definition sep_conj (p q : perm) : perm :=
   {|
     view := fun x y =>
               (view p x y) /\ (view q x y) /\ sep_at x p q /\ sep_at y p q;
@@ -378,7 +378,7 @@ Qed.
 (* Perms = upwards-closed sets of single permissions *)
 Record Perms :=
   {
-    in_Perms : perm1 -> Prop;
+    in_Perms : perm -> Prop;
     Perms_upwards_closed : forall p1 p2, in_Perms p1 -> p1 <= p2 -> in_Perms p2
   }.
 
