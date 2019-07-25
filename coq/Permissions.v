@@ -19,7 +19,6 @@ Record perm :=
 Instance view_is_PER p : PER (view p) := view_PER p.
 Instance upd_is_preorder p : PreOrder (upd p) := upd_PO p.
 
-
 Record lte_perm (p q:perm) : Prop :=
   {
     view_inc : forall x y, (view q) x y -> (view p) x y;
@@ -30,12 +29,9 @@ Notation "p <= q" := (lte_perm p q).
 
 Instance lte_perm_is_PreOrder : PreOrder lte_perm.
 Proof.
-  admit.
-Admitted.
-
-Lemma lte_refl : forall (p:perm), p <= p.
-Proof.
-  intros; split; intros; tauto.
+  constructor; constructor; auto; intros.
+  - apply H. apply H0. assumption.
+  - apply H0. apply H. assumption.
 Qed.
 
 Program Definition join_perm (p q:perm) : perm :=
@@ -44,34 +40,19 @@ Program Definition join_perm (p q:perm) : perm :=
     upd  := clos_trans _ (fun x y => (upd p x y) \/ (upd q x y)) ;
   |}.
 Next Obligation.
-  admit.
-Admitted.
-Next Obligation.
-  admit.
-Admitted.
-
-(*
-Lemma join_good : forall p q,
-    good_perm p -> good_perm q -> good_perm (join_perm p q).
-Proof.
-  intros p q Hgoodp Hgoodq. constructor; simpl.
-  - constructor.
-    + destruct Hgoodp as [[? _] _]. destruct Hgoodq as [[? _] _].
-      intros x y []. split; auto.
-    + destruct Hgoodp as [[_ ?] _]. destruct Hgoodq as [[_ ?] _].
-      intros x y z [] []. split; eauto.
-  - constructor.
-    + destruct Hgoodp as [_ [? _]]. destruct Hgoodq as [_ [? _]].
-      constructor; auto.
-    + destruct Hgoodp as [_ [_ ?]]. destruct Hgoodq as [_ [_ ?]].
-      red. intros.
-      induction H; induction H0.
-      * destruct H, H0; econstructor 2; constructor; eauto.
-      * econstructor 2; eauto.
-      * econstructor 2; eauto. apply IHclos_trans2. constructor; auto.
-      * repeat (econstructor 2; eauto).
+  constructor.
+  - constructor; destruct H; symmetry; auto.
+  - constructor; destruct H, H0; transitivity y; auto.
 Qed.
-*)
+Next Obligation.
+  constructor.
+  - constructor; left; reflexivity.
+  - repeat intro. destruct H, H0.
+    + destruct H, H0; econstructor 2; constructor; eauto.
+    + econstructor 2. left. apply H. econstructor 2; eauto.
+    + econstructor 2; eauto. econstructor 2; eauto. left. assumption.
+    + repeat (econstructor 2; eauto).
+Qed.
 
 Lemma lte_l_join : forall p q,
     p <= (join_perm p q).
@@ -94,14 +75,11 @@ Lemma join_min : forall p q r,
     q <= r ->
     join_perm p q <= r.
 Proof.
-  admit.
-Admitted.
-(*
   intros p q r [] []. constructor; intros; simpl in *; auto.
-  induction H; eauto.
-  destruct H; auto.
+  induction H.
+  - destruct H; auto.
+  - transitivity y; auto.
 Qed.
- *)
 
 Program Definition meet_perm (p q:perm) : perm :=
   {|
@@ -109,11 +87,17 @@ Program Definition meet_perm (p q:perm) : perm :=
     upd  := fun x y => (upd p x y) /\ (upd q x y) ;
   |}.
 Next Obligation.
-  admit.
-Admitted.
+  constructor.
+  - repeat intro. induction H.
+    + constructor. destruct H; symmetry in H; auto.
+    + econstructor 2; eauto.
+  - repeat intro. econstructor 2; eauto.
+Qed.
 Next Obligation.
-  admit.
-Admitted.
+  constructor.
+  - constructor; reflexivity.
+  - intros x y z [] []. split; etransitivity; eauto.
+Qed.
 
 Lemma lte_meet_l : forall p q,
     meet_perm p q <= p.
@@ -134,39 +118,11 @@ Lemma meet_max : forall p q r,
     r <= q ->
     r <= meet_perm p q.
 Proof.
-  admit.
-Admitted.
-(*
-  intros p q r [[_ ?] _] [] []. constructor; intros; simpl in *; auto.
-  induction H; eauto.
-  destruct H; auto.
+  intros p q r [] []. constructor; intros; simpl in *; auto.
+  induction H.
+  - destruct H; auto.
+  - transitivity y; auto.
 Qed.
- *)
-
-(*
-Lemma meet_good : forall p q,
-    good_perm p -> good_perm q -> good_perm (meet_perm p q).
-Proof.
-  intros p q Hgoodp Hgoodq. constructor; simpl.
-  - constructor.
-    + destruct Hgoodp as [[? _] _]. destruct Hgoodq as [[? _] _].
-      intros x y H. induction H.
-      * constructor. destruct H; auto.
-      * econstructor 2; eauto.
-    + destruct Hgoodp as [[_ ?] _]. destruct Hgoodq as [[_ ?] _].
-      red. intros.
-      induction H; induction H0.
-      * destruct H, H0; econstructor 2; constructor; eauto.
-      * econstructor 2; eauto.
-      * econstructor 2; eauto. apply IHclos_trans2. constructor; auto.
-      * repeat (econstructor 2; eauto).
-  - constructor.
-    + destruct Hgoodp as [_ [? _]]. destruct Hgoodq as [_ [? _]].
-      constructor; auto.
-    + destruct Hgoodp as [_ [_ ?]]. destruct Hgoodq as [_ [_ ?]].
-      intros x y z [] []. split; eauto.
-Qed.
- *)
 
 Program Definition bottom_perm : perm :=
   {|
@@ -245,10 +201,16 @@ Proof.
   - apply lte_view. apply (sep_at_upd_r sepat). assumption.
 Qed.
 
-(* NOTE: this implies that the fields of p and q are complete; maybe this
-definition would be better if we quantified over all x in the fields (i.e., the
-fields on the PERs) of p and q?  *)
-Definition separate' (p q : perm) : Prop := forall x, sep_at x p q.
+Definition separate (p q : perm) : Prop :=
+  forall x, view p x x -> view q x x -> sep_at x p q.
+
+(* Lemma separate_anti_monotone : forall p1 p2 q, *)
+(*     separate p2 q -> p1 <= p2 -> separate p1 q. *)
+(* Proof. *)
+(*   intros. repeat intro. *)
+(*   eapply sep_at_anti_monotone; eauto. apply H; auto. *)
+(*   destruct H0.  *)
+(* Qed. *)
 
 (* Equality of permissions = the symmetric closure of the ordering *)
 Definition eq_perm p q : Prop := p <= q /\ q <= p.
@@ -260,10 +222,10 @@ Proof.
   rewrite <- H0. assumption.
 Qed.
 
-(*
-Lemma separate_bottom : forall p, separate' bottom_perm p.
-Proof. intros p x. apply sep_at_bottom. Qed.
-*)
+Lemma separate_bottom : forall p, separate bottom_perm p.
+Proof.
+  intros p x ? ?. apply sep_at_bottom. assumption.
+Qed.
 
 Program Definition sep_conj (p q : perm) : perm :=
   {|
@@ -272,108 +234,63 @@ Program Definition sep_conj (p q : perm) : perm :=
     upd := clos_trans _ (fun x y => (upd p x y) \/ (upd q x y));
   |}.
 Next Obligation.
-  admit.
-Admitted.
+  constructor.
+  - repeat intro. destruct H as [? [? [? ?]]]. repeat (split; try symmetry; auto).
+  - repeat intro. destruct H as [? [? [? ?]]]. destruct H0 as [? [? [? ?]]].
+    repeat (split; try etransitivity; eauto).
+Qed.
 Next Obligation.
-  admit.
-Admitted.
+  constructor.
+  - intro. constructor 1. left. reflexivity.
+  - repeat intro. econstructor 2; eauto.
+Qed.
 
-
-Lemma separate_join_is_sep_conj: forall p q, separate' p q -> eq_perm (join_perm p q) (sep_conj p q).
+(* TODO lemma name *)
+Lemma PER_lem {A} (p : A -> A -> Prop) `{PER _ p} : forall x y, p x y -> p x x.
 Proof.
-  admit.
-Admitted.
-(*
-  intros. red in H. constructor; intros.
+  intros. etransitivity; eauto; try symmetry; eauto.
+Qed.
+
+Lemma separate_join_is_sep_conj: forall p q, separate p q -> eq_perm (join_perm p q) (sep_conj p q).
+Proof.
+  intros. red in H. split; intros.
   {
-    split; intros; simpl in *.
-    - destruct H0 as [? [? ?]]. auto.
-    - destruct H0. auto.
+    constructor; intros; simpl in *; auto.
+    destruct H0 as [? [? ?]]. split; auto.
   }
   {
-    split; intros; simpl in *.
-    - induction H0.
-      + destruct H0; constructor; auto.
-      + econstructor 2; eauto.
-    - induction H0.
-      + destruct H0; constructor; auto.
-      + econstructor 2; eauto.
+    constructor; intros; simpl in *; auto. destruct H0.
+    split; auto. split; auto. split; apply H. (* TODO make nicer *)
+    eapply PER_lem; intuition; eauto.
+    eapply PER_lem; intuition; eauto.
+    eapply PER_lem; intuition; symmetry; eauto.
+    eapply PER_lem; intuition; symmetry; eauto.
   }
 Qed.
- *)
 
 Lemma sep_conj_top_absorb : forall p, eq_perm (sep_conj top_perm p) top_perm.
 Proof.
-  admit.
-Admitted.
-(*
-  intros. unfold sep_conj. destruct p. unfold top_perm. constructor; intros; simpl.
-  - split; intros; try contradiction.
-    destruct H. contradiction.
-  - split; intros.
-    + induction H; auto.
-    + constructor. left. auto.
+  intros. split; split; intros; simpl in *; intuition.
 Qed.
-*)
 
 Lemma sep_conj_bottom_identity : forall p, eq_perm (sep_conj bottom_perm p) p.
 Proof.
-  admit.
-Admitted.
-(*
-  intros p Hgood. unfold sep_conj. destruct p. unfold bottom_perm. constructor; intros; simpl.
-  - split; intros; auto.
-    + repeat split; auto; intros; simpl in *; contradiction.
-    + destruct H as [? [? ?]]; auto.
-  - split; intros; auto.
-    + induction H.
-      * destruct H; auto; contradiction.
-      * destruct Hgood. destruct upd_PO0. simpl in *. eapply preord_trans; eauto.
-    + constructor. right. auto.
+  intros. split; intros.
+  {
+    split; intros; simpl in *.
+    - split; auto. split; auto. split.
+      + apply sep_at_bottom. eapply PER_lem; intuition; eauto.
+      + apply sep_at_bottom. eapply PER_lem; intuition; symmetry; eauto.
+    - induction H; auto.
+      + destruct H; auto. rewrite H. reflexivity.
+      + etransitivity; eauto.
+  }
+  {
+    split; intros; simpl in *.
+    - destruct H as [_ [? _]]. auto.
+    - constructor 1. right. auto.
+  }
 Qed.
- *)
-
-(* Definition sep_disj (p q : perm) : perm := *)
-(*   {| *)
-(*     view := fun x y => (clos_trans _ (fun x y => (view p x y) \/ (view q x y))) x y /\ sep_at p q x /\ sep_at p q y ; *)
-(*     upd := fun x y => (upd p x y) /\ (upd q x y) ; *)
-(*   |}. *)
-(* Lemma separate_meet_is_sep_disj: forall p q, separate' p q -> eq_perm (meet_perm p q) (sep_disj p q). *)
-(* Proof. *)
-(*   intros. red in H. constructor; intros. *)
-(*   { *)
-(*     split; intros; simpl in *; auto. *)
-(*     destruct H0 as [? [? ?]]. auto. *)
-(*   } *)
-(*   { *)
-(*     split; intros; simpl in *; auto. *)
-(*   } *)
-(* Qed. *)
-(* Lemma sep_disj_bottom_absorb : forall p, eq_perm (sep_disj bottom_perm p) bottom_perm. *)
-(* Proof. *)
-(*   intros. unfold sep_disj. destruct p. unfold bottom_perm. constructor; intros; simpl. *)
-(*   - split; intros; try contradiction; auto. *)
-(*     repeat split; simpl; auto; intros; try contradiction. *)
-(*     constructor. left. auto. *)
-(*   - split; intros; try contradiction. *)
-(*     destruct H. contradiction. *)
-(* Qed. *)
-
-(* Lemma sep_disj_top_identity : forall p, good_perm p -> eq_perm (sep_disj top_perm p) p. *)
-(* Proof. *)
-(*   intros p Hgood. unfold sep_disj. destruct p. unfold top_perm. constructor; intros; simpl. *)
-(*   - split; intros; auto. *)
-(*     + split. *)
-(*       constructor. right. auto. *)
-(*       split; constructor; intros; simpl in *; auto. *)
-(*       * simpl. *)
-(*     + destruct H as [? [? ?]]; auto. *)
-(*   - split; intros; auto. *)
-(*     + induction H. *)
-(*       * destruct H; auto; contradiction. *)
-(*       * destruct Hgood. destruct upd_PO0. simpl in *. eapply preord_trans; eauto. *)
-(*     + constructor. right. auto. *)
-(* Qed. *)
 
 (* Perms = upwards-closed sets of single permissions *)
 Record Perms :=
@@ -408,7 +325,24 @@ Next Obligation.
   apply H1. assumption.
 Qed.
 
+Lemma lte_meet_Perms : forall (Ps : Perms -> Prop) P,
+    Ps P ->
+    meet_Perms Ps ⊑ P.
+Proof.
+  intros. exists P. auto.
+Qed.
 
+Lemma meet_Perms_max : forall (Ps : Perms -> Prop) Q,
+    (forall P, Ps P -> Q ⊑ P) ->
+    Q ⊑ meet_Perms Ps.
+Proof.
+(*   intros. repeat intro. apply H. *)
+
+(*   constructor; intros; simpl in *; auto. *)
+(*   induction H. *)
+(*   - destruct H; auto. *)
+(*   - transitivity y; auto. *)
+(* Qed. *)
 (*
 FIXME:
 - Prove that meet_Perms is a greatest lower bound
