@@ -317,35 +317,29 @@ Defined.
 (* Complete meet of Perms sets = union *)
 Program Definition meet_Perms (Ps : Perms -> Prop) : Perms :=
   {|
-    in_Perms := fun p => exists P, Ps P -> in_Perms P p
+    in_Perms := fun p => exists P, Ps P /\ in_Perms P p
   |}.
 Next Obligation.
-  exists H. intro.
+  exists H. split; auto.
   apply (Perms_upwards_closed _ p1); try assumption.
-  apply H1. assumption.
-Qed.
+Defined.
 
 Lemma lte_meet_Perms : forall (Ps : Perms -> Prop) P,
     Ps P ->
     meet_Perms Ps ⊑ P.
 Proof.
-  intros. exists P. auto.
+  repeat intro. exists P. auto.
 Qed.
 
 Lemma meet_Perms_max : forall (Ps : Perms -> Prop) Q,
     (forall P, Ps P -> Q ⊑ P) ->
     Q ⊑ meet_Perms Ps.
 Proof.
-(*   intros. repeat intro. apply H. *)
-
-(*   constructor; intros; simpl in *; auto. *)
-(*   induction H. *)
-(*   - destruct H; auto. *)
-(*   - transitivity y; auto. *)
-(* Qed. *)
+  repeat intro. destruct H0 as [? [? ?]].
+  eapply H; eauto.
+Qed.
 (*
 FIXME:
-- Prove that meet_Perms is a greatest lower bound
 - Define binary meet as a special case
 - Define conjunction of Perms pointwise
 - Define the top and bottom Perms sets
