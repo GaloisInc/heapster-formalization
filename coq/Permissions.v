@@ -204,14 +204,6 @@ Qed.
 Definition separate (p q : perm) : Prop :=
   forall x, view p x x -> view q x x -> sep_at x p q.
 
-(* Lemma separate_anti_monotone : forall p1 p2 q, *)
-(*     separate p2 q -> p1 <= p2 -> separate p1 q. *)
-(* Proof. *)
-(*   intros. repeat intro. *)
-(*   eapply sep_at_anti_monotone; eauto. apply H; auto. *)
-(*   destruct H0.  *)
-(* Qed. *)
-
 (* Equality of permissions = the symmetric closure of the ordering *)
 Definition eq_perm p q : Prop := p <= q /\ q <= p.
 
@@ -292,6 +284,34 @@ Proof.
   }
 Qed.
 
+Lemma lte_l_sep_conj : forall p q,
+    p <= (sep_conj p q).
+Proof.
+  intros. constructor.
+  - intros x y []; auto.
+  - left; auto.
+Qed.
+
+Lemma lte_r_sep_conj : forall p q,
+    q <= (sep_conj p q).
+Proof.
+  intros. constructor.
+  - intros x y [? [? _]]; auto.
+  - left; auto.
+Qed.
+
+(* Lemma sep_conj_assoc : forall p q r, eq_perm (sep_conj (sep_conj p q) r) (sep_conj p (sep_conj q r)). *)
+(* Proof. *)
+(*   split. *)
+(*   { *)
+(*     constructor; intros. *)
+(*     - destruct H as [? [[? [? [? ?]]] [? ?]]]. split; simpl; auto. *)
+(*       + split; auto. split; auto. split. *)
+(*         * constructor. auto. eapply PER_lem; eauto; intuition. *)
+(*           intros. *)
+(*       + *)
+
+
 (* Perms = upwards-closed sets of single permissions *)
 Record Perms :=
   {
@@ -303,7 +323,12 @@ Record Perms :=
 Definition lte_Perms (P Q : Perms) : Prop :=
   forall p, in_Perms Q p -> in_Perms P p.
 
-Notation "P ⊑ Q" := (lte_Perms P Q) (at level 80, right associativity).
+Instance lte_Perms_is_preorder : PreOrder lte_Perms.
+Proof.
+  constructor; repeat intro; auto.
+Qed.
+
+Notation "P ⊑ Q" := (lte_Perms P Q) (at level 20, right associativity).
 
 (* The least Perms set containing a given p *)
 Program Definition singleton_Perms p : Perms :=
@@ -338,72 +363,98 @@ Proof.
   repeat intro. destruct H0 as [? [? ?]].
   eapply H; eauto.
 Qed.
-(*
-FIXME:
-- Define binary meet as a special case
-- Define conjunction of Perms pointwise
-- Define the top and bottom Perms sets
-- Define entailment as the inverse of lte_Perms
-- Define impl_Perms as the adjoint (w.r.t. entailment) of conjunction
 
+Definition meet_Perms2 P Q : Perms := meet_Perms (fun R => R = P \/ R = Q).
 
-Definition join_Perm (P Q : Perm) : Perm :=
-  fun p => P p /\ Q p.
+Program Definition top_Perms : Perms :=
+  {|
+    in_Perms := fun r => False
+  |}.
 
-Lemma lte_join_Perm_l : forall P Q (HgoodP: goodPerm P) (HgoodQ: goodPerm Q),
-    P ⊑ join_Perm P Q.
+Lemma top_Perms_is_top : forall P, P ⊑ top_Perms.
 Proof.
-  intros P Q [] []. red. intros. destruct H. exists q. split; auto. constructor; auto.
-Qed.
-Lemma lte_join_Perm_r : forall P Q (HgoodP: goodPerm P) (HgoodQ: goodPerm Q),
-    Q ⊑ join_Perm P Q.
-Proof.
-  intros P Q [] []. red. intros. destruct H. exists q. split; auto. constructor; auto.
-Qed.
-Lemma join_Perm_min : forall P Q R (HgoodP: goodPerm P) (HgoodQ: goodPerm Q) (HgoodR: goodPerm R),
-    P ⊑ R ->
-    Q ⊑ R ->
-    join_Perm P Q ⊑ R.
-Proof.
-  intros P Q R [] [] [] ? ? ? ?.
-  destruct (H _ H1) as [? [? ?]]. destruct (H0 _ H1) as [? [? ?]].
-  specialize (Perm_upward_closed0 _ _ H2 H3).
-  specialize (Perm_upward_closed1 _ _ H4 H5).
-  exists q. split; try red; try constructor; auto.
+  repeat intro. inversion H.
 Qed.
 
-Definition bottom_Perm : Perm :=
-  fun p => True.
-Lemma bottom_Perm_is_bot : forall P (Hgood: goodPerm P), bottom_Perm ⊑ P.
+Program Definition bottom_Perms : Perms :=
+  {|
+    in_Perms := fun r => True
+  |}.
+
+Lemma bottom_Perms_is_bottom : forall P, bottom_Perms ⊑ P.
 Proof.
-  intros P Hgood p Hp. exists bottom_perm.
-  split; try red; auto.
-  apply bottom_perm_is_bot.
+  repeat intro. simpl. auto.
 Qed.
 
-Definition top_Perm : Perm :=
-  fun p => False.
-Lemma top_Perm_is_top : forall P (Hgood: goodPerm P), P ⊑ top_Perm.
+(* Set equality *)
+Definition eq_Perms (P Q : Perms) : Prop := P ⊑ Q /\ Q ⊑ P.
+
+Program Definition sep_conj_Perms (P Q : Perms) : Perms :=
+  {|
+    in_Perms := fun r => exists p q, in_Perms P p /\ in_Perms Q q /\ sep_conj p q <= r
+  |}.
+Next Obligation.
+  (* etransitivity; eauto. *)
+  exists H, H1. split; auto. split; auto. etransitivity; eauto.
+Defined.
+
+Lemma sep_conj_Perms_top_identity : forall P, eq_Perms (sep_conj_Perms top_Perms P) top_Perms.
 Proof.
-  intros P Hgood p Hp. inversion Hp.
+  constructor; repeat intro.
+  - inversion H.
+  - destruct H as [? [? [? ?]]]. inversion H.
 Qed.
 
-Definition separate_Perm (P Q : Perm) : Prop :=
-  forall p q, P p -> Q q -> separate p q.
-
-(* Doesn't hold, P1 must contain stuff such that P1 ⊑ P2, but aside from that
-   it can contain anything. *)
-Lemma separate_Perm_anti_monotone : forall (P1 P2 Q : Perm)
-                                      (HSep : separate_Perm P2 Q)
-                                      (Hlte : P1 ⊑ P2),
-    separate_Perm P1 Q.
+Lemma sep_conj_Perms_bottom_absorb : forall P, eq_Perms (sep_conj_Perms bottom_Perms P) P.
 Proof.
-  intros P1 P2 Q ? ? p q ? ?.
-  (* red in HSep. *)
-  (* red in Hlte. specialize (Hlte _ H). destruct Hlte as [p2 [? ?]]. *)
-  (* eapply separate_anti_monotone; eauto. *)
-Abort.
+  constructor; repeat intro; simpl in *.
+  - exists bottom_perm, p. split; [auto | split; auto].
+    apply sep_conj_bottom_identity.
+  - destruct H as [? [? [_ [? ?]]]].
+    eapply (Perms_upwards_closed P); eauto.
+    etransitivity; eauto. apply lte_r_sep_conj.
+Qed.
 
-(* sep conj is pointwise ? *)
+Definition entails_Perms P Q := Q ⊑ P.
 
- *)
+Definition impl_Perms P Q := meet_Perms (fun R => entails_Perms (sep_conj_Perms R P) Q).
+
+Lemma sep_conj_Perms_monotonic : forall P Q R, P ⊑ Q -> sep_conj_Perms P R ⊑ sep_conj_Perms Q R.
+Proof.
+  repeat intro. destruct H0 as [? [? [? [? ?]]]].
+  exists x, x0. auto.
+Qed.
+
+Lemma sep_conj_Perms_meet_commute : forall (Ps : Perms -> Prop) P,
+    eq_Perms (sep_conj_Perms (meet_Perms Ps) P)
+             (meet_Perms (fun Q => exists P', Q = sep_conj_Perms P' P /\ Ps P')).
+Proof.
+  split; repeat intro.
+  - destruct H as [? [[Q [? ?]] ?]].
+    subst. destruct H1 as [? [? [? [? ?]]]].
+    simpl. exists x, x0. split; [ | split]; auto.
+    eexists; split; eauto.
+  - destruct H as [? [? [[Q [? ?]] [? ?]]]].
+    simpl. eexists. split.
+    + exists Q. split; auto.
+    + eapply Perms_upwards_closed; eauto.
+      simpl. exists x, x0. split; [auto | split; [auto | ]]. reflexivity.
+Qed.
+
+(* TODO prove proper instances *)
+Lemma sep_conj_Perms_meet_commute' : forall (Ps : Perms -> Prop) P,
+    eq (sep_conj_Perms (meet_Perms Ps) P)
+       (meet_Perms (fun Q => exists P', Q = sep_conj_Perms P' P /\ Ps P')).
+Admitted.
+
+Lemma adjunction : forall P Q R, entails_Perms (sep_conj_Perms P Q) R <->
+                            entails_Perms P (impl_Perms Q R).
+Proof.
+  intros. split; intros.
+  - red. red. intros. simpl. exists P. auto.
+  - apply (sep_conj_Perms_monotonic _ _ Q) in H.
+    red. etransitivity; [ | apply H].
+    unfold impl_Perms.
+    rewrite sep_conj_Perms_meet_commute'.
+    apply meet_Perms_max. intros P' [? [? ?]]. subst. auto.
+Qed.
