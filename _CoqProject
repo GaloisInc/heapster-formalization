@@ -1,2 +1,4 @@
 -Q coq Heapster
 -R coq Heapster
+
+-R ../../InteractionTrees/theories ITree

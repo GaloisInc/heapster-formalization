@@ -191,6 +191,12 @@ Arguments sep_at_view_r [x p q].
 Arguments sep_at_upd_l [x p q].
 Arguments sep_at_upd_r [x p q].
 
+Lemma sep_at_commutative : forall x p q,
+    sep_at x p q -> sep_at x q p.
+Proof.
+  intros. destruct H. constructor; auto.
+Qed.
+
 Lemma sep_at_anti_monotone : forall x p1 p2 q,
     sep_at x p2 q -> p1 <= p2 -> sep_at x p1 q.
 Proof.
@@ -237,11 +243,38 @@ Next Obligation.
   - repeat intro. econstructor 2; eauto.
 Qed.
 
-(* TODO lemma name *)
-Lemma PER_lem {A} (p : A -> A -> Prop) `{PER _ p} : forall x y, p x y -> p x x.
+Lemma PER_refl {A} (p : A -> A -> Prop) `{PER _ p} : forall x y, p x y -> p x x.
 Proof.
   intros. etransitivity; eauto; try symmetry; eauto.
 Qed.
+
+(* Lemma sep_at_sep_conj_assoc : forall x p q r, *)
+(*     sep_at x (sep_conj p q) r <-> sep_at x p (sep_conj q r). *)
+(* Proof. *)
+(*   split; intros. *)
+(*   { *)
+(*     destruct H as [[? [? [? ?]]] ?]. *)
+(*     constructor; auto. *)
+(*     - split; [ | split ]; auto. *)
+(*       split; (constructor; auto; intros; *)
+(*               [apply sep_at_upd_l0; constructor; auto | *)
+(*                destruct (sep_at_upd_r0 _ H3) as [_ [? _]]; auto]). *)
+(*     - intros. clear H2. destruct H1. split; [ | split; [ | split ]]; auto. *)
+(*       + apply sep_at_upd_l0. constructor. left. auto. *)
+(*       + constructor; auto; intros. *)
+(*         * apply sep_at_upd_l0. constructor. right. auto. *)
+(*         * destruct (sep_at_upd_r0 _ H1) as [_ [? _]]; auto. *)
+(*       + constructor; auto; intros. *)
+(*         * eapply PER_refl; intuition. symmetry. apply sep_at_upd_l1. auto. *)
+(*         * eapply PER_refl; intuition. symmetry. apply sep_at_upd_l0. constructor. left. auto. *)
+(*         * etransitivity. *)
+(*           -- symmetry. apply sep_at_upd_l0. constructor. left. auto. *)
+(*           -- apply sep_at_upd_l0. econstructor 2; constructor; eauto. *)
+(*         * etransitivity. *)
+(*           -- symmetry. apply sep_at_upd_l1. auto. *)
+(*           -- (* specialize (sep_at_upd_r0 _ H1). *) admit. *)
+(*     - admit. *)
+(* Abort. *)
 
 Lemma separate_join_is_sep_conj: forall p q, separate p q -> eq_perm (join_perm p q) (sep_conj p q).
 Proof.
@@ -253,10 +286,10 @@ Proof.
   {
     constructor; intros; simpl in *; auto. destruct H0.
     split; auto. split; auto. split; apply H. (* TODO make nicer *)
-    eapply PER_lem; intuition; eauto.
-    eapply PER_lem; intuition; eauto.
-    eapply PER_lem; intuition; symmetry; eauto.
-    eapply PER_lem; intuition; symmetry; eauto.
+    eapply PER_refl; intuition; eauto.
+    eapply PER_refl; intuition; eauto.
+    eapply PER_refl; intuition; symmetry; eauto.
+    eapply PER_refl; intuition; symmetry; eauto.
   }
 Qed.
 
@@ -271,8 +304,8 @@ Proof.
   {
     split; intros; simpl in *.
     - split; auto. split; auto. split.
-      + apply sep_at_bottom. eapply PER_lem; intuition; eauto.
-      + apply sep_at_bottom. eapply PER_lem; intuition; symmetry; eauto.
+      + apply sep_at_bottom. eapply PER_refl; intuition; eauto.
+      + apply sep_at_bottom. eapply PER_refl; intuition; symmetry; eauto.
     - induction H; auto.
       + destruct H; auto. rewrite H. reflexivity.
       + etransitivity; eauto.
@@ -300,16 +333,27 @@ Proof.
   - left; auto.
 Qed.
 
-(* Lemma sep_conj_assoc : forall p q r, eq_perm (sep_conj (sep_conj p q) r) (sep_conj p (sep_conj q r)). *)
+Lemma sep_conj_commutative : forall p q, sep_conj p q <= sep_conj q p.
+Proof.
+  constructor.
+  - intros x y [? [? [? ?]]].
+    split; [ | split ; [ | split ]]; auto; try apply sep_at_commutative; auto.
+  - intros. induction H.
+    + destruct H; auto; constructor; auto.
+    + etransitivity; eauto.
+Qed.
+
+(* Lemma sep_conj_assoc : forall p q r, eq_perm (sep_conj (sep_conj p q) r) *)
+(*                                         (sep_conj p (sep_conj q r)). *)
 (* Proof. *)
 (*   split. *)
 (*   { *)
-(*     constructor; intros. *)
-(*     - destruct H as [? [[? [? [? ?]]] [? ?]]]. split; simpl; auto. *)
+(*     constructor; repeat intro. *)
+(*     - destruct H as [? [[? [? [? ?]]] [? ?]]]. *)
+(*       split; [ split ; [ | split; [ | split ] ] | split ; [ | split; [ | ] ] ]; auto. *)
 (*       + split; auto. split; auto. split. *)
-(*         * constructor. auto. eapply PER_lem; eauto; intuition. *)
+(*         * constructor. auto. eapply PER_refl; eauto; intuition. *)
 (*           intros. *)
-(*       + *)
 
 
 (* Perms = upwards-closed sets of single permissions *)
@@ -394,7 +438,6 @@ Program Definition sep_conj_Perms (P Q : Perms) : Perms :=
     in_Perms := fun r => exists p q, in_Perms P p /\ in_Perms Q q /\ sep_conj p q <= r
   |}.
 Next Obligation.
-  (* etransitivity; eauto. *)
   exists H, H1. split; auto. split; auto. etransitivity; eauto.
 Defined.
 
@@ -441,11 +484,10 @@ Proof.
       simpl. exists x, x0. split; [auto | split; [auto | ]]. reflexivity.
 Qed.
 
-(* TODO prove proper instances *)
-Lemma sep_conj_Perms_meet_commute' : forall (Ps : Perms -> Prop) P,
-    eq (sep_conj_Perms (meet_Perms Ps) P)
-       (meet_Perms (fun Q => exists P', Q = sep_conj_Perms P' P /\ Ps P')).
-Admitted.
+Instance eq_Perms_flip_impl : forall P, Proper (eq_Perms ==> Basics.flip Basics.impl) (lte_Perms P).
+Proof.
+  intros P Q R [] ?. etransitivity; eauto.
+Qed.
 
 Lemma adjunction : forall P Q R, entails_Perms (sep_conj_Perms P Q) R <->
                             entails_Perms P (impl_Perms Q R).
@@ -455,6 +497,87 @@ Proof.
   - apply (sep_conj_Perms_monotonic _ _ Q) in H.
     red. etransitivity; [ | apply H].
     unfold impl_Perms.
-    rewrite sep_conj_Perms_meet_commute'.
+    rewrite sep_conj_Perms_meet_commute.
     apply meet_Perms_max. intros P' [? [? ?]]. subst. auto.
 Qed.
+
+Section ts.
+  From ITree Require Import
+       Basics.Basics
+       Core.ITreeDefinition
+       Events.State
+       Events.Nondeterminism
+       Indexed.Sum
+       Core.Subevent
+       Interp.Interp.
+
+  Context {E : Type -> Type}.
+  Context {HasStateNat : stateE nat -< E}.
+  Context {HasStateUnit : stateE unit -< E}.
+  Context {HasNondet : nondetE -< E}.
+
+  Definition par_match
+             (par : itree E unit -> itree E unit -> itree E unit )
+             (t1 t2 : itree E unit)
+    : itree E unit :=
+    vis Or (fun b : bool =>
+              if b then
+                match (observe t1) with
+                | RetF _ => t2
+                | TauF t => Tau (par t t2)
+                | VisF o k => vis o (fun x => par (k x) t2)
+                end
+              else
+                match (observe t2) with
+                | RetF _ => t1
+                | TauF t => Tau (par t1 t)
+                | VisF o k => vis o (fun x => par t1 (k x))
+                end).
+
+  CoFixpoint par (t1 t2 : itree E unit) := par_match par t1 t2.
+
+  CoFixpoint step
+             (t : itree (nondetE +' stateE nat) unit)
+             (n : nat)
+    : itree (nondetE +' stateE nat) unit :=
+    match (observe t) with
+    | RetF _ => t
+    | TauF t => Tau (step t n)
+    | VisF o k =>
+      match o with
+      | inl1 _ => (vis o (fun x => (step (k x) n)))
+      | inr1 s => match s in stateE _ X return (X -> _) -> _ with
+                 | Get _ => fun id => k (id n)
+                 | Put _ n' => fun id => k (id tt)
+                 end id
+      end
+    end.
+
+  CoInductive step' : itree (nondetE +' stateE nat) unit -> nat -> itree (nondetE +' stateE nat) unit -> nat -> Prop :=
+  | step_ret : forall n, step' (Ret tt) n (Ret tt) n
+  | step_tau : forall t n t' n', step' t n t' n' -> step' (Tau t) n t' n'
+  (* | step_nondet : forall n k, step' (vis Or k) n *)
+  .
+
+End ts.
+
+
+From ExtLib Require Import
+     Structures.Functor
+     Structures.Monad.
+
+
+Import ITreeNotations.
+Import ITree.Basics.Basics.Monads.
+
+Definition test : itree (stateE nat +' _) unit :=
+  par
+    (x <- (trigger (Get _)) ;; (trigger (Put _ x)))
+    (par (vis (Get nat) (fun x => Ret tt))
+         (Ret tt)).
+
+Compute (burn 10 test).
+
+Eval cbv in (burn 10 (step (trigger (Put _ 0)) 1)).
+(* Eval cbn in (burn 10 (step test 1)). *)
+Eval cbn in (burn 10 (run_state test 1)).
