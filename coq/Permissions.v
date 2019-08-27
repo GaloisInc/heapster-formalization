@@ -1,11 +1,12 @@
 From Coq Require Import
      Classes.Morphisms
+     Classes.RelationClasses
      Lists.List
      Relations.Relation_Operators.
 
 Import ListNotations.
 
-Parameter config : Type.
+Definition config : Type := nat.
 
 (* A single permission *)
 Record perm :=
@@ -501,25 +502,34 @@ Proof.
     apply meet_Perms_max. intros P' [? [? ?]]. subst. auto.
 Qed.
 
+From ITree Require Import
+     ITree
+     ITreeFacts
+     Events.State
+     Events.Nondeterminism
+     Eq.Eq.
+
+From Paco Require Import
+     paco.
+
+Import ITreeNotations.
+Import ITree.Basics.Basics.Monads.
+
+(* todo get rewriting to work *)
+Require Import ITree.Eq.EqAxiom.
+
 Section ts.
-  From ITree Require Import
-       Basics.Basics
-       Core.ITreeDefinition
-       Events.State
-       Events.Nondeterminism
-       Indexed.Sum
-       Core.Subevent
-       Interp.Interp.
 
   Context {E : Type -> Type}.
-  Context {HasStateNat : stateE nat -< E}.
-  Context {HasStateUnit : stateE unit -< E}.
+  Context {HasStateConfig : stateE config -< E}.
   Context {HasNondet : nondetE -< E}.
 
+  Context {R : Type}.
+
   Definition par_match
-             (par : itree E unit -> itree E unit -> itree E unit )
-             (t1 t2 : itree E unit)
-    : itree E unit :=
+             (par : itree E R -> itree E R -> itree E R)
+             (t1 t2 : itree E R)
+    : itree E R :=
     vis Or (fun b : bool =>
               if b then
                 match (observe t1) with
@@ -534,50 +544,141 @@ Section ts.
                 | VisF o k => vis o (fun x => par t1 (k x))
                 end).
 
-  CoFixpoint par (t1 t2 : itree E unit) := par_match par t1 t2.
+  CoFixpoint par (t1 t2 : itree E R) := par_match par t1 t2.
 
-  CoFixpoint step
-             (t : itree (nondetE +' stateE nat) unit)
-             (n : nat)
-    : itree (nondetE +' stateE nat) unit :=
-    match (observe t) with
-    | RetF _ => t
-    | TauF t => Tau (step t n)
-    | VisF o k =>
-      match o with
-      | inl1 _ => (vis o (fun x => (step (k x) n)))
-      | inr1 s => match s in stateE _ X return (X -> _) -> _ with
-                 | Get _ => fun id => k (id n)
-                 | Put _ n' => fun id => k (id tt)
-                 end id
-      end
-    end.
+  Lemma rewrite_par : forall t1 t2, par t1 t2 = par_match par t1 t2.
+  Proof.
+    intros. apply bisimulation_is_eq. revert t1 t2.
+    ginit. gcofix CIH. intros. gstep. unfold par. constructor. red. intros.
+    apply Reflexive_eqit_gen_eq. (* not sure why reflexivity doesn't work here *)
+  Qed.
 
-  CoInductive step' : itree (nondetE +' stateE nat) unit -> nat -> itree (nondetE +' stateE nat) unit -> nat -> Prop :=
-  | step_ret : forall n, step' (Ret tt) n (Ret tt) n
-  | step_tau : forall t n t' n', step' t n t' n' -> step' (Tau t) n t' n'
-  (* | step_nondet : forall n k, step' (vis Or k) n *)
+  Variant step : itree E R -> config -> itree E R -> config -> Prop :=
+  | step_tau : forall t c, step (Tau t) c t c
+  | step_nondet_true : forall k c, step (vis Or k) c (k true) c
+  | step_nondet_false : forall k c, step (vis Or k) c (k false) c
+  | step_get : forall k c, step (vis (Get _) k) c (k c) c
+  | step_put : forall k c c', step (vis (Put _ c') k) c (k tt) c'
   .
 
-End ts.
+  (* Variant step_ : itree' E R -> config -> itree' E R -> config -> Prop := *)
+  (* | step_tau' : forall t c, step_ (TauF t) c (observe t) c *)
+  (* | step_nondet_true' : forall k c, step_ (VisF (subevent _ Or) k) c (observe (k true)) c *)
+  (* | step_nondet_false' : forall k c, step_ (VisF (subevent _ Or) k) c (observe (k false)) c *)
+  (* | step_get' : forall k c, step_ (VisF (subevent _ (Get _)) k) c (observe (k c)) c *)
+  (* | step_put' : forall k c c', step_ (VisF (subevent _ (Put _ c')) k) c (observe (k tt)) c' *)
+  (* . *)
 
+  (* Definition step t c t' c' := step_ (observe t) c (observe t') c'. *)
+
+  (* Instance test : Proper *)
+  (*                   (eq_itree eq ==> *)
+  (*                             eq ==> *)
+  (*                             eq ==> *)
+  (*                             eq ==> *)
+  (*                             Basics.flip Basics.impl) step. *)
+  (* Proof. *)
+  (*   intros t1 t2 Heq ? ? ? ? ? ? ? ? ? ?. subst. inversion H2; subst. *)
+  (*   - rewrite (itree_eta t2) in Heq. rewrite <- H0 in Heq. *)
+
+
+      (*   red. rewrite <- H. *)
+      (* red. rewrite <- H0 in Heq. red in Heq. red in Heq. destruct (observe y0). *)
+      (* destruct (eq_itree_inv_tau _ _ Heq) as [? [? ?]]. red. rewrite H1. rewrite <- H. destruct (observe t1); inversion H. rewrite Heq in H. rewrite H1. *)
+  (* Admitted. *)
+
+  (* Instance test' t c : Proper *)
+  (*                      (observing eq ==> *)
+  (*                                eq ==> *)
+  (*                             Basics.flip Basics.impl) (step t c). *)
+  (* Proof. *)
+  (*   (* intros t1 t2 Hobs ? ? ? ?. *) *)
+  (*   (* subst. *) *)
+  (*   (* red. red in H0. rewrite Hobs. auto. *) *)
+  (* Admitted. *)
+
+  Lemma step_bind : forall (t1 t2 : itree E R) (c1 c2 : config) (k : R -> itree E R),
+      step t1 c1 t2 c2 ->
+      step (t1 >>= k) c1 (t2 >>= k) c2.
+  Proof.
+    intros. inversion H; subst.
+    -
+      (* rewrite (unfold_bind_ t2 _). *)
+      (* rewrite unfold_bind_. *)
+      (* rewrite <- H1. rewrite <- H3. *)
+      (* rewrite <- unfold_bind_. *)
+      (* simpl. constructor. *)
+      pose proof (bind_tau _ t2 k) as bind_tau.
+      apply bisimulation_is_eq in bind_tau. rewrite bind_tau. constructor.
+    (* - *)
+    (*   rewrite (unfold_bind_ t2 _). *)
+    (*   rewrite unfold_bind_. *)
+    (*   rewrite <- H1. rewrite <- H3. *)
+    (*   rewrite <- unfold_bind_. *)
+    (*   simpl. constructor. *)
+    (* - *)
+    (*   rewrite (unfold_bind_ t2 _). *)
+    (*   rewrite unfold_bind_. *)
+    (*   rewrite <- H1. rewrite <- H3. *)
+    (*   rewrite <- unfold_bind_. *)
+    (*   simpl. constructor. *)
+    (* - *)
+    (*   rewrite (unfold_bind_ t2 _). *)
+    (*   rewrite unfold_bind_. *)
+    (*   rewrite <- H1. rewrite <- H3. *)
+    (*   rewrite <- unfold_bind_. *)
+    (*   simpl. constructor. *)
+    (* - *)
+    (*   rewrite (unfold_bind_ t2 _). *)
+    (*   rewrite unfold_bind_. *)
+    (*   rewrite <- H1. rewrite <- H3. *)
+    (*   rewrite <- unfold_bind_. *)
+    (*   simpl. constructor. *)
+
+    -
+      pose proof (bind_vis _ _ (subevent _ Or) k0 k) as bind_vis.
+      apply bisimulation_is_eq in bind_vis. rewrite bind_vis. constructor.
+    - pose proof (bind_vis _ _ (subevent _ Or) k0 k) as bind_vis.
+      apply bisimulation_is_eq in bind_vis. rewrite bind_vis. constructor.
+    - pose proof (bind_vis _ _ (subevent _ (Get _)) k0 k) as bind_vis.
+      apply bisimulation_is_eq in bind_vis. rewrite bind_vis. constructor.
+    - pose proof (bind_vis _ _ (subevent _ (Put _ c2)) k0 k) as bind_vis.
+      apply bisimulation_is_eq in bind_vis. rewrite bind_vis. constructor.
+  Qed.
+
+  Lemma step_ret_bind : forall (t1 t2 : itree E R) (c1 c2 : config) (r : R),
+      step t1 c1 t2 c2 ->
+      step (Ret r;; t1) c1 t2 c2.
+  Proof.
+    intros. pose proof (bind_ret r (fun _ => t1)) as bind_ret.
+    apply bisimulation_is_eq in bind_ret. rewrite bind_ret. assumption.
+  Qed.
+
+  (* to handle the nondeterminism, par needs double the amount of steps *)
+  Lemma par_step : forall (t1 t2 t' : itree E R) (c c' : config),
+      step t1 c t2 c' ->
+      exists t'' c'', step (par t1 t') c t'' c'' /\ step t'' c'' (par t2 t') c'.
+  Proof.
+    intros. inversion H; subst;
+              (rewrite rewrite_par; unfold par_match; simpl; repeat eexists; constructor).
+  Qed.
+End ts.
 
 From ExtLib Require Import
      Structures.Functor
      Structures.Monad.
 
-
 Import ITreeNotations.
 Import ITree.Basics.Basics.Monads.
 
-Definition test : itree (stateE nat +' _) unit :=
+Definition test : itree (stateE config +' _) unit :=
   par
     (x <- (trigger (Get _)) ;; (trigger (Put _ x)))
-    (par (vis (Get nat) (fun x => Ret tt))
+    (par (vis (Get _) (fun x => Ret tt))
          (Ret tt)).
 
 Compute (burn 10 test).
 
-Eval cbv in (burn 10 (step (trigger (Put _ 0)) 1)).
+(* Eval cbv in (burn 10 (step (trigger (Put _ 0)) 1)). *)
 (* Eval cbn in (burn 10 (step test 1)). *)
 Eval cbn in (burn 10 (run_state test 1)).
