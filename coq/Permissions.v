@@ -515,7 +515,6 @@ From Paco Require Import
 Import ITreeNotations.
 Import ITree.Basics.Basics.Monads.
 
-(* todo get rewriting to work *)
 Require Import ITree.Eq.EqAxiom.
 
 Section ts.
@@ -561,82 +560,14 @@ Section ts.
   | step_put : forall k c c', step (vis (Put _ c') k) c (k tt) c'
   .
 
-  (* Variant step_ : itree' E R -> config -> itree' E R -> config -> Prop := *)
-  (* | step_tau' : forall t c, step_ (TauF t) c (observe t) c *)
-  (* | step_nondet_true' : forall k c, step_ (VisF (subevent _ Or) k) c (observe (k true)) c *)
-  (* | step_nondet_false' : forall k c, step_ (VisF (subevent _ Or) k) c (observe (k false)) c *)
-  (* | step_get' : forall k c, step_ (VisF (subevent _ (Get _)) k) c (observe (k c)) c *)
-  (* | step_put' : forall k c c', step_ (VisF (subevent _ (Put _ c')) k) c (observe (k tt)) c' *)
-  (* . *)
-
-  (* Definition step t c t' c' := step_ (observe t) c (observe t') c'. *)
-
-  (* Instance test : Proper *)
-  (*                   (eq_itree eq ==> *)
-  (*                             eq ==> *)
-  (*                             eq ==> *)
-  (*                             eq ==> *)
-  (*                             Basics.flip Basics.impl) step. *)
-  (* Proof. *)
-  (*   intros t1 t2 Heq ? ? ? ? ? ? ? ? ? ?. subst. inversion H2; subst. *)
-  (*   - rewrite (itree_eta t2) in Heq. rewrite <- H0 in Heq. *)
-
-
-      (*   red. rewrite <- H. *)
-      (* red. rewrite <- H0 in Heq. red in Heq. red in Heq. destruct (observe y0). *)
-      (* destruct (eq_itree_inv_tau _ _ Heq) as [? [? ?]]. red. rewrite H1. rewrite <- H. destruct (observe t1); inversion H. rewrite Heq in H. rewrite H1. *)
-  (* Admitted. *)
-
-  (* Instance test' t c : Proper *)
-  (*                      (observing eq ==> *)
-  (*                                eq ==> *)
-  (*                             Basics.flip Basics.impl) (step t c). *)
-  (* Proof. *)
-  (*   (* intros t1 t2 Hobs ? ? ? ?. *) *)
-  (*   (* subst. *) *)
-  (*   (* red. red in H0. rewrite Hobs. auto. *) *)
-  (* Admitted. *)
-
   Lemma step_bind : forall (t1 t2 : itree E R) (c1 c2 : config) (k : R -> itree E R),
       step t1 c1 t2 c2 ->
       step (t1 >>= k) c1 (t2 >>= k) c2.
   Proof.
     intros. inversion H; subst.
-    -
-      (* rewrite (unfold_bind_ t2 _). *)
-      (* rewrite unfold_bind_. *)
-      (* rewrite <- H1. rewrite <- H3. *)
-      (* rewrite <- unfold_bind_. *)
-      (* simpl. constructor. *)
-      pose proof (bind_tau _ t2 k) as bind_tau.
+    - pose proof (bind_tau _ t2 k) as bind_tau.
       apply bisimulation_is_eq in bind_tau. rewrite bind_tau. constructor.
-    (* - *)
-    (*   rewrite (unfold_bind_ t2 _). *)
-    (*   rewrite unfold_bind_. *)
-    (*   rewrite <- H1. rewrite <- H3. *)
-    (*   rewrite <- unfold_bind_. *)
-    (*   simpl. constructor. *)
-    (* - *)
-    (*   rewrite (unfold_bind_ t2 _). *)
-    (*   rewrite unfold_bind_. *)
-    (*   rewrite <- H1. rewrite <- H3. *)
-    (*   rewrite <- unfold_bind_. *)
-    (*   simpl. constructor. *)
-    (* - *)
-    (*   rewrite (unfold_bind_ t2 _). *)
-    (*   rewrite unfold_bind_. *)
-    (*   rewrite <- H1. rewrite <- H3. *)
-    (*   rewrite <- unfold_bind_. *)
-    (*   simpl. constructor. *)
-    (* - *)
-    (*   rewrite (unfold_bind_ t2 _). *)
-    (*   rewrite unfold_bind_. *)
-    (*   rewrite <- H1. rewrite <- H3. *)
-    (*   rewrite <- unfold_bind_. *)
-    (*   simpl. constructor. *)
-
-    -
-      pose proof (bind_vis _ _ (subevent _ Or) k0 k) as bind_vis.
+    - pose proof (bind_vis _ _ (subevent _ Or) k0 k) as bind_vis.
       apply bisimulation_is_eq in bind_vis. rewrite bind_vis. constructor.
     - pose proof (bind_vis _ _ (subevent _ Or) k0 k) as bind_vis.
       apply bisimulation_is_eq in bind_vis. rewrite bind_vis. constructor.
@@ -655,14 +586,36 @@ Section ts.
   Qed.
 
   (* to handle the nondeterminism, par needs double the amount of steps *)
-  Lemma par_step : forall (t1 t2 t' : itree E R) (c c' : config),
+  Lemma par_step_left : forall (t1 t2 t' : itree E R) (c c' : config),
       step t1 c t2 c' ->
       exists t'' c'', step (par t1 t') c t'' c'' /\ step t'' c'' (par t2 t') c'.
   Proof.
     intros. inversion H; subst;
               (rewrite rewrite_par; unfold par_match; simpl; repeat eexists; constructor).
   Qed.
+  Lemma par_step_right : forall (t1 t2 t' : itree E R) (c c' : config),
+      step t1 c t2 c' ->
+      exists t'' c'', step (par t' t1) c t'' c'' /\ step t'' c'' (par t' t2) c'.
+  Proof.
+    intros. inversion H; subst;
+              (rewrite rewrite_par; unfold par_match; simpl; repeat eexists; constructor).
+  Qed.
+
+  CoInductive typing P t : Prop :=
+  | cond : forall p c, in_Perms P p -> view p c c -> forall t' c', step t c t' c' ->
+                  (
+                    (* we step to configs that satisfy the perm *)
+                    (upd p c c') /\
+                    (* we step to machines that are well-typed by some other perm that maintains separation *)
+                    (forall p', sep_at c p p' ->
+                           exists P_out, typing P_out t' /\
+                                    forall p_out,
+                                      in_Perms P_out p_out ->
+                                      (view p_out c' c' /\ sep_at c' p_out p'))
+                  ) -> typing P t.
 End ts.
+
+(* TODO: typing P spin *)
 
 From ExtLib Require Import
      Structures.Functor
