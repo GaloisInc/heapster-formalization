@@ -174,7 +174,7 @@ Lemma separate_anti_monotone : forall (p1 p2 q : perm) (HSep: separate p2 q) (Hl
     separate p1 q.
 Proof.
   intros p1 p2 q [sep1 sep2] [lte1 lte2].
-  constructor; intros.
+ constructor; intros.
   - apply sep1; try assumption. apply lte2. assumption.
   - NOTE: here is where we get stuck!
  *)
@@ -243,6 +243,13 @@ Next Obligation.
   - intro. constructor 1. left. reflexivity.
   - repeat intro. econstructor 2; eauto.
 Qed.
+
+(* Lemma sep_conj_test : forall p, eq_perm (sep_conj p p) p. *)
+(* Proof. *)
+(*   intros. split; auto. *)
+(*   - constructor; intros; auto. *)
+(*     + split; auto. split; auto. split; auto. *)
+(* Qed. *)
 
 Lemma PER_refl {A} (p : A -> A -> Prop) `{PER _ p} : forall x y, p x y -> p x x.
 Proof.
@@ -588,34 +595,134 @@ Section ts.
   (* to handle the nondeterminism, par needs double the amount of steps *)
   Lemma par_step_left : forall (t1 t2 t' : itree E R) (c c' : config),
       step t1 c t2 c' ->
-      exists t'' c'', step (par t1 t') c t'' c'' /\ step t'' c'' (par t2 t') c'.
+      exists t'', step (par t1 t') c t'' c /\ step t'' c (par t2 t') c'.
   Proof.
     intros. inversion H; subst;
               (rewrite rewrite_par; unfold par_match; simpl; repeat eexists; constructor).
   Qed.
   Lemma par_step_right : forall (t1 t2 t' : itree E R) (c c' : config),
       step t1 c t2 c' ->
-      exists t'' c'', step (par t' t1) c t'' c'' /\ step t'' c'' (par t' t2) c'.
+      exists t'', step (par t' t1) c t'' c /\ step t'' c (par t' t2) c'.
   Proof.
     intros. inversion H; subst;
               (rewrite rewrite_par; unfold par_match; simpl; repeat eexists; constructor).
   Qed.
 
-  CoInductive typing P t : Prop :=
-  | cond : forall p c, in_Perms P p -> view p c c -> forall t' c', step t c t' c' ->
-                  (
-                    (* we step to configs that satisfy the perm *)
-                    (upd p c c') /\
-                    (* we step to machines that are well-typed by some other perm that maintains separation *)
-                    (forall p', sep_at c p p' ->
-                           exists P_out, typing P_out t' /\
-                                    forall p_out,
-                                      in_Perms P_out p_out ->
-                                      (view p_out c' c' /\ sep_at c' p_out p'))
-                  ) -> typing P t.
+  Variant typing_gen typing P t : Prop :=
+  | cond : (forall p c, in_Perms P p ->
+                   view p c c ->
+                   forall t' c',
+                     step t c t' c' ->
+                     (
+                       (* we step to configs that satisfy the perm *)
+                       (upd p c c') /\
+                       (* we step to machines that are well-typed by some other perm that maintains separation *)
+                       (exists P', typing P' t' /\
+                              exists p', in_Perms P' p' /\
+                                    forall p_s,
+                                      view (sep_conj p p_s) c c ->
+                                      view p_s c c'))) -> (* here maybe sep_conj p' p_s ? *)
+           typing_gen typing P t.
+
+  Definition typing P t := paco2 typing_gen bot2 P t.
+
+  Lemma typing_gen_mon : monotone2 typing_gen.
+  Proof.
+    repeat intro.
+    inversion IN. econstructor; eauto. intros. specialize (H _ _ H0 H1 _ _ H2).
+    destruct H as [? [? [? [? [? ?]]]]]. split; eauto. eexists; eauto.
+  Qed.
+  Hint Resolve typing_gen_mon : paco.
+
+  Lemma rewrite_spin : (ITree.spin : itree E R) = Tau (ITree.spin).
+  Proof.
+    intros. apply bisimulation_is_eq.
+    ginit. gcofix CIH. gstep. unfold ITree.spin. constructor.
+    apply Reflexive_eqit_gen_eq.
+  Qed.
+
+  Lemma type_spin : forall P, typing P ITree.spin.
+  Proof.
+    pcofix CIH. intros. pfold. econstructor. intros. rewrite rewrite_spin in H1.
+    inversion H1; subst. split; try reflexivity.
+    exists P. split; auto. exists p. split; auto. intros. destruct H2 as [_ [? _]]. auto.
+  Qed.
+
+  Lemma type_tau : forall P t, typing P t -> typing P (Tau t).
+  Proof.
+    pcofix CIH. intros. pfold. econstructor. intros.
+    inversion H2; subst.
+    split; intuition. exists P. split.
+    - left. eapply paco2_mon_bot; eauto.
+    - exists p. split; auto. intros. destruct H3 as [_ [? _]]. auto.
+  Qed.
+
+  Lemma type_tau' : forall P t, typing P (Tau t) -> typing P t.
+  Proof.
+    pcofix CIH. intros. pfold. econstructor. intros.
+    pinversion H0.
+    inversion H2; subst.
+    - split; intuition.
+      specialize (H3 _ _ H H1 (Tau t') c').
+      destruct H3 as [? [P' [? [p' [? ?]]]]]. constructor.
+      destruct H4; try contradiction.
+      exists P'; split; eauto.
+    - split; intuition.
+      specialize (H3 _ _ H H1 (Vis (subevent bool Or) k) c').
+      destruct H3 as [? [P' [? [p' [? ?]]]]]. constructor.
+      destruct H4; try contradiction.
+
+      pinversion H4.
+      assert (view p' c' c') by admit.
+      specialize (H7 _ c' H5 H8 (k true) c').
+      destruct H7 as [? [P'' [? [p'' [? ?]]]]]. constructor.
+      destruct H9; try contradiction.
+      exists P''. split; eauto. left. eapply paco2_mon_bot; eauto.
+    - split; intuition.
+      specialize (H3 _ _ H H1 (Vis (subevent bool Or) k) c').
+      destruct H3 as [? [P' [? [p' [? ?]]]]]. constructor.
+      destruct H4; try contradiction.
+
+      pinversion H4.
+      assert (view p' c' c') by admit.
+      specialize (H7 _ c' H5 H8 (k false) c').
+      destruct H7 as [? [P'' [? [p'' [? ?]]]]]. constructor.
+      destruct H9; try contradiction.
+      exists P''. split; eauto. left. eapply paco2_mon_bot; eauto.
+    - split; intuition.
+      specialize (H3 _ _ H H1 (Vis (subevent config (Get config)) k) c').
+      destruct H3 as [? [P' [? [p' [? ?]]]]]. constructor.
+      destruct H4; try contradiction.
+
+      pinversion H4.
+      assert (view p' c' c') by admit.
+      specialize (H7 _ c' H5 H8 (k c') c').
+      destruct H7 as [? [P'' [? [p'' [? ?]]]]]. constructor.
+      destruct H9; try contradiction.
+      exists P''. split; eauto. left. eapply paco2_mon_bot; eauto.
+    - specialize (H3 _ _ H H1 (Vis (subevent unit (Put config c')) k) c).
+      destruct H3 as [? [P' [? [p' [? ?]]]]]. constructor.
+      destruct H4; try contradiction.
+
+      pinversion H4.
+      assert (view p' c c) by admit.
+      specialize (H7 p c H5 H8 (k tt) c').
+      destruct H7 as [? [P'' [? [p'' [? ?]]]]]. constructor.
+      destruct H9; try contradiction. split. admit.
+      exists P''. split; eauto. left. eapply paco2_mon_bot; eauto.
+      exists p''. split; auto. intros. apply H11.
+  Qed.
+
+  Lemma frame : forall P1 P2 t1, typing P1 t1 -> typing (sep_conj_Perms P1 P2) t1.
+  Proof.
+    pcofix CIH. intros. pfold. pinversion H0.
+    econstructor. intros. inversion H3; subst; eauto.
+    - split; try reflexivity.
+      eexists; split; eauto.
+      + right. apply CIH. pfold. apply H0.
+  Qed.
 End ts.
 
-(* TODO: typing P spin *)
 
 From ExtLib Require Import
      Structures.Functor
