@@ -617,11 +617,12 @@ Section ts.
                        (* we step to configs that satisfy the perm *)
                        (upd p c c') /\
                        (* we step to machines that are well-typed by some other perm that maintains separation *)
-                       (exists P', typing P' t' /\
-                              exists p', in_Perms P' p' /\
-                                    forall p_s,
-                                      view (sep_conj p p_s) c c ->
-                                      view p_s c c'))) -> (* here maybe sep_conj p' p_s ? *)
+                       (typing P t'))) ->
+                       (* (exists P', typing P' t' /\ *)
+                       (*        exists p', in_Perms P' p' /\ *)
+                       (*              forall p_s, *)
+                       (*                view (sep_conj p p_s) c c -> *)
+                       (*                view p_s c c'))) -> (* here maybe sep_conj p' p_s ? *) *)
            typing_gen typing P t.
 
   Definition typing P t := paco2 typing_gen bot2 P t.
@@ -630,7 +631,10 @@ Section ts.
   Proof.
     repeat intro.
     inversion IN. econstructor; eauto. intros. specialize (H _ _ H0 H1 _ _ H2).
-    destruct H as [? [? [? [? [? ?]]]]]. split; eauto. eexists; eauto.
+
+    destruct H; eauto.
+
+    (* destruct H as [? [? [? [? [? ?]]]]]. split; eauto. eexists; eauto. *)
   Qed.
   Hint Resolve typing_gen_mon : paco.
 
@@ -645,16 +649,21 @@ Section ts.
   Proof.
     pcofix CIH. intros. pfold. econstructor. intros. rewrite rewrite_spin in H1.
     inversion H1; subst. split; try reflexivity.
-    exists P. split; auto. exists p. split; auto. intros. destruct H2 as [_ [? _]]. auto.
+    eauto.
+    (* exists P. split; auto. exists p. split; auto. intros. destruct H2 as [_ [? _]]. auto. *)
   Qed.
 
   Lemma type_tau : forall P t, typing P t -> typing P (Tau t).
   Proof.
     pcofix CIH. intros. pfold. econstructor. intros.
     inversion H2; subst.
-    split; intuition. exists P. split.
-    - left. eapply paco2_mon_bot; eauto.
-    - exists p. split; auto. intros. destruct H3 as [_ [? _]]. auto.
+    split; intuition.
+
+    left. eapply paco2_mon_bot; eauto.
+
+    (* exists P. split. *)
+    (* - left. eapply paco2_mon_bot; eauto. *)
+    (* - exists p. split; auto. intros. destruct H3 as [_ [? _]]. auto. *)
   Qed.
 
   Lemma type_tau' : forall P t, typing P (Tau t) -> typing P t.
@@ -663,66 +672,139 @@ Section ts.
     pinversion H0.
     inversion H2; subst.
     - split; intuition.
-      specialize (H3 _ _ H H1 (Tau t') c').
-      destruct H3 as [? [P' [? [p' [? ?]]]]]. constructor.
-      destruct H4; try contradiction.
-      exists P'; split; eauto.
+      destruct (H3 _ _ H H1 _ _ (step_tau _ _)).
+      right. apply CIH.
+      destruct H5; try contradiction; auto.
     - split; intuition.
-      specialize (H3 _ _ H H1 (Vis (subevent bool Or) k) c').
-      destruct H3 as [? [P' [? [p' [? ?]]]]]. constructor.
-      destruct H4; try contradiction.
-
-      pinversion H4.
-      assert (view p' c' c') by admit.
-      specialize (H7 _ c' H5 H8 (k true) c').
-      destruct H7 as [? [P'' [? [p'' [? ?]]]]]. constructor.
-      destruct H9; try contradiction.
-      exists P''. split; eauto. left. eapply paco2_mon_bot; eauto.
+      destruct (H3 _ _ H H1 _ _ (step_tau _ _)). clear H3.
+      destruct H5; try contradiction.
+      pinversion H3.
+      destruct (H5 _ _ H H1 _ _ (step_nondet_true _ _)).
+      destruct H7; try contradiction.
+      left. eapply paco2_mon_bot; eauto.
     - split; intuition.
-      specialize (H3 _ _ H H1 (Vis (subevent bool Or) k) c').
-      destruct H3 as [? [P' [? [p' [? ?]]]]]. constructor.
-      destruct H4; try contradiction.
-
-      pinversion H4.
-      assert (view p' c' c') by admit.
-      specialize (H7 _ c' H5 H8 (k false) c').
-      destruct H7 as [? [P'' [? [p'' [? ?]]]]]. constructor.
-      destruct H9; try contradiction.
-      exists P''. split; eauto. left. eapply paco2_mon_bot; eauto.
+      destruct (H3 _ _ H H1 _ _ (step_tau _ _)). clear H3.
+      destruct H5; try contradiction.
+      pinversion H3.
+      destruct (H5 _ _ H H1 _ _ (step_nondet_false _ _)).
+      destruct H7; try contradiction.
+      left. eapply paco2_mon_bot; eauto.
     - split; intuition.
-      specialize (H3 _ _ H H1 (Vis (subevent config (Get config)) k) c').
-      destruct H3 as [? [P' [? [p' [? ?]]]]]. constructor.
-      destruct H4; try contradiction.
+      destruct (H3 _ _ H H1 _ _ (step_tau _ _)). clear H3.
+      destruct H5; try contradiction.
+      pinversion H3.
+      destruct (H5 _ _ H H1 _ _ (step_get _ _)).
+      destruct H7; try contradiction.
+      left. eapply paco2_mon_bot; eauto.
+    - destruct (H3 _ _ H H1 _ _ (step_tau _ _)). clear H3.
+      destruct H5; try contradiction.
+      pinversion H3.
+      destruct (H5 _ _ H H1 _ _ (step_put _ _ _)).
+      destruct H7; try contradiction.
+      split; auto.
+      left. eapply paco2_mon_bot; eauto.
+Qed.
 
-      pinversion H4.
-      assert (view p' c' c') by admit.
-      specialize (H7 _ c' H5 H8 (k c') c').
-      destruct H7 as [? [P'' [? [p'' [? ?]]]]]. constructor.
-      destruct H9; try contradiction.
-      exists P''. split; eauto. left. eapply paco2_mon_bot; eauto.
-    - specialize (H3 _ _ H H1 (Vis (subevent unit (Put config c')) k) c).
-      destruct H3 as [? [P' [? [p' [? ?]]]]]. constructor.
-      destruct H4; try contradiction.
 
-      pinversion H4.
-      assert (view p' c c) by admit.
-      specialize (H7 p c H5 H8 (k tt) c').
-      destruct H7 as [? [P'' [? [p'' [? ?]]]]]. constructor.
-      destruct H9; try contradiction. split. admit.
-      exists P''. split; eauto. left. eapply paco2_mon_bot; eauto.
-      exists p''. split; auto. intros. apply H11.
-  Qed.
+  (*   inversion H2; subst. *)
+  (*   - split; intuition. *)
+  (*     specialize (H3 _ _ H H1 (Tau t') c'). *)
+  (*     destruct H3 as [? [P' [? [p' [? ?]]]]]. constructor. *)
+  (*     destruct H4; try contradiction. *)
+  (*     exists P'; split; eauto. *)
+  (*   - split; intuition. *)
+  (*     specialize (H3 _ _ H H1 (Vis (subevent bool Or) k) c'). *)
+  (*     destruct H3 as [? [P' [? [p' [? ?]]]]]. constructor. *)
+  (*     destruct H4; try contradiction. *)
+
+  (*     pinversion H4. *)
+  (*     assert (view p' c' c') by admit. *)
+  (*     specialize (H7 _ c' H5 H8 (k true) c'). *)
+  (*     destruct H7 as [? [P'' [? [p'' [? ?]]]]]. constructor. *)
+  (*     destruct H9; try contradiction. *)
+  (*     exists P''. split; eauto. left. eapply paco2_mon_bot; eauto. *)
+  (*   - split; intuition. *)
+  (*     specialize (H3 _ _ H H1 (Vis (subevent bool Or) k) c'). *)
+  (*     destruct H3 as [? [P' [? [p' [? ?]]]]]. constructor. *)
+  (*     destruct H4; try contradiction. *)
+
+  (*     pinversion H4. *)
+  (*     assert (view p' c' c') by admit. *)
+  (*     specialize (H7 _ c' H5 H8 (k false) c'). *)
+  (*     destruct H7 as [? [P'' [? [p'' [? ?]]]]]. constructor. *)
+  (*     destruct H9; try contradiction. *)
+  (*     exists P''. split; eauto. left. eapply paco2_mon_bot; eauto. *)
+  (*   - split; intuition. *)
+  (*     specialize (H3 _ _ H H1 (Vis (subevent config (Get config)) k) c'). *)
+  (*     destruct H3 as [? [P' [? [p' [? ?]]]]]. constructor. *)
+  (*     destruct H4; try contradiction. *)
+
+  (*     pinversion H4. *)
+  (*     assert (view p' c' c') by admit. *)
+  (*     specialize (H7 _ c' H5 H8 (k c') c'). *)
+  (*     destruct H7 as [? [P'' [? [p'' [? ?]]]]]. constructor. *)
+  (*     destruct H9; try contradiction. *)
+  (*     exists P''. split; eauto. left. eapply paco2_mon_bot; eauto. *)
+  (*   - specialize (H3 _ _ H H1 (Vis (subevent unit (Put config c')) k) c). *)
+  (*     destruct H3 as [? [P' [? [p' [? ?]]]]]. constructor. *)
+  (*     destruct H4; try contradiction. *)
+
+  (*     pinversion H4. *)
+  (*     assert (view p' c c) by admit. *)
+  (*     specialize (H7 p c H5 H8 (k tt) c'). *)
+  (*     destruct H7 as [? [P'' [? [p'' [? ?]]]]]. constructor. *)
+  (*     destruct H9; try contradiction. split. admit. *)
+  (*     exists P''. split; eauto. left. eapply paco2_mon_bot; eauto. *)
+  (*     exists p''. split; auto. intros. apply H11. *)
+  (* Qed. *)
 
   Lemma frame : forall P1 P2 t1, typing P1 t1 -> typing (sep_conj_Perms P1 P2) t1.
   Proof.
     pcofix CIH. intros. pfold. pinversion H0.
     econstructor. intros. inversion H3; subst; eauto.
     - split; try reflexivity.
-      eexists; split; eauto.
-      + right. apply CIH. pfold. apply H0.
+      right. apply CIH. apply type_tau'. pfold. apply H0.
+    - split; try reflexivity.
+      destruct H1 as [? [? [? [? ?]]]].
+      destruct H5 as [? _]. specialize (view_inc0 _ _ H2). destruct view_inc0.
+      destruct (H _ _ H1 H5 _ _ (step_nondet_true _ _)).
+      destruct H8; try contradiction.
+      right. apply CIH. auto.
+    - split; try reflexivity.
+      destruct H1 as [? [? [? [? ?]]]].
+      destruct H5 as [? _]. specialize (view_inc0 _ _ H2). destruct view_inc0.
+      destruct (H _ _ H1 H5 _ _ (step_nondet_false _ _)).
+      destruct H8; try contradiction.
+      right. apply CIH. auto.
+    - split; try reflexivity.
+      destruct H1 as [? [? [? [? ?]]]].
+      destruct H5 as [? _]. specialize (view_inc0 _ _ H2). destruct view_inc0.
+      destruct (H _ _ H1 H5 _ _ (step_get _ _)).
+      destruct H8; try contradiction.
+      right. apply CIH. auto.
+    - destruct H1 as [? [? [? [? ?]]]].
+      destruct H5 as [? ?]. specialize (view_inc0 _ _ H2). destruct view_inc0.
+      destruct (H _ _ H1 H5 _ _ (step_put _ _ _)).
+      destruct H8; try contradiction.
+      split.
+      + apply upd_inc0. constructor. left. auto.
+      + right. apply CIH. auto.
   Qed.
-End ts.
 
+  Lemma separation : forall P1 P2 t1 t2,
+      typing P1 t1 -> typing P2 t2 -> typing (sep_conj_Perms P1 P2) (par t1 t2).
+  Proof.
+    pcofix CIH. intros. pfold. pinversion H0.
+    econstructor. intros. rewrite rewrite_par in H4. unfold par_match in H4.
+    inversion H4; auto_inj_pair2; subst; clear H4.
+    - split; intuition. destruct (observe t1) eqn:?.
+      + left. (* true by (generalized with different r) frame rule? *) admit.
+      + left. (* true by type_tau'? *) admit.
+      + left. pfold. constructor. intros. admit.
+    -
+  Qed.
+
+End ts.
 
 From ExtLib Require Import
      Structures.Functor
