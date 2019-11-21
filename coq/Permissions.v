@@ -8,6 +8,11 @@ Import ListNotations.
 
 Definition config : Type := nat.
 
+Lemma PER_refl {A} (p : A -> A -> Prop) `{PER _ p} : forall x y, p x y -> p x x.
+Proof.
+  intros. etransitivity; eauto; try symmetry; eauto.
+Qed.
+
 (* A single permission *)
 Record perm :=
   mkPerm {
@@ -389,8 +394,26 @@ Proof.
 Abort.
 
 Definition separate' (p q : perm) : Prop :=
-  (forall x y x', view p x y -> upd q x x' -> exists y', view p x' y' /\ upd q y y') /\
-  (forall x y x', view q x y -> upd p x x' -> exists y', view q x' y' /\ upd p y y').
+  (forall x y, view p x x -> upd q x y -> view p x y) /\
+  (forall x y, view q x x -> upd p x y -> view q x y).
+
+Definition separate'' (p q : perm) : Prop :=
+  (forall x y z, view p x y -> upd q y z -> view p x z) /\
+  (forall x y z, view q x y -> upd p y z -> view q x z).
+
+Lemma sep_test : forall p q,
+    separate' p q -> separate'' p q.
+Proof.
+  intros p q [H H']. split; repeat intro.
+  - etransitivity; eauto. apply H; auto. eapply PER_refl; eauto; intuition; symmetry; eauto.
+  - etransitivity; eauto. apply H'; auto. eapply PER_refl; eauto; intuition; symmetry; eauto.
+Qed.
+
+Lemma sep_test' : forall p q,
+    separate'' p q -> separate' p q.
+Proof.
+  intros p q [H H']. split; repeat intro; eauto.
+Qed.
 
 Record permConj :=
   {
@@ -407,16 +430,18 @@ Program Definition permConj_perm (pc : permConj) : perm :=
   {|
     view := fun x y => forall p, in_permConj pc p ->
                          view p x y /\
-                         forall q, in_permConj pc q -> q <> p -> sep_at x p q /\ sep_at y p q;
+                         forall q, in_permConj pc q -> q <> p -> separate'' p q;
     upd := fun x y => x = y \/ clos_trans _ (fun x y => exists p, in_permConj pc p /\ upd p x y) x y;
   |}.
 Next Obligation.
   constructor; repeat intro.
-  - destruct (H p H0). split; try symmetry; auto. intros.
-    destruct (H2 q); eauto.
+  - destruct (H p H0). split; try symmetry; auto.
+    (* intros. destruct (H2 q); eauto. *)
   - destruct (H p H1) as [? ?]. destruct (H0 p H1) as [? ?].
     split. etransitivity; eauto.
-    intros. destruct (H3 q H6 H7), (H5 q H6 H7). repeat (split; try etransitivity; eauto).
+    intros.
+    apply H3; auto.
+    (* destruct (H3 q H6 H7), (H5 q H6 H7). repeat (split; try etransitivity; eauto). *)
 Qed.
 Next Obligation.
   constructor.
@@ -551,8 +576,9 @@ Qed.
 
 Definition sep_conj_permConj := join_permConj.
 
-Definition separate_permConj pc1 pc2 : Prop := separate (permConj_perm pc1)
-                                                     (permConj_perm pc2).
+Definition separate_permConj pc1 pc2 : Prop := separate'' (permConj_perm pc1)
+                                                       (permConj_perm pc2).
+
 
 (* Program Definition sep_conj (p q : perm) : perm := *)
 (*   {| *)
@@ -571,11 +597,6 @@ Definition separate_permConj pc1 pc2 : Prop := separate (permConj_perm pc1)
 (*   - intro. constructor 1. left. reflexivity. *)
 (*   - repeat intro. econstructor 2; eauto. *)
 (* Qed. *)
-
-Lemma PER_refl {A} (p : A -> A -> Prop) `{PER _ p} : forall x y, p x y -> p x x.
-Proof.
-  intros. etransitivity; eauto; try symmetry; eauto.
-Qed.
 
 (* Lemma separate_join_is_sep_conj: forall p q, separate p q -> eq_perm (join_perm p q) (sep_conj p q). *)
 (* Proof. *)
@@ -1009,21 +1030,22 @@ Section ts.
               (rewrite rewrite_par; unfold par_match; simpl; repeat eexists; constructor).
   Qed.
 
-  Variant typing_gen typing P t : Prop :=
-  | cond : (forall p c, in_Perms P p ->
-                   view p c c ->
-                   forall t' c',
-                     step t c t' c' ->
-                     (
-                       (* we step to configs that satisfy the perm *)
-                       (upd p c c') /\
-                       (* we step to machines that are well-typed by some other perm that maintains separation *)
-                       (* (typing P t'))) -> *)
-                       (exists P', typing P' t' /\
-                              forall p_s,
-                                view (sep_conj_permConj p p_s) c c ->
-                                exists p', in_Perms P' p' /\
-                                      view (sep_conj_permConj p' p_s) c' c'))) ->
+  Variant typing_gen typing (P : Perms) (t : itree E R) : Prop :=
+  | cond : (forall pc c, in_Perms P pc ->
+                    let p := permConj_perm pc in
+                    view p c c ->
+                    forall t' c',
+                      step t c t' c' ->
+                      (
+                        (* we step to configs that satisfy the perm *)
+                        (upd p c c') /\
+                        (* we step to machines that are well-typed by some other perm that maintains separation *)
+                        (* (typing P t'))) -> *)
+                        (exists P', typing P' t' /\
+                               forall pc_s,
+                                 view (permConj_perm (sep_conj_permConj pc pc_s)) c c ->
+                                 exists pc', in_Perms P' pc' /\
+                                       view (permConj_perm (sep_conj_permConj pc' pc_s)) c' c'))) ->
            typing_gen typing P t.
 
   Definition typing P t := paco2 typing_gen bot2 P t.
@@ -1047,7 +1069,7 @@ Section ts.
   Proof.
     pcofix CIH. intros. pfold. econstructor. intros. rewrite rewrite_spin in H1.
     inversion H1; subst. split; try reflexivity.
-    exists P. split; auto. intros. exists p. split; auto.
+    exists P. split; auto. intros. exists pc. split; auto.
   Qed.
 
   Lemma type_tau : forall P t, typing P t -> typing P (Tau t).
@@ -1057,19 +1079,19 @@ Section ts.
     split; intuition.
     exists P. split.
     - left. eapply paco2_mon_bot; eauto.
-    - exists p. split; auto.
+    - exists pc. split; auto.
   Qed.
 
   Lemma type_tau' : forall P t, typing P (Tau t) -> typing P t.
   Proof.
     pcofix CIH. intros P t Htyping. pfold.
     econstructor. intros p c Hp Hviewpcc t' c' Hstep. pinversion Htyping.
-    specialize (H _ _ Hp Hviewpcc _ _ (step_tau _ _)).
-    destruct H as [Hupdpcc [P' [Htyping' Hp_s]]].
-    destruct Htyping' as [Htyping' | ?]; try contradiction.
-    pinversion Htyping'.
+    (* specialize (H _ _ Hp Hviewpcc _ _ (step_tau _ _)). *)
+    (* destruct H as [Hupdpcc [P' [Htyping' Hp_s]]]. *)
+    (* destruct Htyping' as [Htyping' | ?]; try contradiction. *)
+    (* pinversion Htyping'. *)
     (* specialize (H6 _ _ *)
-Admitted.
+Abort.
   (* Qed. *)
 
   (*   inversion H2; subst. *)
@@ -1124,19 +1146,19 @@ Admitted.
   (*     exists p''. split; auto. intros. apply H11. *)
   (* Qed. *)
 
-  Lemma sep_at_sep_conj : forall s p1 p2 p3,
-      sep_at s p1 p2 -> sep_at s p1 p3 -> sep_at s p2 p3 -> sep_at s p1 (sep_conj p2 p3).
-  Proof.
-    intros s p1 p2 p3 [] [] ?. constructor; auto.
-    - split; auto.
-    - intros. split; auto. split; auto. split; auto.
-      constructor; auto.
-      + eapply PER_refl; intuition. symmetry. apply sep_at_upd_l0. auto.
-      + eapply PER_refl; intuition. symmetry. apply sep_at_upd_l1. auto.
-      + intros. destruct H. etransitivity.
-        * symmetry. apply sep_at_upd_l2. auto.
-Admitted.
-  (* Qed. *)
+(*   Lemma sep_at_sep_conj : forall s p1 p2 p3, *)
+(*       sep_at s p1 p2 -> sep_at s p1 p3 -> sep_at s p2 p3 -> sep_at s p1 (sep_conj p2 p3). *)
+(*   Proof. *)
+(*     intros s p1 p2 p3 [] [] ?. constructor; auto. *)
+(*     - split; auto. *)
+(*     - intros. split; auto. split; auto. split; auto. *)
+(*       constructor; auto. *)
+(*       + eapply PER_refl; intuition. symmetry. apply sep_at_upd_l0. auto. *)
+(*       + eapply PER_refl; intuition. symmetry. apply sep_at_upd_l1. auto. *)
+(*       + intros. destruct H. etransitivity. *)
+(*         * symmetry. apply sep_at_upd_l2. auto. *)
+(* Admitted. *)
+(*   (* Qed. *) *)
 
   Lemma frame : forall P1 P2 t, typing P1 t -> typing (sep_conj_Perms P1 P2) t.
   Proof.
