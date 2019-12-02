@@ -397,6 +397,12 @@ Definition separate' (p q : perm) : Prop :=
   (forall x y, view p x x -> upd q x y -> view p x y) /\
   (forall x y, view q x x -> upd p x y -> view q x y).
 
+Lemma sep_self : forall p,
+    (forall x y, upd p x y -> x = y) -> separate' p p.
+Proof.
+  split; repeat intro; apply H in H1; subst; auto.
+Qed.
+
 Definition separate'' (p q : perm) : Prop :=
   (forall x y z, view p x y -> upd q y z -> view p x z) /\
   (forall x y z, view q x y -> upd p y z -> view q x z).
@@ -430,7 +436,7 @@ Program Definition permConj_perm (pc : permConj) : perm :=
   {|
     view := fun x y => forall p, in_permConj pc p ->
                          view p x y /\
-                         forall q, in_permConj pc q -> q <> p -> separate'' p q;
+                         forall q, in_permConj pc q -> q <> p -> separate' p q;
     upd := fun x y => x = y \/ clos_trans _ (fun x y => exists p, in_permConj pc p /\ upd p x y) x y;
   |}.
 Next Obligation.
@@ -527,13 +533,13 @@ Program Definition join_permConj pc1 pc2 : permConj :=
   |}.
 
 Lemma lte_l_join_permConj : forall pc1 pc2,
-    pc1 ⊆ (join_permConj pc1 pc2).
+    pc1 ⊆ join_permConj pc1 pc2.
 Proof.
   repeat intro. left. auto.
 Qed.
 
 Lemma lte_r_join_permConj : forall pc1 pc2,
-    pc2 ⊆ (join_permConj pc1 pc2).
+    pc2 ⊆ join_permConj pc1 pc2.
 Proof.
   repeat intro. right. auto.
 Qed.
@@ -574,192 +580,59 @@ Proof.
   - left. auto.
 Qed.
 
+(* Intersection *)
+Program Definition meet_permConj pc1 pc2 : permConj :=
+  {|
+    in_permConj := fun p => in_permConj pc1 p /\ in_permConj pc2 p;
+  |}.
+
+Lemma lte_meet_permConj_l : forall pc1 pc2,
+    meet_permConj pc1 pc2 ⊆ pc1.
+Proof.
+  repeat intro. destruct H. auto.
+Qed.
+
+Lemma lte_meet_permConj_r : forall pc1 pc2,
+    meet_permConj pc1 pc2 ⊆ pc2.
+Proof.
+  repeat intro. destruct H. auto.
+Qed.
+
+Lemma meet_permConj_max : forall pc1 pc2 pc3,
+    pc3 ⊆ pc1 ->
+    pc3 ⊆ pc2 ->
+    pc3 ⊆ meet_permConj pc1 pc2.
+Proof.
+  repeat intro. constructor; auto.
+Qed.
+
+Lemma meet_permConj_commut : forall pc1 pc2,
+    eq_permConj (meet_permConj pc1 pc2) (meet_permConj pc2 pc1).
+Proof.
+  split; repeat intro; destruct H; constructor; auto.
+Qed.
+
+Lemma meet_permConj_assoc : forall pc1 pc2 pc3,
+    eq_permConj (meet_permConj pc1 (meet_permConj pc2 pc3))
+                (meet_permConj (meet_permConj pc1 pc2) pc3).
+Proof.
+  split; repeat intro.
+  - destruct H as [? [? ?]]. constructor; [ constructor | ]; auto.
+  - destruct H as [[? ?] ?]. constructor; [ | constructor ]; auto.
+Qed.
+
+Lemma meet_permConj_idem : forall pc, eq_permConj (meet_permConj pc pc) pc.
+Proof.
+  split; repeat intro.
+  - destruct H; auto.
+  - constructor; auto.
+Qed.
+
 Definition sep_conj_permConj := join_permConj.
 
-Definition separate_permConj pc1 pc2 : Prop := separate'' (permConj_perm pc1)
+Definition separate_permConj pc1 pc2 : Prop := separate' (permConj_perm pc1)
                                                        (permConj_perm pc2).
 
-
-(* Program Definition sep_conj (p q : perm) : perm := *)
-(*   {| *)
-(*     view := fun x y => *)
-(*               (view p x y) /\ (view q x y) /\ sep_at x p q /\ sep_at y p q; *)
-(*     upd := clos_trans _ (fun x y => (upd p x y) \/ (upd q x y)); *)
-(*   |}. *)
-(* Next Obligation. *)
-(*   constructor. *)
-(*   - repeat intro. destruct H as [? [? [? ?]]]. repeat (split; try symmetry; auto). *)
-(*   - repeat intro. destruct H as [? [? [? ?]]]. destruct H0 as [? [? [? ?]]]. *)
-(*     repeat (split; try etransitivity; eauto). *)
-(* Qed. *)
-(* Next Obligation. *)
-(*   constructor. *)
-(*   - intro. constructor 1. left. reflexivity. *)
-(*   - repeat intro. econstructor 2; eauto. *)
-(* Qed. *)
-
-(* Lemma separate_join_is_sep_conj: forall p q, separate p q -> eq_perm (join_perm p q) (sep_conj p q). *)
-(* Proof. *)
-(*   intros. red in H. split; intros. *)
-(*   { *)
-(*     constructor; intros; simpl in *; auto. *)
-(*     destruct H0 as [? [? ?]]. split; auto. *)
-(*   } *)
-(*   { *)
-(*     constructor; intros; simpl in *; auto. destruct H0. *)
-(*     split; auto. split; auto. split; apply H. *)
-(*     eapply PER_refl; intuition; eauto. *)
-(*     eapply PER_refl; intuition; eauto. *)
-(*     eapply PER_refl; intuition; symmetry; eauto. *)
-(*     eapply PER_refl; intuition; symmetry; eauto. *)
-(*   } *)
-(* Qed. *)
-
-(* Lemma separate'_sep_conj : forall p q r, *)
-(*     separate' (sep_conj p q) r -> separate' p r. *)
-(* Proof. *)
-(*   intros. destruct H. split; intros. *)
-(*   - *)
-(* Abort. *)
-
-(* Lemma separate_assoc : forall p q r, eq_perm (sep_conj p (sep_conj q r)) (sep_conj (sep_conj p q) r). *)
-(* Proof. *)
-(*   split; intros. *)
-(*   - constructor. *)
-(*     + intros. destruct H. constructor. admit. split. admit. *)
-(*       destruct H0. *)
-(*       assert (separate' p q). *)
-(*       destruct H. destruct H2. auto. *)
-(* Abort. *)
-
-(* Lemma separate_sep_conj : forall p q r, separate p q -> *)
-(*                                    separate q r -> *)
-(*                                    separate r p -> *)
-(*                                    separate p (sep_conj q r). *)
-(* Proof. *)
-(*   repeat intro. constructor; auto. *)
-(*   - destruct H3 as [? [? ?]]. intros. split. apply H; auto. split; auto. apply H1; auto. *)
-(*   - destruct H3 as [? [? _]]. intros. apply Operators_Properties.clos_trans_tn1 in H5. *)
-(*     (* assert (view p x y /\ (view q x y \/ view r x y)). *) *)
-(*     induction H5. *)
-(*     + destruct H5. apply H; auto. apply H1; auto. *)
-(*     + etransitivity; eauto. destruct H5. *)
-(*       * apply H; auto. admit. (* stuck *) *)
-(* Abort. *)
-
-(* Lemma sep_at_sep_conj : forall c p q r, sep_at c p q -> *)
-(*                                    sep_at c q r -> *)
-(*                                    sep_at c r p -> *)
-(*                                    sep_at c p (sep_conj q r). *)
-(* Proof. *)
-(*   intros c p q r. intros. repeat intro. constructor. *)
-
-(*   simpl in H2. unfold sep_conj in H2. *)
-(*   revert H H0 H1. *)
-(*   induction H2. *)
-(*   - intros. destruct H as [? | [? | ?]]. *)
-(*     + pose proof (sep_at_upd_preserved _ _ _ _ H0 H). *)
-(*       assert (sep_at y p r). *)
-(*       { *)
-(*         eapply sep_at_upd_preserved. *)
-(*         symmetry. eauto. eauto. *)
-(*       } *)
-(*       assert (sep_at y q r). *)
-(*       { *)
-(*         eapply sep_at_view_preserved; eauto. *)
-(*         apply H0; auto. constructor. left. reflexivity. *)
-(*       } *)
-(*       constructor; intros. *)
-(*       * apply H3. constructor. left. reflexivity. *)
-(*       * split. apply H5. constructor. left. reflexivity. *)
-(*         split; auto. apply H5. constructor. left. reflexivity. *)
-(*       * split; [ | split; [ | split ]]; auto. *)
-(*         apply H3; auto. constructor. left. reflexivity. *)
-(*         apply H4; auto. constructor. left. reflexivity. *)
-(*         eapply sep_at_view_preserved; eauto. *)
-
-(* Abort. *)
-
-(* Lemma test' : forall x p q r, *)
-(*     sep_at' x p (sep_conj q r) -> sep_at' x p q. *)
-(* Proof. *)
-(*   intros. apply sep_at'_commutative. eapply sep_at'_anti_monotone. *)
-(*   apply sep_at'_commutative. 2: apply test. apply H. *)
-(* Qed. *)
-
-(* Lemma sep_conj_assoc : forall p q r, eq_perm (sep_conj (sep_conj p q) r) *)
-(*                                         (sep_conj p (sep_conj q r)). *)
-(* Proof. *)
-(*   intros. split. *)
-(*   { *)
-(*     split. *)
-(*     - intros. destruct H as [? [[? [? [? ?]]] [? ?]]]. *)
-(*       simpl in *. *)
-(* Qed. *)
-
-(* Program Definition sep_conj (p q : perm) : perm := *)
-(*   {| *)
-(*     view := fun x y => *)
-(*               (view p x y) /\ (view q x y) /\ sep_at x p q /\ sep_at y p q; *)
-(*     upd := clos_trans _ (fun x y => (upd p x y) \/ (upd q x y)); *)
-(*   |}. *)
-(* Next Obligation. *)
-(*   constructor. *)
-(*   - repeat intro. destruct H as [? [? [? ?]]]. repeat (split; try symmetry; auto). *)
-(*   - repeat intro. destruct H as [? [? [? ?]]]. destruct H0 as [? [? [? ?]]]. *)
-(*     repeat (split; try etransitivity; eauto). *)
-(* Qed. *)
-(* Next Obligation. *)
-(*   constructor. *)
-(*   - intro. constructor 1. left. reflexivity. *)
-(*   - repeat intro. econstructor 2; eauto. *)
-(* Qed. *)
-
-(* Program Definition sep_conj' (p q : perm) : perm := *)
-(*   {| *)
-(*     view := fun x y => *)
-(*               (view p x y) /\ (view q x y) /\ separate p q; *)
-(*     upd := clos_trans _ (fun x y => (upd p x y) \/ (upd q x y)); *)
-(*   |}. *)
-(* Next Obligation. *)
-(*   constructor. *)
-(*   - repeat intro. destruct H as [? [? ?]]. repeat (split; try symmetry; auto). *)
-(*   - repeat intro. destruct H as [? [? ?]]. destruct H0 as [? [? ?]]. *)
-(*     repeat (split; try etransitivity; eauto). *)
-(* Qed. *)
-(* Next Obligation. *)
-(*   constructor. *)
-(*   - intro. constructor 1. left. reflexivity. *)
-(*   - repeat intro. econstructor 2; eauto. *)
-(* Qed. *)
-
-(* Lemma sep_at_sep_conj_assoc : forall x p q r, *)
-(*     sep_at x (sep_conj p q) r <-> sep_at x p (sep_conj q r). *)
-(* Proof. *)
-(*   split; intros. *)
-(*   { *)
-(*     destruct H as [[? [? [? ?]]] ?]. *)
-(*     constructor; auto. *)
-(*     - split; [ | split ]; auto. *)
-(*       split; (constructor; auto; intros; *)
-(*               [apply sep_at_upd_l0; constructor; auto | *)
-(*                destruct (sep_at_upd_r0 _ H3) as [_ [? _]]; auto]). *)
-(*     - intros. clear H2. destruct H1. split; [ | split; [ | split ]]; auto. *)
-(*       + apply sep_at_upd_l0. constructor. left. auto. *)
-(*       + constructor; auto; intros. *)
-(*         * apply sep_at_upd_l0. constructor. right. auto. *)
-(*         * destruct (sep_at_upd_r0 _ H1) as [_ [? _]]; auto. *)
-(*       + constructor; auto; intros. *)
-(*         * eapply PER_refl; intuition. symmetry. apply sep_at_upd_l1. auto. *)
-(*         * eapply PER_refl; intuition. symmetry. apply sep_at_upd_l0. constructor. left. auto. *)
-(*         * etransitivity. *)
-(*           -- symmetry. apply sep_at_upd_l0. constructor. left. auto. *)
-(*           -- apply sep_at_upd_l0. econstructor 2; constructor; eauto. *)
-(*         * etransitivity. *)
-(*           -- symmetry. apply sep_at_upd_l1. auto. *)
-(*           -- (* specialize (sep_at_upd_r0 _ H1). *) admit. *)
-(*     - admit. *)
-(* Abort. *)
 
 Lemma sep_conj_permConj_top_absorb : forall pc,
     eq_permConj (sep_conj_permConj top_permConj pc) top_permConj.
@@ -774,18 +647,6 @@ Proof.
   destruct H; auto. inversion H.
 Qed.
 
-Lemma lte_l_sep_conj_permConj : forall pc1 pc2,
-    pc1 ⊆ (sep_conj_permConj pc1 pc2).
-Proof.
-  repeat intro. constructor 1. auto.
-Qed.
-
-Lemma lte_r_sep_conj_permConj : forall pc1 pc2,
-    pc2 ⊆ (sep_conj_permConj pc1 pc2).
-Proof.
-  repeat intro. constructor 2. auto.
-Qed.
-
 (* Perms = upwards-closed sets of conjunctive permission sets *)
 Record Perms :=
   {
@@ -793,9 +654,9 @@ Record Perms :=
     Perms_upwards_closed : forall pc1 pc2, in_Perms pc1 -> pc1 ⊆ pc2 -> in_Perms pc2
   }.
 
-(* The ordering on Perms sets is the superset ordering *)
+(* Subset *)
 Definition lte_Perms (P Q : Perms) : Prop :=
-  forall p, in_Perms Q p -> in_Perms P p.
+  forall p, in_Perms P p -> in_Perms Q p.
 
 Instance lte_Perms_is_preorder : PreOrder lte_Perms.
 Proof.
@@ -813,8 +674,8 @@ Next Obligation.
   transitivity pc0; assumption.
 Defined.
 
-(* Complete meet of Perms sets = union *)
-Program Definition meet_Perms (Ps : Perms -> Prop) : Perms :=
+(* Complete join of Perms sets = union *)
+Program Definition join_Perms (Ps : Perms -> Prop) : Perms :=
   {|
     in_Perms := fun pc => exists P, Ps P /\ in_Perms P pc
   |}.
@@ -823,41 +684,41 @@ Next Obligation.
   apply (Perms_upwards_closed _ pc1); try assumption.
 Defined.
 
-Lemma lte_meet_Perms : forall (Ps : Perms -> Prop) P,
+Lemma lte_join_Perms : forall (Ps : Perms -> Prop) P,
     Ps P ->
-    meet_Perms Ps ⊑ P.
+    P ⊑ join_Perms Ps.
 Proof.
   repeat intro. exists P. auto.
 Qed.
 
-Lemma meet_Perms_max : forall (Ps : Perms -> Prop) Q,
-    (forall P, Ps P -> Q ⊑ P) ->
-    Q ⊑ meet_Perms Ps.
+Lemma join_Perms_min : forall (Ps : Perms -> Prop) Q,
+    (forall P, Ps P -> P ⊑ Q) ->
+    join_Perms Ps ⊑ Q.
 Proof.
   repeat intro. destruct H0 as [? [? ?]].
   eapply H; eauto.
 Qed.
 
-Definition meet_Perms2 P Q : Perms := meet_Perms (fun R => R = P \/ R = Q).
+Definition join_Perms2 P Q : Perms := join_Perms (fun R => R = P \/ R = Q).
 
 Program Definition top_Perms : Perms :=
-  {|
-    in_Perms := fun r => False
-  |}.
-
-Lemma top_Perms_is_top : forall P, P ⊑ top_Perms.
-Proof.
-  repeat intro. inversion H.
-Qed.
-
-Program Definition bottom_Perms : Perms :=
   {|
     in_Perms := fun r => True
   |}.
 
-Lemma bottom_Perms_is_bottom : forall P, bottom_Perms ⊑ P.
+Lemma top_Perms_is_top : forall P, P ⊑ top_Perms.
 Proof.
   repeat intro. simpl. auto.
+Qed.
+
+Program Definition bottom_Perms : Perms :=
+  {|
+    in_Perms := fun r => False
+  |}.
+
+Lemma bottom_Perms_is_bottom : forall P, bottom_Perms ⊑ P.
+Proof.
+  repeat intro. inversion H.
 Qed.
 
 (* Set equality *)
@@ -871,26 +732,33 @@ Next Obligation.
   exists H, H1. split; auto. split; auto. etransitivity; eauto.
 Defined.
 
-Lemma sep_conj_Perms_top_identity : forall P, eq_Perms (sep_conj_Perms top_Perms P) top_Perms.
+Lemma lte_l_sep_conj_Perms : forall P Q, sep_conj_Perms P Q ⊑ P.
+Proof.
+  intros P Q p' ?. destruct H as [p [q [? [? ?]]]].
+  eapply Perms_upwards_closed; eauto.
+  etransitivity; eauto. apply lte_l_join_permConj.
+Qed.
+
+Lemma sep_conj_Perms_top_identity : forall P, eq_Perms (sep_conj_Perms top_Perms P) P.
 Proof.
   constructor; repeat intro.
-  - inversion H.
-  - destruct H as [? [? [? ?]]]. inversion H.
-Qed.
-
-Lemma sep_conj_Perms_bottom_absorb : forall P, eq_Perms (sep_conj_Perms bottom_Perms P) P.
-Proof.
-  constructor; repeat intro; simpl in *.
-  - exists bottom_permConj, p. split; [auto | split; auto].
-    apply sep_conj_permConj_bottom_identity.
   - destruct H as [? [? [_ [? ?]]]].
     eapply (Perms_upwards_closed P); eauto.
-    etransitivity; eauto. apply lte_r_sep_conj_permConj.
+    etransitivity; eauto. apply lte_r_join_permConj.
+  - exists bottom_permConj, p. split; simpl; [auto | split; auto].
+    apply sep_conj_permConj_bottom_identity.
 Qed.
 
-Definition entails_Perms P Q := Q ⊑ P.
+Lemma sep_conj_Perms_bottom_absorb : forall P, eq_Perms (sep_conj_Perms bottom_Perms P) bottom_Perms.
+Proof.
+  constructor; repeat intro.
+  - destruct H as [? [_ [[] _]]].
+  - inversion H.
+Qed.
 
-Definition impl_Perms P Q := meet_Perms (fun R => entails_Perms (sep_conj_Perms R P) Q).
+Definition entails_Perms P Q := P ⊑ Q.
+
+Definition impl_Perms P Q := join_Perms (fun R => entails_Perms (sep_conj_Perms R P) Q).
 
 Lemma sep_conj_Perms_monotonic : forall P Q R, P ⊑ Q -> sep_conj_Perms P R ⊑ sep_conj_Perms Q R.
 Proof.
@@ -898,21 +766,26 @@ Proof.
   exists x, x0. auto.
 Qed.
 
-Lemma sep_conj_Perms_meet_commute : forall (Ps : Perms -> Prop) P,
-    eq_Perms (sep_conj_Perms (meet_Perms Ps) P)
-             (meet_Perms (fun Q => exists P', Q = sep_conj_Perms P' P /\ Ps P')).
+Lemma sep_conj_Perms_join_commute : forall (Ps : Perms -> Prop) P,
+    eq_Perms (sep_conj_Perms (join_Perms Ps) P)
+             (join_Perms (fun Q => exists P', Q = sep_conj_Perms P' P /\ Ps P')).
 Proof.
   split; repeat intro.
-  - destruct H as [? [[Q [? ?]] ?]].
-    subst. destruct H1 as [? [? [? [? ?]]]].
-    simpl. exists x, x0. split; [ | split]; auto.
-    eexists; split; eauto.
   - destruct H as [? [? [[Q [? ?]] [? ?]]]].
     simpl. eexists. split.
     + exists Q. split; auto.
     + eapply Perms_upwards_closed; eauto.
       simpl. exists x, x0. split; [auto | split; [auto | ]]. reflexivity.
+  - destruct H as [? [[Q [? ?]] ?]].
+    subst. destruct H1 as [? [? [? [? ?]]]].
+    simpl. exists x, x0. split; [ | split]; auto.
+    eexists; split; eauto.
 Qed.
+
+Lemma sep_conj_Perms_join_commute' : forall (Ps : Perms -> Prop) P,
+    eq (sep_conj_Perms (join_Perms Ps) P)
+             (join_Perms (fun Q => exists P', Q = sep_conj_Perms P' P /\ Ps P')).
+Admitted.
 
 Instance eq_Perms_flip_impl : forall P, Proper (eq_Perms ==> Basics.flip Basics.impl) (lte_Perms P).
 Proof.
@@ -925,11 +798,12 @@ Proof.
   intros. split; intros.
   - red. red. intros. simpl. exists P. auto.
   - apply (sep_conj_Perms_monotonic _ _ Q) in H.
-    red. etransitivity; [ | apply H].
+    red. etransitivity; [ apply H | ].
     unfold impl_Perms.
-    rewrite sep_conj_Perms_meet_commute.
-    apply meet_Perms_max. intros P' [? [? ?]]. subst. auto.
+    rewrite sep_conj_Perms_join_commute.
+    apply join_Perms_min. intros P' [? [? ?]]. subst. auto.
 Qed.
+
 
 From ITree Require Import
      ITree
