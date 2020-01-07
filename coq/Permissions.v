@@ -27,9 +27,6 @@ Record perm :=
 Instance view_is_ER p : Equivalence (view p) := view_ER p.
 Instance upd_is_preorder p : PreOrder (upd p) := upd_PO p.
 
-(* Definition dom_perm p x : Prop := *)
-(*   view p x x. *)
-
 Record lte_perm (p q: perm) : Prop :=
   {
     (* dom_inc : forall x, dom p x -> dom q x; *)
@@ -55,6 +52,15 @@ Proof.
   - split; reflexivity.
   - intros x y []. split; auto.
   - intros x y z [] []. split; etransitivity; eauto.
+Qed.
+
+Instance eq_perm_flip_impl : Proper (eq ==> eq_perm ==> Basics.flip Basics.impl) lte_perm.
+Proof.
+  repeat intro. etransitivity; subst; eauto. apply H0.
+Qed.
+Instance eq_perm_flip_impl' : Proper (eq_perm ==> eq ==> Basics.flip Basics.impl) lte_perm.
+Proof.
+  repeat intro. etransitivity; subst; eauto. apply H.
 Qed.
 
 Program Definition bottom_perm : perm :=
@@ -353,6 +359,13 @@ Proof.
   intros p q []. constructor; auto.
 Qed.
 
+Lemma separate_bottom : forall p, separate p bottom_perm.
+Proof.
+  constructor; intros; auto.
+  - inversion H. reflexivity.
+  - simpl. auto.
+Qed.
+
 Lemma separate_antimonotone : forall p q r, separate p q -> r <= q -> separate p r.
 Proof.
   intros. constructor.
@@ -398,6 +411,48 @@ Proof.
   intros. constructor.
   - intros x y [_ []]; auto.
   - left; auto.
+Qed.
+
+Lemma sep_conj_perm_weaken_l : forall p p' q r,
+    sep_conj_perm p q <= r -> p' <= p -> sep_conj_perm p' q <= r.
+Proof.
+  constructor; intros.
+  - split; [| split].
+    + apply H0. apply H. auto.
+    + apply H. auto.
+    + destruct H. destruct (view_inc0 _ _ H1) as [_ [_ []]]; auto.
+      left. symmetry. eapply separate_antimonotone; eauto. symmetry. auto.
+  - induction H1.
+    + apply H. constructor. destruct H1; auto. left. apply H0. auto.
+    + etransitivity; eauto.
+Qed.
+
+Lemma sep_conj_perm_weaken_r : forall p q q' r,
+    sep_conj_perm p q <= r -> q' <= q -> sep_conj_perm p q' <= r.
+Proof.
+  constructor; intros.
+  - split; [| split].
+    + apply H. auto.
+    + apply H0. apply H. auto.
+    + destruct H. destruct (view_inc0 _ _ H1) as [_ [_ []]]; auto.
+      left. eapply separate_antimonotone; eauto.
+  - induction H1.
+    + apply H. constructor. destruct H1; auto. right. apply H0. auto.
+    + etransitivity; eauto.
+Qed.
+
+Lemma sep_conj_perm_bottom' : forall p, sep_conj_perm p bottom_perm <= p.
+Proof.
+  intros. constructor; intros.
+  - repeat split; auto. left. apply separate_bottom.
+  - induction H.
+    + destruct H; auto. inversion H. reflexivity.
+    + etransitivity; eauto.
+Qed.
+
+Lemma sep_conj_perm_bottom : forall p, eq_perm (sep_conj_perm p bottom_perm) p.
+Proof.
+  split; [apply sep_conj_perm_bottom' | apply lte_l_sep_conj_perm].
 Qed.
 
 Lemma sep_conj_perm_commut' : forall p q, sep_conj_perm p q <= sep_conj_perm q p.
@@ -805,9 +860,18 @@ Qed.
 (* Set equality *)
 Definition eq_Perms (P Q : Perms) : Prop := P ⊑ Q /\ Q ⊑ P.
 
+Instance eq_Perms_flip_impl : Proper (eq ==> eq_Perms ==> Basics.flip Basics.impl) lte_Perms.
+Proof.
+  intros P Q [] ? ? ? ?. etransitivity; subst; eauto. apply H.
+Qed.
+Instance eq_Perms_flip_impl' : Proper (eq_Perms ==> eq ==> Basics.flip Basics.impl) lte_Perms.
+Proof.
+  intros P Q [] ? ? ? ?. etransitivity; subst; eauto.
+Qed.
+
 Program Definition sep_conj_Perms (P Q : Perms) : Perms :=
   {|
-    in_Perms := fun r => exists p q, in_Perms P p /\ in_Perms Q q /\ sep_conj_permConj p q <= r
+    in_Perms := fun r => exists p q, in_Perms P p /\ in_Perms Q q /\ sep_conj_perm p q <= r
   |}.
 Next Obligation.
   exists H, H1. split; auto. split; auto. etransitivity; eauto.
@@ -817,24 +881,24 @@ Lemma lte_l_sep_conj_Perms : forall P Q, P ⊑ sep_conj_Perms P Q.
 Proof.
   intros P Q p' ?. destruct H as [p [q [? [? ?]]]].
   eapply Perms_upwards_closed; eauto.
-  etransitivity; eauto. apply lte_l_join_permConj.
+  etransitivity; eauto. apply lte_l_sep_conj_perm.
 Qed.
 
 Lemma lte_r_sep_conj_Perms : forall P Q, Q ⊑ sep_conj_Perms P Q.
 Proof.
   intros P Q q' ?. destruct H as [p [q [? [? ?]]]].
   eapply Perms_upwards_closed; eauto.
-  etransitivity; eauto. apply lte_r_join_permConj.
+  etransitivity; eauto. apply lte_r_sep_conj_perm.
 Qed.
 
 Lemma sep_conj_Perms_bottom_identity : forall P, eq_Perms (sep_conj_Perms bottom_Perms P) P.
 Proof.
   constructor; repeat intro.
-  - exists bottom_permConj, p. split; simpl; [auto | split; auto].
-    apply sep_conj_permConj_bottom_identity.
+  - exists bottom_perm, p. split; simpl; [auto | split; auto].
+    rewrite sep_conj_perm_commut. apply sep_conj_perm_bottom.
   - destruct H as [? [? [_ [? ?]]]].
     eapply (Perms_upwards_closed P); eauto.
-    etransitivity; eauto. apply lte_r_join_permConj.
+    etransitivity; eauto. apply lte_r_sep_conj_perm.
 Qed.
 
 Lemma sep_conj_Perms_top_absorb : forall P, eq_Perms (sep_conj_Perms top_Perms P) top_Perms.
@@ -844,7 +908,6 @@ Proof.
   - destruct H as [? [_ [[] _]]].
 Qed.
 
-(* P ⊆ Q *)
 Definition entails_Perms P Q := Q ⊑ P.
 
 Definition impl_Perms P Q := meet_Perms (fun R => entails_Perms (sep_conj_Perms R P) Q).
@@ -855,21 +918,21 @@ Proof.
   exists x, x0. auto.
 Qed.
 
-Lemma sep_conj_Perms_permConj: forall P Q p q, in_Perms P p ->
+Lemma sep_conj_Perms_perm: forall P Q p q, in_Perms P p ->
                        in_Perms Q q ->
-                       in_Perms (sep_conj_Perms P Q) (sep_conj_permConj p q).
+                       in_Perms (sep_conj_Perms P Q) (sep_conj_perm p q).
 Proof.
   intros. exists p, q. split; auto. split; auto. reflexivity.
 Qed.
 
-Lemma sep_conj_Perms_comm : forall P Q, eq_Perms (sep_conj_Perms P Q)
+Lemma sep_conj_Perms_commut : forall P Q, eq_Perms (sep_conj_Perms P Q)
                                             (sep_conj_Perms Q P).
 Proof.
   split; repeat intro.
   - destruct H as [q [p' [? [? ?]]]].
-    exists p', q. repeat split; auto. repeat intro. apply H1. destruct H2; [right | left]; auto.
+    exists p', q. split; [| split]; auto. etransitivity; eauto. apply sep_conj_perm_commut.
   - destruct H as [p' [q [? [? ?]]]].
-    exists q, p'. repeat split; auto. repeat intro. apply H1. destruct H2; [right | left]; auto.
+    exists q, p'. split; [| split]; auto. etransitivity; eauto. apply sep_conj_perm_commut.
 Qed.
 
 Lemma sep_conj_Perms_assoc : forall P Q R, eq_Perms (sep_conj_Perms P (sep_conj_Perms Q R))
@@ -878,22 +941,16 @@ Proof.
   split; repeat intro.
   - rename p into p'. destruct H as [pq [r [? [? ?]]]].
     destruct H as [p [q [? [? ?]]]].
-    exists p, (sep_conj_permConj q r).
-    split; auto. split; auto. apply sep_conj_Perms_permConj; auto. repeat intro.
-    apply H1. destruct H4.
-    + left. apply H3. left. auto.
-    + destruct H4.
-      * left. apply H3. right. auto.
-      * right. auto.
+    exists p, (sep_conj_perm q r).
+    split; auto. split; auto. apply sep_conj_Perms_perm; auto.
+    rewrite <- sep_conj_perm_assoc.
+    eapply sep_conj_perm_weaken_l; eauto.
   - rename p into p'. destruct H as [p [qr [? [? ?]]]].
     destruct H0 as [q [r [? [? ?]]]].
-    exists (sep_conj_permConj p q), r.
-    split; auto. apply sep_conj_Perms_permConj; auto. split; auto.
-    repeat intro. apply H1. destruct H4.
-    + destruct H4.
-      * left. auto.
-      * right. apply H3. left. auto.
-    + right. apply H3. right. auto.
+    exists (sep_conj_perm p q), r.
+    split; auto. apply sep_conj_Perms_perm; auto. split; auto.
+    rewrite sep_conj_perm_assoc.
+    eapply sep_conj_perm_weaken_r; eauto.
 Qed.
 
 Lemma sep_conj_Perms_meet_commute : forall (Ps : Perms -> Prop) P,
@@ -910,11 +967,6 @@ Proof.
     + exists Q. split; auto.
     + eapply Perms_upwards_closed; eauto.
       simpl. exists x, x0. split; [auto | split; [auto | ]]. reflexivity.
-Qed.
-
-Instance eq_Perms_flip_impl : forall P, Proper (eq_Perms ==> Basics.flip Basics.impl) (lte_Perms P).
-Proof.
-  intros P Q R [] ?. etransitivity; eauto.
 Qed.
 
 Lemma adjunction : forall P Q R, entails_Perms (sep_conj_Perms P Q) R <->
@@ -1009,7 +1061,7 @@ Section ts.
       step t1 c1 t2 c2 ->
       step (Ret r;; t1) c1 t2 c2.
   Proof.
-    intros. pose proof (bind_ret r (fun _ => t1)) as bind_ret.
+    intros. pose proof (bind_ret_l r (fun _ => t1)) as bind_ret.
     apply bisimulation_is_eq in bind_ret. rewrite bind_ret. assumption.
   Qed.
 
@@ -1018,91 +1070,94 @@ Section ts.
       step t1 c t2 c' ->
       exists t'', step (par t1 t') c t'' c /\ step t'' c (par t2 t') c'.
   Proof.
-    intros. inversion H; subst;
-              (rewrite rewrite_par; unfold par_match; simpl; repeat eexists; constructor).
+    inversion 1; subst;
+      (rewrite rewrite_par; unfold par_match; simpl; repeat eexists; constructor).
   Qed.
   Lemma par_step_right : forall (t1 t2 t' : itree E R) (c c' : config),
       step t1 c t2 c' ->
       exists t'', step (par t' t1) c t'' c /\ step t'' c (par t' t2) c'.
   Proof.
-    intros. inversion H; subst;
-              (rewrite rewrite_par; unfold par_match; simpl; repeat eexists; constructor).
+    inversion 1; subst;
+      (rewrite rewrite_par; unfold par_match; simpl; repeat eexists; constructor).
   Qed.
 
-  Lemma test_view : forall pc1 pc2 x y, pc1 ⊆ pc2 -> view (permConj_perm pc2) x y ->
-                               view (permConj_perm pc1) x y.
-  Proof.
-    repeat intro. split; intros; apply H0; auto.
-  Qed.
-  Lemma test_upd : forall pc1 pc2 x y, pc1 ⊆ pc2 -> upd (permConj_perm pc1) x y ->
-                               upd (permConj_perm pc2) x y.
-  Proof.
-    repeat intro. destruct H0; subst; intuition.
-    simpl. right. induction H0.
-    - destruct H0 as [p [? ?]]. left. exists p. split; auto.
-    - eright; eauto.
-  Qed.
+  Definition sep P' p c c' : Prop :=
+    forall p_s,
+      view (sep_conj_perm p p_s) c c ->
+      exists p', in_Perms P' p' /\
+             view (sep_conj_perm p' p_s) c' c'.
 
-  Definition sep P' pc c c' :=
-    forall pc_s,
-      view (permConj_perm (sep_conj_permConj pc pc_s)) c c ->
-      exists pc', in_Perms P' pc' /\
-             view (permConj_perm (sep_conj_permConj pc' pc_s)) c' c'.
+  Definition sep' P' p (c c' : config) : Prop :=
+    forall p_s, separate p p_s ->
+           exists p', in_Perms P' p' /\ separate p' p_s /\ view p' c' c'.
 
-  Definition sep' P' pc (c c' : config) : Prop :=
-    forall pc_s, separate_permConj pc pc_s ->
-            exists pc', in_Perms P' pc' /\ separate_permConj pc' pc_s /\ view (permConj_perm pc') c' c'.
-
-  Definition eq_sep P1 P2 pc1 : Prop :=
-    in_Perms P1 pc1 ->
-    exists pc2, in_Perms P2 pc2 /\
-               (forall pc, separate_permConj pc2 pc -> separate_permConj pc1 pc)(*  /\ *)
-               (* (forall pc, separate_permConj pc2 pc -> separate_permConj pc1 pc) *).
+  Definition eq_sep P1 P2 p1 : Prop :=
+    in_Perms P1 p1 ->
+    exists p2, in_Perms P2 p2 /\
+          (forall p, separate p2 p -> separate p1 p) /\
+          (forall p, separate p1 p -> separate p2 p).
 
   Lemma eq_sep_refl : forall P pc, in_Perms P pc -> eq_sep P P pc.
   Proof.
     eexists; eauto.
   Qed.
 
-  Lemma eq_sep_trans : forall P Q R pc, eq_sep P Q pc -> (forall q, eq_sep Q R q) -> eq_sep P R pc.
-  Proof.
-    repeat intro. specialize (H H1). destruct H as [q [? ?]].
-    specialize (H0 q H). destruct H0 as [r [? ?]].
-    exists r. split; auto.
-  Qed.
+  (* Lemma eq_sep_trans : forall P Q R pc, eq_sep P Q pc -> (forall q, eq_sep Q R q) -> eq_sep P R pc. *)
+  (* Proof. *)
+  (*   repeat intro. specialize (H H1). destruct H as [q [? ?]]. *)
+  (*   specialize (H0 q H). destruct H0 as [r [? ?]]. *)
+  (*   exists r. split; auto. *)
+  (* Qed. *)
 
-  Lemma eq_sep_lte : forall P Q R pc, P ⊑ Q -> eq_sep P R pc -> eq_sep Q R pc.
-  Proof.
-    repeat intro.
-    red in H0. specialize (H0 (H _ H1)). destruct H0 as [pc' [? ?]].
-    exists pc'. split; auto.
-  Qed.
+  (* Lemma eq_sep_lte : forall P Q R pc, P ⊑ Q -> eq_sep P R pc -> eq_sep Q R pc. *)
+  (* Proof. *)
+  (*   repeat intro. *)
+  (*   red in H0. specialize (H0 (H _ H1)). destruct H0 as [pc' [? ?]]. *)
+  (*   exists pc'. split; auto. *)
+  (* Qed. *)
 
-  Lemma test : forall pc1 pc2 pc3 pc, sep_conj_permConj pc1 pc2 ⊆ pc ->
-                                 separate_permConj pc pc3 ->
-                                 separate_permConj pc2 pc3.
+  Lemma eq_sep_comp : forall P1 P2 P1' p1 p2 p',
+      in_Perms P1 p1 ->
+      in_Perms P2 p2 ->
+      sep_conj_perm p1 p2 <= p' ->
+      eq_sep P1 P1' p1 ->
+      eq_sep (sep_conj_Perms P1 P2) (sep_conj_Perms P1' P2) p'.
   Proof.
-    intros. red. red in H0.
-    destruct H0. split; intros; simpl; intros; (split; [ | apply H2; auto]).
-    - red in H. simpl in H. apply H0; auto; intros. (* cannot conclude... *)
-      eapply view_inc; eauto.
-      admit.
-    - apply H1; auto. eapply upd_inc; eauto. apply permConj_perm_lte_perm.
-      etransitivity; eauto. apply lte_r_join_permConj.
-  Abort.
+    intros P1 P2 P1' p1 p2 p' Hp1 Hp2 Hp' Heq _. specialize (Heq Hp1).
+    destruct Heq as [p1' [? [? ?]]].
+    exists (sep_conj_perm p1' p2). split. apply sep_conj_Perms_perm; auto.
+    split.
+    - admit.
+    - constructor; intros.
+      + split; [| split].
+        *
 
-  Lemma test : forall P1 P2 Q1 Q2 pc1 pc2, eq_sep P1 Q1 pc1 ->
-                                      eq_sep P2 Q2 pc2 ->
-                                      eq_sep (sep_conj_Perms P1 P2)
-                                             (sep_conj_Perms Q1 Q2)
-                                             (sep_conj_permConj pc1 pc2).
-  Proof.
-    repeat intro. destruct H1 as [p1 [p2 [? [? ?]]]]. red in H.
-  Qed.
+                      Abort.
+
+  (* Lemma test : forall pc1 pc2 pc3 pc, sep_conj_permConj pc1 pc2 ⊆ pc -> *)
+  (*                                separate_permConj pc pc3 -> *)
+  (*                                separate_permConj pc2 pc3. *)
+  (* Proof. *)
+  (*   intros. red. red in H0. *)
+  (*   destruct H0. split; intros; simpl; intros; (split; [ | apply H2; auto]). *)
+  (*   - red in H. simpl in H. apply H0; auto; intros. (* cannot conclude... *) *)
+  (*     eapply view_inc; eauto. *)
+  (*     admit. *)
+  (*   - apply H1; auto. eapply upd_inc; eauto. apply permConj_perm_lte_perm. *)
+  (*     etransitivity; eauto. apply lte_r_join_permConj. *)
+  (* Abort. *)
+
+  (* Lemma test : forall P1 P2 Q1 Q2 pc1 pc2, eq_sep P1 Q1 pc1 -> *)
+  (*                                     eq_sep P2 Q2 pc2 -> *)
+  (*                                     eq_sep (sep_conj_Perms P1 P2) *)
+  (*                                            (sep_conj_Perms Q1 Q2) *)
+  (*                                            (sep_conj_permConj pc1 pc2). *)
+  (* Proof. *)
+  (*   repeat intro. destruct H1 as [p1 [p2 [? [? ?]]]]. red in H. *)
+  (* Qed. *)
 
   Variant typing_gen typing (P : Perms) (t : itree E R) : Prop :=
-  | cond : (forall pc c, in_Perms P pc ->
-                    let p := permConj_perm pc in
+  | cond : (forall p c, in_Perms P p ->
                     view p c c ->
                     forall t' c',
                       step t c t' c' ->
@@ -1110,7 +1165,7 @@ Section ts.
                         (* we step to configs that satisfy the perm *)
                         (upd p c c') /\
                         (* we step to machines that are well-typed by some other perm that maintains separation *)
-                        (exists P', typing P' t' /\ eq_sep P P' pc))) (* sep' P' pc c c'))) *)
+                        (exists P', typing P' t' /\ eq_sep P P' p))) (* sep' P' pc c c'))) *)
                                (* forall pc_s, *)
                                (*   view (permConj_perm (sep_conj_permConj pc pc_s)) c c -> *)
                                (*   exists pc', in_Perms P' pc' /\ *)
@@ -1139,8 +1194,6 @@ Section ts.
     pcofix CIH. intros. pstep. constructor. intros. rewrite rewrite_spin in H1.
     inversion H1; subst. split; try reflexivity.
     exists P. split; auto. eapply eq_sep_refl; eauto.
-
-    (* intros. exists pc. split; auto. *)
   Qed.
 
   Lemma type_ret : forall P r, typing P (Ret r).
@@ -1169,94 +1222,99 @@ Section ts.
     inversion H2; subst.
     split; intuition.
     exists P. split; auto.
-    exists pc. split; auto.
+    exists p. split; auto.
   Qed.
 
   Lemma frame : forall P1 P2 t, typing P1 t -> typing (sep_conj_Perms P1 P2) t.
   Proof.
     intros. eapply type_lte; eauto. apply lte_l_sep_conj_Perms.
   Qed.
-
-  Lemma view_permConj : forall pc p c, in_permConj pc p ->
-                                  view (permConj_perm pc) c c ->
-                                  view p c c.
+  (* todo get proper instance working *)
+  Lemma frame' : forall P1 P2 t, typing P2 t -> typing (sep_conj_Perms P1 P2) t.
   Proof.
-    intros. simpl in H0. apply H0; auto.
+    intros. eapply type_lte; eauto. apply lte_r_sep_conj_Perms.
   Qed.
 
-  Lemma view_sep_conj_l : forall pc1 pc2 pc c,
-      sep_conj_permConj pc1 pc2 ⊆ pc ->
-      view (permConj_perm pc) c c ->
-      view (permConj_perm pc1) c c.
-  Proof.
-    repeat intro. red in H. split.
-    - eapply view_permConj. apply H. apply lte_l_join_permConj. auto. auto.
-    - intros. simpl in H0. apply H0.
-      apply H. left. auto. apply H. left. auto. auto.
-  Qed.
+  (* Lemma view_permConj : forall pc p c, in_permConj pc p -> *)
+  (*                                 view (permConj_perm pc) c c -> *)
+  (*                                 view p c c. *)
+  (* Proof. *)
+  (*   intros. simpl in H0. apply H0; auto. *)
+  (* Qed. *)
 
-  Lemma view_sep_conj_r : forall pc1 pc2 pc c,
-      sep_conj_permConj pc1 pc2 ⊆ pc ->
-      view (permConj_perm pc) c c ->
-      view (permConj_perm pc2) c c.
-  Proof.
-    repeat intro. red in H. split.
-    - eapply view_permConj. apply H. apply lte_r_join_permConj. auto. auto.
-    - intros. simpl in H0. apply H0.
-      apply H. right. auto. apply H. right. auto. auto.
-  Qed.
+  (* Lemma view_sep_conj_l : forall pc1 pc2 pc c, *)
+  (*     sep_conj_permConj pc1 pc2 ⊆ pc -> *)
+  (*     view (permConj_perm pc) c c -> *)
+  (*     view (permConj_perm pc1) c c. *)
+  (* Proof. *)
+  (*   repeat intro. red in H. split. *)
+  (*   - eapply view_permConj. apply H. apply lte_l_join_permConj. auto. auto. *)
+  (*   - intros. simpl in H0. apply H0. *)
+  (*     apply H. left. auto. apply H. left. auto. auto. *)
+  (* Qed. *)
 
-  Lemma sep_sep_conj_Perms : forall P1 P2 pc c, in_Perms (sep_conj_Perms P1 P2) pc ->
-                                           view (permConj_perm pc) c c ->
-                                           sep P2 pc c c.
-  Proof.
-    red. intros. destruct H as [p1 [p2 [Hp1 [Hp2 ?]]]].
-    exists p2. split; auto. simpl in H1. simpl. intros. destruct H2.
-    - split.
-      + apply H1. left. apply H. right. auto.
-      + intros. destruct H3; apply H1; auto; left; apply H; right; auto.
-    - split.
-      + apply H1. right. auto.
-      + intros. destruct H3; apply H1; auto; left; apply H; right; auto.
-  Qed.
+  (* Lemma view_sep_conj_r : forall pc1 pc2 pc c, *)
+  (*     sep_conj_permConj pc1 pc2 ⊆ pc -> *)
+  (*     view (permConj_perm pc) c c -> *)
+  (*     view (permConj_perm pc2) c c. *)
+  (* Proof. *)
+  (*   repeat intro. red in H. split. *)
+  (*   - eapply view_permConj. apply H. apply lte_r_join_permConj. auto. auto. *)
+  (*   - intros. simpl in H0. apply H0. *)
+  (*     apply H. right. auto. apply H. right. auto. auto. *)
+  (* Qed. *)
 
-  Lemma sep_sep_conj_Perms'' : forall P1 P2 pc c, in_Perms (sep_conj_Perms P1 P2) pc ->
-                                             view (permConj_perm pc) c c ->
-                                             sep' P2 pc c c.
-  Proof.
-    red. intros. destruct H as [p1 [p2 [Hp1 [Hp2 ?]]]].
-    exists p2. split; auto. split; auto. 2: { eapply view_sep_conj_r; eauto. }
-    red in H. red.
-  Abort.
+  (* Lemma sep_sep_conj_Perms : forall P1 P2 pc c, in_Perms (sep_conj_Perms P1 P2) pc -> *)
+  (*                                          view (permConj_perm pc) c c -> *)
+  (*                                          sep P2 pc c c. *)
+  (* Proof. *)
+  (*   red. intros. destruct H as [p1 [p2 [Hp1 [Hp2 ?]]]]. *)
+  (*   exists p2. split; auto. simpl in H1. simpl. intros. destruct H2. *)
+  (*   - split. *)
+  (*     + apply H1. left. apply H. right. auto. *)
+  (*     + intros. destruct H3; apply H1; auto; left; apply H; right; auto. *)
+  (*   - split. *)
+  (*     + apply H1. right. auto. *)
+  (*     + intros. destruct H3; apply H1; auto; left; apply H; right; auto. *)
+  (* Qed. *)
 
-  Lemma anti_mon : forall pc1 pc2 pc3, separate_permConj pc2 pc3 -> pc1 ⊆ pc2 ->
-                                  separate_permConj pc1 pc3.
-  Proof.
-    repeat red. split; intros.
-    - eapply test_view; eauto. destruct H. apply H; auto.
-      (* not true *) admit.
-    - apply H; auto. eapply test_upd; eauto.
-  Abort.
+  (* Lemma sep_sep_conj_Perms'' : forall P1 P2 pc c, in_Perms (sep_conj_Perms P1 P2) pc -> *)
+  (*                                            view (permConj_perm pc) c c -> *)
+  (*                                            sep' P2 pc c c. *)
+  (* Proof. *)
+  (*   red. intros. destruct H as [p1 [p2 [Hp1 [Hp2 ?]]]]. *)
+  (*   exists p2. split; auto. split; auto. 2: { eapply view_sep_conj_r; eauto. } *)
+  (*   red in H. red. *)
+  (* Abort. *)
 
-  Lemma sep_sep_conj_Perms' : forall P1 P2 pc c, in_Perms (sep_conj_Perms P1 P2) pc ->
-                                           view (permConj_perm pc) c c ->
-                                           sep (sep_conj_Perms P1 P2) pc c c.
-  Proof.
-    red. intros. destruct H as [p1 [p2 [Hp1 [Hp2 ?]]]].
-    exists (sep_conj_permConj p1 p2). split; auto.
-    - apply sep_conj_Perms_permConj; auto.
-    - repeat intro. split.
-      + apply H1. destruct H2.
-        * left. apply H. auto.
-        * right. auto.
-      + intros. apply H1; auto.
-        * destruct H2.
-          left. auto.
-          right. auto.
-        * destruct H3.
-          left. auto.
-          right. auto.
-  Qed.
+  (* Lemma anti_mon : forall pc1 pc2 pc3, separate_permConj pc2 pc3 -> pc1 ⊆ pc2 -> *)
+  (*                                 separate_permConj pc1 pc3. *)
+  (* Proof. *)
+  (*   repeat red. split; intros. *)
+  (*   - eapply test_view; eauto. destruct H. apply H; auto. *)
+  (*     (* not true *) admit. *)
+  (*   - apply H; auto. eapply test_upd; eauto. *)
+  (* Abort. *)
+
+  (* Lemma sep_sep_conj_Perms' : forall P1 P2 pc c, in_Perms (sep_conj_Perms P1 P2) pc -> *)
+  (*                                          view (permConj_perm pc) c c -> *)
+  (*                                          sep (sep_conj_Perms P1 P2) pc c c. *)
+  (* Proof. *)
+  (*   red. intros. destruct H as [p1 [p2 [Hp1 [Hp2 ?]]]]. *)
+  (*   exists (sep_conj_permConj p1 p2). split; auto. *)
+  (*   - apply sep_conj_Perms_permConj; auto. *)
+  (*   - repeat intro. split. *)
+  (*     + apply H1. destruct H2. *)
+  (*       * left. apply H. auto. *)
+  (*       * right. auto. *)
+  (*     + intros. apply H1; auto. *)
+  (*       * destruct H2. *)
+  (*         left. auto. *)
+  (*         right. auto. *)
+  (*       * destruct H3. *)
+  (*         left. auto. *)
+  (*         right. auto. *)
+  (* Qed. *)
 
   (* Lemma sep_test : forall pc1 pc2 c, *)
   (*     view (permConj_perm (sep_conj_permConj pc1 pc2)) c c -> *)
@@ -1277,19 +1335,17 @@ Section ts.
   Axiom par_tau_l : forall t1 t2, par (Tau t1) t2 = par t1 t2.
   Axiom par_tau_r : forall t1 t2, par t1 (Tau t2) = par t1 t2.
 
-  Lemma type_tau' : forall P pc c t, typing P (Tau t) ->
-                                view (permConj_perm pc) c c ->
-                                in_Perms P pc ->
-                                exists P', typing P' t /\ sep P' pc c c /\ exists pc', in_Perms P' pc'.
+  Lemma type_tau' : forall P p c t, typing P (Tau t) ->
+                               in_Perms P p ->
+                               view p c c ->
+                               exists P', typing P' t /\ eq_sep P P' p.
   Proof.
-    intros P pc c t Htyping Hpccc HPpc.
+    intros P p c t Htyping HPp Hviewpcc.
     pinversion Htyping.
-    destruct (H _ _ HPpc Hpccc _ _ (step_tau _ _)) as [_ [P' [? ?]]].
-    pose proof H1.
-    (* destruct H1 with (pc_s := bottom_permConj) as [? [? _]]. *)
-    - admit. (* rewrite join_permConj_commut. rewrite sep_conj_permConj_bottom_identity. *)
-    (* - exists P'. pclearbot. split; auto. split; auto. exists x. auto. *)
-  Admitted.
+    edestruct H as [_ [P' [? ?]]]; eauto.
+    apply step_tau.
+    exists P'; split; auto. pclearbot. auto.
+  Qed.
 
   Require Import Coq.Program.Equality.
 
@@ -1298,37 +1354,30 @@ Section ts.
   Proof.
     pcofix CIH. intros P1 P2 t1 t2 Ht1 Ht2.
     pstep. econstructor.
-    intros pc c Hpc ? Hcc t' c' Hstep. destruct Hpc as [p1 [p2 [Hp1 [Hp2 Hpc]]]].
+    intros p c ? Hcc t' c' Hstep.
     (* assert (view (permConj_perm p1) c c). { *)
     (*   apply (view_inc _ p); auto. *)
     (*   apply permConj_perm_lte_perm. etransitivity; eauto. apply lte_l_join_permConj. *)
     (* } *)
     (* specialize (H _ _ H2 H7). *)
+    destruct H as [p1 [p2 [? [? ?]]]].
 
     rewrite rewrite_par in Hstep. unfold par_match in Hstep.
     dependent destruction Hstep. (* inversion Hstep; auto_inj_pair2; subst. *)
     - split; intuition. destruct (observe t1) eqn:?.
-      + exists P2. split. left. eapply paco2_mon_bot; eauto.
-        intro. exists p2. (* probably sep_conj_permConj bottom_permConj p2 *)
-        split; auto. intros.
-
-        (* red. red. split; intros. *)
-        (* * simpl. *)
-
-        (* eapply test; eauto. *)
-      (* eapply sep_sep_conj_Perms; eauto. simpl. exists p1, p2. repeat split; eauto. *)
-        admit.
+      + exists (sep_conj_Perms P1 P2). split.
+        * left. eapply paco2_mon_bot; eauto. apply frame'; auto.
+        * apply eq_sep_refl; auto. simpl. exists p1, p2; auto.
       + pose proof type_tau'. symmetry in Heqi. pose proof (simpobs Heqi).
-        apply bisimulation_is_eq in H0. rewrite H0 in Ht1.
-        specialize (H _ p1 c _ Ht1). destruct H as [P' [HP' [? [pc' ?]]]]; auto.
-        { eapply view_sep_conj_l; eauto. }
+        apply bisimulation_is_eq in H3. rewrite H3 in Ht1.
+        specialize (H2 _ p1 c _ Ht1). destruct H2 as [P' [HP' ?]]; auto.
+        { apply H1; auto. }
 
         exists (sep_conj_Perms P' P2). split; auto.
         * rewrite <- par_tau. right. apply CIH; auto.
         * red. intros.
-          exists (sep_conj_permConj pc' p2). split. apply sep_conj_Perms_permConj; auto. red in H.
-          simpl. intros. (* don't have enough info about P'? *)
-
+          destruct H2 as [p' [? [? ?]]]; auto.
+          exists (sep_conj_perm p' p2). split. apply sep_conj_Perms_perm; auto.
           (* old way without intros *)
       (* apply sep_sep_conj_Perms'; auto. exists p1, p2. repeat split; auto. red in H. *)
           admit.
@@ -1342,13 +1391,12 @@ Section ts.
         (* * apply sep_sep_conj_Perms'; auto. exists p1, p2. repeat split; auto. *)
 
     (* What should this P be? *)
-        admit.
+          admit.
+        * admit.
     - (* same as last case, basically *) admit.
     - admit.
     - admit.
-  Qed.
-
-
+  Abort.
 End ts.
 
 From ExtLib Require Import
