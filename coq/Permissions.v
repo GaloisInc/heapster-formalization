@@ -409,21 +409,9 @@ Proof.
   inversion H. reflexivity.
 Qed.
 
-Program Definition sym_perm (p : perm) : perm :=
-  {|
-    dom := dom p;
-    view := view p;
-    upd := clos_refl_sym_trans _ (upd p);
-  |}.
-Next Obligation.
-  constructor; repeat intro.
-  constructor 2.
-  econstructor 4; eauto.
-Qed.
-
 Program Definition sym_upd_perm (p : perm) : perm :=
   {|
-    dom := dom p;
+    dom x := False;
     view := clos_refl_sym_trans _ (upd p);
     upd := view p;
   |}.
@@ -435,8 +423,8 @@ Next Obligation.
   - econstructor 4; eauto.
 Qed.
 Next Obligation.
-  admit.
-Admitted.
+  tauto.
+Qed.
 
 Lemma separate_self_sym : forall p, p ⊥ sym_upd_perm p.
 Proof.
@@ -453,19 +441,19 @@ Qed.
 
 Program Definition sep_conj_perm (p q: perm) : perm :=
   {|
-    dom := fun x => dom p x /\ dom q x;
-    view := fun x y => view p x y /\ view q x y /\ (separate p q \/ x = y);
+    dom := fun x => dom p x /\ dom q x /\ separate p q;
+    view := fun x y => view p x y /\ view q x y;
     upd  := clos_trans _ (fun x y => (upd p x y) \/ (upd q x y))
   |}.
 Next Obligation.
   constructor; repeat intro.
-  - split; [reflexivity | split; [reflexivity |]]. right. auto.
-  - destruct H as [? [? []]]; subst; auto. split; [symmetry | split; [symmetry |]]; auto.
-  - destruct H as [? [? []]]; subst; auto. destruct H0 as [? [? []]]; subst; auto.
-    split; [etransitivity | split; [ etransitivity |]]; eauto.
+  - split; reflexivity.
+  - destruct H; split; symmetry; auto.
+  - destruct H, H0.
+    split; etransitivity; eauto.
 Qed.
 Next Obligation.
-  split; intros []; split; respects.
+  split; intros [? [? ?]]; (split; [respects | split; [respects | auto]]).
 Qed.
 Next Obligation.
   constructor.
@@ -481,8 +469,8 @@ Notation "p * q" := (sep_conj_perm p q).
 Lemma sep_conj_join : forall p q, p ⊥ q -> p * q ≡ join_perm p q.
 Proof.
   split; intros.
-  - constructor; auto; intros x y []; split; auto.
-  - constructor; auto; intros x y [? [? _]]; split; auto.
+  - constructor; auto; intros x []; split; auto.
+  - constructor; auto; intros x [? [? ?]]; split; auto.
 Qed.
 
 Lemma lte_l_sep_conj_perm : forall p q, p <= p * q.
@@ -496,8 +484,8 @@ Qed.
 Lemma lte_r_sep_conj_perm : forall p q, q <= p * q.
 Proof.
   intros. constructor; simpl; auto.
-  - intros x []; auto.
-  - intros x y [_ []]; auto.
+  - intros x [? [? ?]]; auto.
+  - intros x y []; auto.
   - constructor; auto.
 Qed.
 
@@ -505,12 +493,12 @@ Lemma sep_conj_perm_monotone_l : forall p p' q,
     p' <= p -> p' * q <= p * q.
 Proof.
   constructor; intros; simpl.
-  - destruct H0; destruct H; split; auto.
-  - split; [| split]; auto.
+  - destruct H0 as [? [? ?]]; split; [| split]; auto.
+    + apply H; auto.
+    + symmetry. symmetry in H2. eapply separate_antimonotone; eauto.
+  - split.
     + apply H. apply H0.
     + apply H0.
-    + destruct H0 as [? [? []]]; auto.
-      left. symmetry. eapply separate_antimonotone; eauto. symmetry; auto.
   - induction H0.
     + constructor. destruct H0; auto. left. apply H. auto.
     + econstructor 2; eauto.
@@ -520,12 +508,12 @@ Lemma sep_conj_perm_monotone_r : forall p q q',
     q' <= q -> p * q' <= p * q.
 Proof.
   constructor; intros; simpl.
-  - destruct H0; destruct H; split; auto.
-  - split; [| split]; auto.
+  - destruct H0 as [? [? ?]]; split; [| split]; auto.
+    + apply H; auto.
+    + eapply separate_antimonotone; eauto.
+  - split.
     + apply H0.
     + apply H. apply H0.
-    + destruct H0 as [? [? []]]; auto.
-      left. eapply separate_antimonotone; eauto.
   - induction H0.
     + constructor. destruct H0; auto. right. apply H. auto.
     + econstructor 2; eauto.
@@ -534,8 +522,8 @@ Qed.
 Lemma sep_conj_perm_bottom' : forall p, p * bottom_perm <= p.
 Proof.
   constructor; intros.
-  - simpl. intuition.
-  - repeat split; auto. left. apply separate_bottom.
+  - split; [| split]; simpl; intuition. apply separate_bottom.
+  - repeat split; auto.
   - induction H.
     + destruct H; auto. inversion H. reflexivity.
     + etransitivity; eauto.
@@ -560,9 +548,8 @@ Qed.
 Lemma sep_conj_perm_commut' : forall p q, p * q <= q * p.
 Proof.
   constructor.
-  - intros x []; simpl; auto.
-  - intros x y [? [? []]]; subst; try reflexivity.
-    repeat split; auto. left. symmetry; auto.
+  - intros x [? [? ?]]; simpl; split; [| split]; intuition.
+  - intros x y []; repeat split; auto.
   - intros. induction H.
     + destruct H; constructor; auto.
     + etransitivity; eauto.
@@ -594,7 +581,7 @@ Proof.
   - induction H2.
     + destruct H2; [apply H | apply H0]; auto.
     + etransitivity; eauto.
-  - split; [apply H | split; [apply H0 | left; symmetry]]; auto.
+  - split; [apply H | apply H0]; auto.
 Qed.
 
 Lemma sep_conj_perm_assoc : forall p q r,
@@ -603,13 +590,12 @@ Proof.
   split; intros.
   {
     constructor.
-    - intros x [? [? ?]]; simpl; auto.
-    - intros x y [? [[? [? []]] []]]; subst; try reflexivity.
-      split; [ split; [| split] | split]; auto.
-      + left. eapply separate_sep_conj_perm_l; eauto.
-      + left. symmetry. apply separate_sep_conj_perm; symmetry; auto.
-        eapply separate_sep_conj_perm_r; eauto.
-        eapply separate_sep_conj_perm_l; eauto.
+    - intros x [? [[? [? ?]] ?]].
+      pose proof (separate_sep_conj_perm_l _ _ _ H3).
+      pose proof (separate_sep_conj_perm_r _ _ _ H3).
+      split; [split; [| split] | split]; auto.
+      symmetry. apply separate_sep_conj_perm; symmetry; auto.
+    - intros x y [? [? ?]]. split; [split |]; auto.
     - intros. induction H; try solve [etransitivity; eauto].
       destruct H.
       + induction H; try solve [etransitivity; eauto].
@@ -620,13 +606,12 @@ Proof.
   }
   {
     constructor.
-    - intros x [[? ?] ?]; simpl; auto.
-    - intros x y [[? [? []]] [? []]]; subst; try reflexivity.
+    - intros x [[? [? ?]] [? ?]]. symmetry in H3.
+      pose proof (separate_sep_conj_perm_l _ _ _ H3). symmetry in H4.
+      pose proof (separate_sep_conj_perm_r _ _ _ H3). symmetry in H5.
       split; [| split; [split; [| split] |]]; auto.
-      + left. symmetry. symmetry in H3. eapply separate_sep_conj_perm_r; eauto.
-      + left. symmetry in H3. apply separate_sep_conj_perm; auto.
-        symmetry. eapply separate_sep_conj_perm_l; eauto.
-        eapply separate_sep_conj_perm_r; eauto.
+      apply separate_sep_conj_perm; auto. symmetry; auto.
+    - intros x y [[? ?] ?]; simpl; auto.
     - intros. induction H; try solve [etransitivity; eauto].
       destruct H.
       + constructor. left. constructor. left. auto.
@@ -985,23 +970,29 @@ Section ts.
     - apply H1. symmetry. symmetry in H2. eapply separate_antimonotone; eauto.
   Qed.
 
-  (* Lemma eq_sep_sym : forall p q, eq_sep p q -> eq_sep p (sym_perm q). *)
-  (* Proof. *)
-  (*   split; intros. *)
-  (*   - red in H. rewrite H in H0. destruct H0. split; auto. *)
-  (*     intros. simpl in H0. apply sep_r0. induction H0; auto. *)
-  (*     reflexivity. admit. etransitivity; eauto. *)
-  (*   - red in H. rewrite H. destruct H0. split; auto. intros; apply sep_r0. *)
-  (*     constructor; auto. *)
-  (* Qed. *)
+  Lemma sep_step_view : forall p q x y, sep_step p q -> view p x y -> view q x y.
+  Proof.
+    intros. destruct H. specialize (H1 (sym_upd_perm p) (separate_self_sym _)).
+    apply H1; auto.
+  Qed.
 
-  (* Lemma eq_sep_view : forall p q x y, eq_sep p q -> (view p x y <-> view q x y). *)
-  (* Proof. *)
-  (*   intros. *)
-  (*   split; intros. *)
-  (*   - pose proof (separate_self_sym p). red in H. rewrite H in H1. destruct H1. auto. *)
-  (*   - pose proof (separate_self_sym q). red in H. rewrite <- H in H1. destruct H1. auto. *)
-  (* Qed. *)
+  Lemma sep_step_sep_conj_l : forall p1 p2 q, p1 ⊥ q -> sep_step p1 p2 -> sep_step (p1 * q) (p2 * q).
+  Proof.
+    intros p1 p2 q ? []. split.
+    - intros x [? [? ?]]; auto. split; [| split]; auto.
+    - intros; auto. symmetry in H2. symmetry. apply separate_sep_conj_perm; symmetry; auto.
+      + apply H1. symmetry. eapply separate_sep_conj_perm_l; eauto.
+      + symmetry. eapply separate_sep_conj_perm_r; eauto.
+  Qed.
+  Lemma sep_step_sep_conj_r : forall p1 p2 q, p1 ⊥ q -> sep_step p1 p2 -> sep_step (q * p1) (q * p2).
+  Proof.
+    intros p1 p2 q ? []. split.
+    - intros x [? [? ?]]; auto. symmetry in H4. split; [| split]; auto; symmetry; auto.
+    - intros; auto. symmetry in H2. symmetry. apply separate_sep_conj_perm; symmetry; auto.
+      + symmetry. eapply separate_sep_conj_perm_l; eauto.
+      + apply H1. symmetry. eapply separate_sep_conj_perm_r; eauto.
+      + symmetry. auto.
+  Qed.
 
   (* Lemma eq_sep_sep_conj : forall p1 p2 q, eq_sep p1 p2 -> *)
   (*                                    eq_sep (p1 * q) (p2 * q). *)
@@ -1094,11 +1085,11 @@ Section ts.
 
   Lemma type_tau' : forall p t c, typing_perm p (Tau t) ->
                              dom p c ->
-                             exists p', typing_perm p' t.
+                             exists p', typing_perm p' t /\ sep_step p p'.
   Proof.
     intros. pinversion H.
     specialize (H1 _ H0 _ _ (step_tau _ _)). destruct H1 as [_ [p' [? ?]]].
-    exists p'. pclearbot. eapply paco2_mon_bot; eauto.
+    exists p'. pclearbot. split; [eapply paco2_mon_bot |]; eauto.
   Qed.
 
   (* Lemma type_tau'' : forall P t, typing P (Tau t) -> *)
@@ -1125,80 +1116,84 @@ Section ts.
 
   Require Import Coq.Program.Equality.
 
-  Lemma parallel : forall p1 p2 t1 t2,
+  Lemma parallel_perm : forall p1 p2 t1 t2,
       typing_perm p1 t1 -> typing_perm p2 t2 -> typing_perm (p1 * p2) (par t1 t2).
   Proof.
     pcofix CIH. intros p1 p2 t1 t2 Ht1 Ht2.
-    pstep. econstructor. intros c Hdom t' c' Hstep.
+    pstep. econstructor. intros c [Hdom1 [Hdom2 Hsep]] t' c' Hstep.
     rewrite rewrite_par in Hstep. unfold par_match in Hstep.
     dependent destruction Hstep; split; try reflexivity.
-    - destruct (observe t1) eqn:?.
-      + exists p2. (* probably bottom_perm * p2 *) split; [left; eapply paco2_mon_bot; eauto |].
-        (* p1 is anything, since t1 is a ret *)
-  Abort.
+    { destruct (observe t1) eqn:?.
+      - exists p2. split; [left; eapply paco2_mon_bot; eauto |].
+        split; auto.
+        + intros x [? [? ?]]; auto.
+        + intros. symmetry. symmetry in H. eapply separate_sep_conj_perm_r; eauto.
+      - symmetry in Heqi. pose proof (bisimulation_is_eq _ _ (simpobs Heqi)) as Heqi'.
+        rewrite Heqi' in Ht1.
+        pinversion Ht1. destruct (H _ Hdom1 _ _ (step_tau _ _)) as [? [p [? ?]]].
+        exists (p * p2). pclearbot. split.
+        + rewrite <- par_tau. eauto.
+        + apply sep_step_sep_conj_l; auto.
+      - symmetry in Heqi. pose proof (bisimulation_is_eq _ _ (simpobs Heqi)) as Heqi'.
+        rewrite Heqi' in Ht1.
+        destruct e; [destruct s | destruct n]; pinversion Ht1; exists (p1 * p2); split; intuition;
+          left; pstep; constructor; intros ? [Hdom1' [Hdom2' Hsep']] ? ? Hstep;
+            inversion Hstep; auto_inj_pair2; subst.
+        + destruct (H _ Hdom1' _ _ (step_get _ _)) as [? [p [? ?]]]. pclearbot.
+          split; intuition.
+          exists (p * p2). split; auto. apply sep_step_sep_conj_l; auto.
+        + destruct (H _ Hdom1' _ _ (step_put _ _ _)) as [? [p [? ?]]]. pclearbot.
+          split; [constructor |]; auto.
+          exists (p * p2). split; auto. apply sep_step_sep_conj_l; auto.
+        + destruct (H _ Hdom1' _ _ (step_nondet_true _ _)) as [? [p [? ?]]]. pclearbot.
+          split; intuition.
+          exists (p * p2). split; auto. apply sep_step_sep_conj_l; auto.
+        + destruct (H _ Hdom1' _ _ (step_nondet_false _ _)) as [? [p [? ?]]]. pclearbot.
+          split; intuition.
+          exists (p * p2). split; auto. apply sep_step_sep_conj_l; auto.
+    }
+    { symmetry in Hsep. destruct (observe t2) eqn:?.
+      - exists p1. split; [left; eapply paco2_mon_bot; eauto |].
+        split; auto.
+        + intros x [? [? ?]]; auto.
+        + intros. symmetry. symmetry in H. eapply separate_sep_conj_perm_l; eauto.
+      - symmetry in Heqi. pose proof (bisimulation_is_eq _ _ (simpobs Heqi)) as Heqi'.
+        rewrite Heqi' in Ht2.
+        pinversion Ht2. destruct (H _ Hdom2 _ _ (step_tau _ _)) as [? [p [? ?]]].
+        exists (p1 * p). pclearbot. split.
+        + rewrite <- par_tau. eauto.
+        + apply sep_step_sep_conj_r; auto.
+      - symmetry in Heqi. pose proof (bisimulation_is_eq _ _ (simpobs Heqi)) as Heqi'.
+        rewrite Heqi' in Ht2.
+        destruct e; [destruct s | destruct n]; pinversion Ht2; exists (p1 * p2); split; intuition;
+          left; pstep; constructor; intros ? [Hdom1' [Hdom2' Hsep']] ? ? Hstep;
+            inversion Hstep; auto_inj_pair2; subst.
+        + destruct (H _ Hdom2' _ _ (step_get _ _)) as [? [p [? ?]]]. pclearbot.
+          split; intuition.
+          exists (p1 * p). split; auto. apply sep_step_sep_conj_r; auto.
+        + destruct (H _ Hdom2' _ _ (step_put _ _ _)) as [? [p [? ?]]]. pclearbot.
+          split; [constructor |]; auto.
+          exists (p1 * p). split; auto. apply sep_step_sep_conj_r; auto.
+        + destruct (H _ Hdom2' _ _ (step_nondet_true _ _)) as [? [p [? ?]]]. pclearbot.
+          split; intuition.
+          exists (p1 * p). split; auto. apply sep_step_sep_conj_r; auto.
+        + destruct (H _ Hdom2' _ _ (step_nondet_false _ _)) as [? [p [? ?]]]. pclearbot.
+          split; intuition.
+          exists (p1 * p). split; auto. apply sep_step_sep_conj_r; auto.
+      }
+  Qed.
 
   Lemma parallel : forall P1 P2 t1 t2,
       typing P1 t1 -> typing P2 t2 -> typing (P1 ** P2) (par t1 t2).
   Proof.
-    pcofix CIH. intros P1 P2 t1 t2 Ht1 Ht2 p Hin.
-    pstep. econstructor.
-    intros c Hdom t' c' Hstep.
-    (* assert (view (permConj_perm p1) c c). { *)
-    (*   apply (view_inc _ p); auto. *)
-    (*   apply permConj_perm_lte_perm. etransitivity; eauto. apply lte_l_join_permConj. *)
-    (* } *)
-    (* specialize (H _ _ H2 H7). *)
-    destruct Hin as [p1 [p2 [? [? ?]]]].
+    intros P1 P2 t1 t2 Ht1 Ht2 p [p1 [p2 [? [? ?]]]].
     assert (Hp1: p ∈ P1).
     { eapply Perms_upwards_closed; eauto. etransitivity; eauto. apply lte_l_sep_conj_perm. }
     assert (Hp2: p ∈ P2).
     { eapply Perms_upwards_closed; eauto. etransitivity; eauto. apply lte_r_sep_conj_perm. }
-
-    rewrite rewrite_par in Hstep. unfold par_match in Hstep.
-    dependent destruction Hstep; split; try reflexivity.
-    - destruct (observe t1) eqn:?.
-      + exists p. split; intuition.
-        left. eapply paco2_mon_bot; eauto. apply Ht2. auto.
-      + symmetry in Heqi. pose proof (bisimulation_is_eq _ _ (simpobs Heqi)).
-        rewrite H2 in Ht1.
-
-        exists p. split; intuition. specialize (Ht1 _ Hp1). destruct (type_tau' _ _ _ Ht1 Hdom).
-        rewrite <- par_tau. right. eapply CIH; eauto.
-        red in Ht1. admit. admit.
-        (* * assert (eq_sep P2 p). *)
-        (*   { apply eq_sep_refl. eapply Perms_upwards_closed; eauto; reflexivity. } *)
-        (*   destruct H2 as [p' [? ?]]; auto. *)
-        (*   destruct H4 as [p2' [? ?]]; auto. *)
-        (*   exists (p' * p2'). split. apply sep_conj_Perms_perm; auto. *)
-        (*   admit. *)
-      + symmetry in Heqi. pose proof (bisimulation_is_eq _ _ (simpobs Heqi)).
-        rewrite H2 in Ht1.
-        destruct e; [destruct s |].
-        { red in Ht1. specialize (Ht1 _ Hp1).
-          pinversion Ht1.
-          specialize (H3 _ _ Hp1 Hdom _ _ (step_get _ _)).
-          destruct H3 as [? [P' [? ?]]].
-          exists (P' ** P2). split.
-          - left. pstep. constructor. intros.
-            inversion H8; auto_inj_pair2; subst; auto.
-            split; intuition.
-          admit.
-        }
-        {
-          admit.
-        }
-        {
-          destruct n.
-          exists (P1 ** P2). split.
-          - left. pinversion Ht1.
-            pstep. constructor. intros.
-            inversion H5; auto_inj_pair2; subst.
-            + split; intuition. admit.
-            + split; intuition. admit.
-          - apply eq_sep_refl. exists p1, p2. split; [| split]; auto.
-        }
-    - (* same as last case, basically *) admit.
-  Abort.
+    specialize (Ht1 _ H).
+    specialize (Ht2 _ H0). eapply typing_perm_lte; eauto. eapply parallel_perm; eauto.
+  Qed.
 End ts.
 
 From ExtLib Require Import
