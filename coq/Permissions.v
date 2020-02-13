@@ -976,6 +976,14 @@ Section ts.
     apply H1; auto.
   Qed.
 
+  Lemma sep_step_upd : forall p q x y, sep_step p q ->
+                                  upd q x y ->
+                                  clos_refl_sym_trans config (upd p) x y.
+  Proof.
+    intros. destruct H. specialize (H1 (sym_upd_perm p) (separate_self_sym _)).
+    apply H1; auto.
+  Qed.
+
   Lemma sep_step_sep_conj_l : forall p1 p2 q, p1 ⊥ q -> sep_step p1 p2 -> sep_step (p1 * q) (p2 * q).
   Proof.
     intros p1 p2 q ? []. split.
@@ -1049,6 +1057,16 @@ Section ts.
     - eapply sep_step_lte; eauto.
   Qed.
 
+  Lemma typing_perm_step : forall p q t, typing_perm p t -> sep_step q p -> typing_perm q t.
+  Proof.
+    intros p q t Htype Hstep.
+    pstep. constructor. intros. pinversion Htype. apply Hstep in H.
+    destruct (H1 _ H _ _ H0) as [? [p' [? ?]]].
+    split; auto.
+    - pose proof (sep_step_upd _ _ _ _ Hstep H2). (* that's the best we can do I think *) admit.
+    - exists p'. split; auto. etransitivity; eauto.
+  Abort.
+
   Definition typing P t := forall p, p ∈ P -> typing_perm p t.
 
   Lemma type_lte : forall P Q t, typing P t -> P ⊑ Q -> typing Q t.
@@ -1060,7 +1078,7 @@ Section ts.
   Proof.
     pcofix CIH. intros. pstep. constructor. intros. rewrite rewrite_spin in H1.
     inversion H1; subst. split; try reflexivity.
-    exists p. split; eauto. eapply sep_step_refl; eauto.
+    exists p. split; eauto; intuition.
   Qed.
 
   Lemma type_ret : forall P r, typing P (Ret r).
@@ -1080,7 +1098,7 @@ Section ts.
     pfold. econstructor. intros.
     inversion H3; subst.
     split; intuition.
-    exists p. split; auto. apply sep_step_refl.
+    exists p. split; intuition.
   Qed.
 
   Lemma type_tau' : forall p t c, typing_perm p (Tau t) ->
@@ -1092,12 +1110,6 @@ Section ts.
     exists p'. pclearbot. split; [eapply paco2_mon_bot |]; eauto.
   Qed.
 
-  (* Lemma type_tau'' : forall P t, typing P (Tau t) -> *)
-  (*                           exists P', typing P' t. *)
-  (* Proof. *)
-  (*   intros. red in H. *)
-  (* Qed. *)
-
   Lemma frame : forall P1 P2 t, typing P1 t -> typing (P1 ** P2) t.
   Proof.
     intros. eapply type_lte; eauto. apply lte_l_sep_conj_Perms.
@@ -1107,12 +1119,6 @@ Section ts.
   Proof.
     intros. eapply type_lte; eauto. apply lte_r_sep_conj_Perms.
   Qed.
-
-  Axiom par_tau : forall t1 t2, par t1 t2 = Tau (par t1 t2).
-  Axiom par_ret_l : forall r t, par (Ret r) t = t.
-  Axiom par_ret_r : forall r t, par t (Ret r) = t.
-  Axiom par_tau_l : forall t1 t2, par (Tau t1) t2 = par t1 t2.
-  Axiom par_tau_r : forall t1 t2, par t1 (Tau t2) = par t1 t2.
 
   Require Import Coq.Program.Equality.
 
@@ -1132,7 +1138,8 @@ Section ts.
         rewrite Heqi' in Ht1.
         pinversion Ht1. destruct (H _ Hdom1 _ _ (step_tau _ _)) as [? [p [? ?]]].
         exists (p * p2). pclearbot. split.
-        + rewrite <- par_tau. eauto.
+        + left. pstep. constructor. intros. inversion H4; subst.
+          split; intuition. exists (p * p2). split; [| split]; intuition.
         + apply sep_step_sep_conj_l; auto.
       - symmetry in Heqi. pose proof (bisimulation_is_eq _ _ (simpobs Heqi)) as Heqi'.
         rewrite Heqi' in Ht1.
@@ -1161,7 +1168,8 @@ Section ts.
         rewrite Heqi' in Ht2.
         pinversion Ht2. destruct (H _ Hdom2 _ _ (step_tau _ _)) as [? [p [? ?]]].
         exists (p1 * p). pclearbot. split.
-        + rewrite <- par_tau. eauto.
+        + left. pstep. constructor. intros. inversion H4; subst.
+          split; intuition. exists (p1 * p). split; [| split]; intuition.
         + apply sep_step_sep_conj_r; auto.
       - symmetry in Heqi. pose proof (bisimulation_is_eq _ _ (simpobs Heqi)) as Heqi'.
         rewrite Heqi' in Ht2.
