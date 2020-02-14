@@ -1028,7 +1028,7 @@ Section ts.
                      (* we step to configs that satisfy the perm *)
                      (upd p c c') /\
                      (* we step to machines that are well-typed by some other perm that maintains separation *)
-                     (exists p', typing p' t' /\ sep_step p p'))) -> (* todo add dom p' c' *)
+                     (exists p', typing p' t' /\ sep_step p p' /\ dom p' c'))) ->
            typing_perm_gen typing p t.
 
   Definition typing_perm p t := paco2 typing_perm_gen bot2 p t.
@@ -1052,7 +1052,7 @@ Section ts.
   Proof.
     intros. pcofix CIH. pstep. constructor; intros.
     pinversion H. edestruct H3; eauto. split; eauto.
-    destruct H5 as [p' [? ?]]. exists p'. split.
+    destruct H5 as [p' [? [? ?]]]. exists p'. split; [| split]; auto.
     - pclearbot. left. eapply paco2_mon_bot; eauto.
     - eapply sep_step_lte; eauto.
   Qed.
@@ -1061,10 +1061,10 @@ Section ts.
   Proof.
     intros p q t Htype Hstep.
     pstep. constructor. intros. pinversion Htype. apply Hstep in H.
-    destruct (H1 _ H _ _ H0) as [? [p' [? ?]]].
+    destruct (H1 _ H _ _ H0) as [? [p' [? [? ?]]]].
     split; auto.
     - pose proof (sep_step_upd _ _ _ _ Hstep H2). (* that's the best we can do I think *) admit.
-    - exists p'. split; auto. etransitivity; eauto.
+    - exists p'. split; [| split]; auto. etransitivity; eauto.
   Abort.
 
   Definition typing P t := forall p, p ∈ P -> typing_perm p t.
@@ -1101,15 +1101,6 @@ Section ts.
     exists p. split; intuition.
   Qed.
 
-  Lemma type_tau' : forall p t c, typing_perm p (Tau t) ->
-                             dom p c ->
-                             exists p', typing_perm p' t /\ sep_step p p'.
-  Proof.
-    intros. pinversion H.
-    specialize (H1 _ H0 _ _ (step_tau _ _)). destruct H1 as [_ [p' [? ?]]].
-    exists p'. pclearbot. split; [eapply paco2_mon_bot |]; eauto.
-  Qed.
-
   Lemma frame : forall P1 P2 t, typing P1 t -> typing (P1 ** P2) t.
   Proof.
     intros. eapply type_lte; eauto. apply lte_l_sep_conj_Perms.
@@ -1130,64 +1121,86 @@ Section ts.
     rewrite rewrite_par in Hstep. unfold par_match in Hstep.
     dependent destruction Hstep; split; try reflexivity.
     { destruct (observe t1) eqn:?.
-      - exists p2. split; [left; eapply paco2_mon_bot; eauto |].
+      - exists p2. split; [left; eapply paco2_mon_bot; eauto | split]; auto.
         split; auto.
         + intros x [? [? ?]]; auto.
         + intros. symmetry. symmetry in H. eapply separate_sep_conj_perm_r; eauto.
       - symmetry in Heqi. pose proof (bisimulation_is_eq _ _ (simpobs Heqi)) as Heqi'.
         rewrite Heqi' in Ht1.
-        pinversion Ht1. destruct (H _ Hdom1 _ _ (step_tau _ _)) as [? [p [? ?]]].
-        exists (p * p2). pclearbot. split.
-        + left. pstep. constructor. intros. inversion H4; subst.
+        pinversion Ht1. destruct (H _ Hdom1 _ _ (step_tau _ _)) as [? [p [? [? ?]]]].
+        exists (p * p2). pclearbot. split; [| split].
+        + left. pstep. constructor. intros. inversion H5; subst.
           split; intuition. exists (p * p2). split; [| split]; intuition.
         + apply sep_step_sep_conj_l; auto.
+        + split; [| split]; auto. apply H2; auto.
       - symmetry in Heqi. pose proof (bisimulation_is_eq _ _ (simpobs Heqi)) as Heqi'.
         rewrite Heqi' in Ht1.
-        destruct e; [destruct s | destruct n]; pinversion Ht1; exists (p1 * p2); split; intuition;
+        destruct e; [destruct s | destruct n]; pinversion Ht1; exists (p1 * p2);
+          (split; intuition; [| split; [| split]]; auto);
           left; pstep; constructor; intros ? [Hdom1' [Hdom2' Hsep']] ? ? Hstep;
             inversion Hstep; auto_inj_pair2; subst.
-        + destruct (H _ Hdom1' _ _ (step_get _ _)) as [? [p [? ?]]]. pclearbot.
+        + destruct (H _ Hdom1' _ _ (step_get _ _)) as [? [p [? [? ?]]]]. pclearbot.
           split; intuition.
-          exists (p * p2). split; auto. apply sep_step_sep_conj_l; auto.
-        + destruct (H _ Hdom1' _ _ (step_put _ _ _)) as [? [p [? ?]]]. pclearbot.
+          exists (p * p2). split; [| split]; auto.
+          * apply sep_step_sep_conj_l; auto.
+          * split; [| split]; auto. apply H2; auto.
+        + destruct (H _ Hdom1' _ _ (step_put _ _ _)) as [? [p [? [? ?]]]]. pclearbot.
           split; [constructor |]; auto.
-          exists (p * p2). split; auto. apply sep_step_sep_conj_l; auto.
-        + destruct (H _ Hdom1' _ _ (step_nondet_true _ _)) as [? [p [? ?]]]. pclearbot.
+          exists (p * p2). split; [| split]; auto.
+          * apply sep_step_sep_conj_l; auto.
+          * split; [| split]; auto. 2: apply H2; auto.
+            rewrite dom_respects. 2: { symmetry. apply Hsep'. apply H0. } auto.
+        + destruct (H _ Hdom1' _ _ (step_nondet_true _ _)) as [? [p [? [? ?]]]]. pclearbot.
           split; intuition.
-          exists (p * p2). split; auto. apply sep_step_sep_conj_l; auto.
-        + destruct (H _ Hdom1' _ _ (step_nondet_false _ _)) as [? [p [? ?]]]. pclearbot.
+          exists (p * p2). split; [| split]; auto.
+          * apply sep_step_sep_conj_l; auto.
+          * split; [| split]; auto. apply H2; auto.
+        + destruct (H _ Hdom1' _ _ (step_nondet_false _ _)) as [? [p [? [? ?]]]]. pclearbot.
           split; intuition.
-          exists (p * p2). split; auto. apply sep_step_sep_conj_l; auto.
+          exists (p * p2). split; [| split]; auto.
+          * apply sep_step_sep_conj_l; auto.
+          * split; [| split]; auto. apply H2; auto.
     }
     { symmetry in Hsep. destruct (observe t2) eqn:?.
-      - exists p1. split; [left; eapply paco2_mon_bot; eauto |].
+      - exists p1. split; [left; eapply paco2_mon_bot; eauto | split]; auto.
         split; auto.
         + intros x [? [? ?]]; auto.
         + intros. symmetry. symmetry in H. eapply separate_sep_conj_perm_l; eauto.
       - symmetry in Heqi. pose proof (bisimulation_is_eq _ _ (simpobs Heqi)) as Heqi'.
         rewrite Heqi' in Ht2.
-        pinversion Ht2. destruct (H _ Hdom2 _ _ (step_tau _ _)) as [? [p [? ?]]].
-        exists (p1 * p). pclearbot. split.
-        + left. pstep. constructor. intros. inversion H4; subst.
+        pinversion Ht2. destruct (H _ Hdom2 _ _ (step_tau _ _)) as [? [p [? [? ?]]]].
+        exists (p1 * p). pclearbot. split; [| split].
+        + left. pstep. constructor. intros. inversion H5; subst.
           split; intuition. exists (p1 * p). split; [| split]; intuition.
         + apply sep_step_sep_conj_r; auto.
+        + split; [| split]; auto. symmetry. apply H2; auto.
       - symmetry in Heqi. pose proof (bisimulation_is_eq _ _ (simpobs Heqi)) as Heqi'.
-        rewrite Heqi' in Ht2.
-        destruct e; [destruct s | destruct n]; pinversion Ht2; exists (p1 * p2); split; intuition;
+        rewrite Heqi' in Ht2. symmetry in Hsep.
+        destruct e; [destruct s | destruct n]; pinversion Ht2; exists (p1 * p2);
+          (split; intuition; [| split; [| split]]; auto);
           left; pstep; constructor; intros ? [Hdom1' [Hdom2' Hsep']] ? ? Hstep;
-            inversion Hstep; auto_inj_pair2; subst.
-        + destruct (H _ Hdom2' _ _ (step_get _ _)) as [? [p [? ?]]]. pclearbot.
+            inversion Hstep; auto_inj_pair2; subst; symmetry in Hsep.
+        + destruct (H _ Hdom2' _ _ (step_get _ _)) as [? [p [? [? ?]]]]. pclearbot.
           split; intuition.
-          exists (p1 * p). split; auto. apply sep_step_sep_conj_r; auto.
-        + destruct (H _ Hdom2' _ _ (step_put _ _ _)) as [? [p [? ?]]]. pclearbot.
+          exists (p1 * p). split; [| split]; auto.
+          * apply sep_step_sep_conj_r; auto.
+          * split; [| split]; auto. symmetry. apply H2; auto.
+        + destruct (H _ Hdom2' _ _ (step_put _ _ _)) as [? [p [? [? ?]]]]. pclearbot.
           split; [constructor |]; auto.
-          exists (p1 * p). split; auto. apply sep_step_sep_conj_r; auto.
-        + destruct (H _ Hdom2' _ _ (step_nondet_true _ _)) as [? [p [? ?]]]. pclearbot.
+          exists (p1 * p). split; [| split]; auto.
+          * apply sep_step_sep_conj_r; auto.
+          * split; [| split]; auto. 2: symmetry; apply H2; auto.
+            rewrite dom_respects. 2: { symmetry. apply Hsep'. apply H0. } auto.
+        + destruct (H _ Hdom2' _ _ (step_nondet_true _ _)) as [? [p [? [? ?]]]]. pclearbot.
           split; intuition.
-          exists (p1 * p). split; auto. apply sep_step_sep_conj_r; auto.
-        + destruct (H _ Hdom2' _ _ (step_nondet_false _ _)) as [? [p [? ?]]]. pclearbot.
+          exists (p1 * p). split; [| split]; auto.
+          * apply sep_step_sep_conj_r; auto.
+          * split; [| split]; auto. symmetry. apply H2; auto.
+        + destruct (H _ Hdom2' _ _ (step_nondet_false _ _)) as [? [p [? [? ?]]]]. pclearbot.
           split; intuition.
-          exists (p1 * p). split; auto. apply sep_step_sep_conj_r; auto.
+          exists (p1 * p). split; [| split]; auto.
+          * apply sep_step_sep_conj_r; auto.
+          * split; [| split]; auto. symmetry. apply H2; auto.
       }
   Qed.
 
