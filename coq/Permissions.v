@@ -432,6 +432,11 @@ Proof.
   constructor; auto.
 Qed.
 
+Lemma separate_self_read : forall p, (forall x y, upd p x y -> x = y) -> p ⊥ p.
+Proof.
+  intros. split; intros x y Hupd; specialize (H _ _ Hupd); subst; reflexivity.
+Qed.
+
 Lemma separate_antimonotone : forall p q r, p ⊥ q -> r <= q -> p ⊥ r.
 Proof.
   intros. constructor.
@@ -848,6 +853,73 @@ Proof.
     apply meet_Perms_max. intros P' [? [? ?]]. subst. auto.
 Qed.
 
+
+Section implication.
+  Require Import Coq.Arith.EqNat.
+
+  Definition var := nat.
+  Definition beq_var := beq_nat.
+  Context (x y z : var).
+
+  Definition empty := bottom_Perms.
+  Definition true := fun (_ : var) => bottom_Perms.
+
+  Lemma drop : forall P, P x ⊦ empty.
+  Proof.
+    repeat intro. simpl. auto.
+  Qed.
+  Lemma true_intro : empty ⊦ true x.
+  Proof.
+    repeat intro; auto.
+  Qed.
+
+  Definition eq y := fun x => if beq_var x y then bottom_Perms else top_Perms.
+
+  Lemma eq_refl : empty ⊦ eq x x.
+  Proof.
+    repeat intro; unfold eq. rewrite <- beq_nat_refl. simpl in *. auto.
+  Qed.
+
+  Lemma eq_trans : eq y x ** eq z y ⊦ eq z x.
+  Proof.
+    repeat intro. destruct H as [p1 [p2 [Hp1 [Hp2 ?]]]]. unfold eq in *.
+    destruct (beq_var x y) eqn:?; simpl in *; intuition. symmetry in Heqb.
+    destruct (beq_var y z) eqn:?; simpl in *; intuition. symmetry in Heqb0.
+    apply beq_nat_eq in Heqb. apply beq_nat_eq in Heqb0. subst.
+    rewrite <- beq_nat_refl. simpl. auto.
+  Qed.
+
+  Lemma eq_elim : forall P, eq y x ** P y ⊦ P x.
+  Proof.
+    repeat intro. destruct H as [p1 [p2 [Hp1 [Hp2 ?]]]]. unfold eq in *.
+    destruct (beq_var x y) eqn:?; simpl in *; intuition.
+    symmetry in Heqb. apply beq_nat_eq in Heqb. subst.
+    eapply Perms_upwards_closed; eauto. etransitivity. apply lte_r_sep_conj_perm. eauto.
+  Qed.
+
+  Lemma copy : forall P, (forall p c1 c2, p ∈ P x -> upd p c1 c2 -> c1 = c2) ->
+                    P x ⊦ (P x ** P x).
+  Proof.
+    repeat intro. exists p, p. split; [| split]; auto.
+    pose proof separate_self_read. split; intros; simpl; eauto.
+    induction H2.
+    - destruct H2; auto.
+    - etransitivity; eauto.
+  Qed.
+
+  Lemma or_left_intro : forall P Q, P x ⊦ meet_Perms2 (P x) (Q x).
+  Proof.
+    repeat intro. exists (P x). split; auto.
+  Qed.
+  Lemma or_right_intro : forall P Q, Q x ⊦ meet_Perms2 (P x) (Q x).
+  Proof.
+    repeat intro. exists (Q x). split; auto.
+  Qed.
+
+  (* Lemma exists_intro : forall  *)
+
+End implication.
+
 From ITree Require Import
      ITree
      ITreeFacts
@@ -1190,10 +1262,6 @@ Section ts.
     specialize (Ht2 _ H0). eapply typing_perm_lte; eauto. eapply parallel_perm; eauto.
   Qed.
 End ts.
-
-From ExtLib Require Import
-     Structures.Functor
-     Structures.Monad.
 
 Import ITreeNotations.
 Import ITree.Basics.Basics.Monads.
