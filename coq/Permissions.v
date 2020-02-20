@@ -432,7 +432,9 @@ Proof.
   constructor; auto.
 Qed.
 
-Lemma separate_self_read : forall p, (forall x y, upd p x y -> x = y) -> p ⊥ p.
+Definition read_perm p := forall x y, upd p x y -> x = y.
+
+Lemma separate_self_read : forall p, read_perm p -> p ⊥ p.
 Proof.
   intros. split; intros x y Hupd; specialize (H _ _ Hupd); subst; reflexivity.
 Qed.
@@ -840,6 +842,11 @@ Qed.
 Definition entails_Perms P Q := Q ⊑ P.
 Notation "P ⊦ Q" := (entails_Perms P Q) (at level 50).
 
+Instance entails_Perms_preorder : PreOrder entails_Perms.
+Proof.
+  constructor; repeat intro; auto.
+Qed.
+
 Definition impl_Perms P Q := meet_Perms (fun R => R ** P ⊦ Q).
 
 Lemma adjunction : forall P Q R, P ** Q ⊦ R <-> P ⊦ (impl_Perms Q R).
@@ -862,13 +869,13 @@ Section implication.
   Context (x y z : var).
 
   Definition empty := bottom_Perms.
-  Definition true := fun (_ : var) => bottom_Perms.
+  Definition true_p := fun (_ : var) => bottom_Perms.
 
   Lemma drop : forall P, P x ⊦ empty.
   Proof.
     repeat intro. simpl. auto.
   Qed.
-  Lemma true_intro : empty ⊦ true x.
+  Lemma true_intro : empty ⊦ true_p x.
   Proof.
     repeat intro; auto.
   Qed.
@@ -897,13 +904,13 @@ Section implication.
     eapply Perms_upwards_closed; eauto. etransitivity. apply lte_r_sep_conj_perm. eauto.
   Qed.
 
-  Lemma copy : forall P, (forall p c1 c2, p ∈ P x -> upd p c1 c2 -> c1 = c2) ->
+  Lemma copy : forall P, (forall p, p ∈ P x -> read_perm p) ->
                     P x ⊦ (P x ** P x).
   Proof.
     repeat intro. exists p, p. split; [| split]; auto.
-    pose proof separate_self_read. split; intros; simpl; eauto.
-    induction H2.
-    - destruct H2; auto.
+    specialize (H _ H0). apply separate_self_read in H. split; intros; simpl; eauto.
+    induction H1.
+    - destruct H1; auto.
     - etransitivity; eauto.
   Qed.
 
@@ -916,7 +923,23 @@ Section implication.
     repeat intro. exists (Q x). split; auto.
   Qed.
 
-  (* Lemma exists_intro : forall  *)
+  Lemma or_elim : forall P Q R, P x ⊦ R ->
+                           Q x ⊦ R ->
+                           meet_Perms2 (P x) (Q x) ⊦ R.
+  Proof.
+    repeat intro. destruct H1 as [X [? ?]]. destruct H1; subst; auto.
+  Qed.
+
+  Lemma exists_intro : forall P, P y x ⊦ meet_Perms (fun Q => exists y, Q = P y x).
+  Proof.
+    repeat intro. exists (P y x). split; auto. exists y; auto.
+  Qed.
+
+  Lemma exists_elim : forall P R, (forall (y': var), P y' x ⊦ R) ->
+                             meet_Perms (fun Q => exists y, Q = P y x) ⊦ R.
+  Proof.
+    repeat intro. destruct H0 as [X [[? ?] ?]]. subst. eapply H; eauto.
+  Qed.
 
 End implication.
 
