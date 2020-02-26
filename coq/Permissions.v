@@ -840,7 +840,7 @@ Proof.
 Qed.
 
 Definition entails_Perms P Q := Q ⊑ P.
-Notation "P ⊦ Q" := (entails_Perms P Q) (at level 50).
+Notation "P ⊦ Q" := (entails_Perms P Q) (at level 60).
 
 Instance entails_Perms_preorder : PreOrder entails_Perms.
 Proof.
@@ -862,50 +862,59 @@ Qed.
 
 
 Section implication.
-  Require Import Coq.Arith.EqNat.
+  Inductive type :=
+  | TUnit : type
+  | TNat : type
+  .
 
-  Definition var := nat.
-  Definition beq_var := beq_nat.
-  Context (x y z : var).
+  Inductive term (T : Type) :=
+  | Var : T -> term T
+  .
+
+  Context (T : Type).
+  Context (x y z : term T).
+
+  Definition apply {T} (P : term T -> Perms) (x : term T) := P x.
+  Notation "x : P" := (apply P x) (at level 40).
 
   Definition empty := bottom_Perms.
-  Definition true_p := fun (_ : var) => bottom_Perms.
+  Definition true_p := fun (_ : term T) => bottom_Perms.
 
-  Lemma drop : forall P, P x ⊦ empty.
+  Lemma drop : forall P, x:P ⊦ empty.
   Proof.
     repeat intro. simpl. auto.
   Qed.
-  Lemma true_intro : empty ⊦ true_p x.
+  Lemma true_intro : empty ⊦ x:true_p.
   Proof.
     repeat intro; auto.
   Qed.
 
-  Definition eq y := fun x => if beq_var x y then bottom_Perms else top_Perms.
+  (* Perms where domain is x = y *)
+  Program Definition eq (y : term T) :=
+    fun (x : term T) =>
+      {|
+        in_Perms := fun _ => x = y;
+      |}.
 
-  Lemma eq_refl : empty ⊦ eq x x.
+  Lemma eq_refl : empty ⊦ x:eq(x).
   Proof.
-    repeat intro; unfold eq. rewrite <- beq_nat_refl. simpl in *. auto.
+    repeat intro. simpl. auto.
   Qed.
 
-  Lemma eq_trans : eq y x ** eq z y ⊦ eq z x.
+  Lemma eq_trans : x:eq(y) ** y:eq(z) ⊦ x:eq(z).
   Proof.
-    repeat intro. destruct H as [p1 [p2 [Hp1 [Hp2 ?]]]]. unfold eq in *.
-    destruct (beq_var x y) eqn:?; simpl in *; intuition. symmetry in Heqb.
-    destruct (beq_var y z) eqn:?; simpl in *; intuition. symmetry in Heqb0.
-    apply beq_nat_eq in Heqb. apply beq_nat_eq in Heqb0. subst.
-    rewrite <- beq_nat_refl. simpl. auto.
+    repeat intro. destruct H as [p1 [p2 [Hp1 [Hp2 ?]]]]. simpl in *. subst. auto.
   Qed.
 
-  Lemma eq_elim : forall P, eq y x ** P y ⊦ P x.
+  Lemma eq_elim : forall P, x:eq(y) ** y:P ⊦ x:P.
   Proof.
-    repeat intro. destruct H as [p1 [p2 [Hp1 [Hp2 ?]]]]. unfold eq in *.
-    destruct (beq_var x y) eqn:?; simpl in *; intuition.
-    symmetry in Heqb. apply beq_nat_eq in Heqb. subst.
+    repeat intro. destruct H as [p1 [p2 [Hp1 [Hp2 ?]]]].
+    destruct Hp1.
     eapply Perms_upwards_closed; eauto. etransitivity. apply lte_r_sep_conj_perm. eauto.
   Qed.
 
-  Lemma copy : forall P, (forall p, p ∈ P x -> read_perm p) ->
-                    P x ⊦ (P x ** P x).
+  Lemma copy : forall P, (forall p, p ∈ x:P -> read_perm p) ->
+                    x:P ⊦ x:P ** x:P.
   Proof.
     repeat intro. exists p, p. split; [| split]; auto.
     specialize (H _ H0). apply separate_self_read in H. split; intros; simpl; eauto.
@@ -914,29 +923,32 @@ Section implication.
     - etransitivity; eauto.
   Qed.
 
-  Lemma or_left_intro : forall P Q, P x ⊦ meet_Perms2 (P x) (Q x).
+  Lemma or_left_intro : forall P Q, x:P ⊦ meet_Perms2 (x:P) (x:Q).
   Proof.
-    repeat intro. exists (P x). split; auto.
+    repeat intro. exists (x:P). split; auto.
   Qed.
-  Lemma or_right_intro : forall P Q, Q x ⊦ meet_Perms2 (P x) (Q x).
+  Lemma or_right_intro : forall P Q, x:Q ⊦ meet_Perms2 (x:P) (x:Q).
   Proof.
-    repeat intro. exists (Q x). split; auto.
+    repeat intro. exists (x:Q). split; auto.
   Qed.
 
-  Lemma or_elim : forall P Q R, P x ⊦ R ->
-                           Q x ⊦ R ->
-                           meet_Perms2 (P x) (Q x) ⊦ R.
+  Lemma or_elim : forall P Q R, x:P ⊦ R ->
+                           x:Q ⊦ R ->
+                           meet_Perms2 (x:P) (x:Q) ⊦ R.
   Proof.
     repeat intro. destruct H1 as [X [? ?]]. destruct H1; subst; auto.
   Qed.
 
-  Lemma exists_intro : forall P, P y x ⊦ meet_Perms (fun Q => exists y, Q = P y x).
+  Definition exists_Perms T (P : term T -> term T -> Perms) : term T -> Perms :=
+    fun x => meet_Perms (fun Q => exists y, Q = x:P(y)).
+
+  Lemma exists_intro : forall P, x:P(y) ⊦ x:(exists_Perms T P).
   Proof.
-    repeat intro. exists (P y x). split; auto. exists y; auto.
+    repeat intro. exists (x:P(y)). split; auto. exists y; auto.
   Qed.
 
-  Lemma exists_elim : forall P R, (forall (y': var), P y' x ⊦ R) ->
-                             meet_Perms (fun Q => exists y, Q = P y x) ⊦ R.
+  Lemma exists_elim : forall P R, (forall (y': term T), x:P(y') ⊦ R) ->
+                             x:(exists_Perms T P) ⊦ R.
   Proof.
     repeat intro. destruct H0 as [X [[? ?] ?]]. subst. eapply H; eauto.
   Qed.
@@ -962,9 +974,6 @@ Require Import ITree.Eq.EqAxiom.
 Section ts.
 
   Definition E := (stateE config +' nondetE).
-  (* Context {E : Type -> Type}. *)
-  (* Context {HasStateConfig : stateE config -< E}. *)
-  (* Context {HasNondet : nondetE -< E}. *)
 
   Context {R : Type}.
 
@@ -1129,16 +1138,6 @@ Section ts.
     - pclearbot. left. eapply paco2_mon_bot; eauto.
     - eapply sep_step_lte; eauto.
   Qed.
-
-  (* Lemma typing_perm_step : forall p q t, typing_perm p t -> sep_step q p -> typing_perm q t. *)
-  (* Proof. *)
-  (*   intros p q t Htype Hstep. *)
-  (*   pstep. constructor. intros. pinversion Htype. apply Hstep in H. *)
-  (*   destruct (H1 _ H _ _ H0) as [? [p' [? [? ?]]]]. *)
-  (*   split; auto. *)
-  (*   - pose proof (sep_step_upd _ _ _ _ Hstep H2). (* that's the best we can do I think *) admit. *)
-  (*   - exists p'. split; [| split]; auto. etransitivity; eauto. *)
-  (* Abort. *)
 
   Definition typing P t := forall p, p ∈ P -> typing_perm p t.
 
