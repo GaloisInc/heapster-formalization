@@ -1,4 +1,6 @@
--Q coq Heapster
--R coq Heapster
-
+-R theories Heapster
 -R ../../InteractionTrees/theories ITree
+
+theories/Permissions.v
+theories/Implication.v
+theories/Typing.v
