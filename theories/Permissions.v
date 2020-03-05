@@ -773,7 +773,7 @@ Program Definition sep_conj_Perms (P Q : Perms) : Perms :=
 Next Obligation.
   exists H, H1. split; [| split]; auto. etransitivity; eauto.
 Qed.
-Notation "P ** Q" := (sep_conj_Perms P Q) (at level 50).
+Notation "P ** Q" := (sep_conj_Perms P Q) (at level 51, right associativity).
 
 Lemma lte_l_sep_conj_Perms : forall P Q, P ⊑ P ** Q.
 Proof.
