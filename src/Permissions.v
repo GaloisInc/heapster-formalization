@@ -7,10 +7,15 @@ From Coq Require Import
 
 Import ListNotations.
 
-Definition config : Type := nat.
+(* TODO: move to another file, this file is for abstract config stuff *)
+Variant Lifetime := invalid | current | finished.
+Record config : Type :=
+  {
+    l : nat -> Lifetime;
+  }.
 
 (* A single permission *)
-Record perm :=
+Record perm : Type :=
   {
     view : config -> config -> Prop;  (* ER over configs *)
     view_ER : Equivalence view;
@@ -67,13 +72,9 @@ Proof.
   - intros x y z [] []. split; etransitivity; eauto.
 Qed.
 
-Instance eq_perm_flip_impl : Proper (eq ==> eq_perm ==> Basics.flip Basics.impl) lte_perm.
+Instance Proper_eq_perm_lte_perm : Proper (eq_perm ==> eq_perm ==> Basics.flip Basics.impl) lte_perm.
 Proof.
-  repeat intro. subst. etransitivity; eauto.
-Qed.
-Instance eq_perm_flip_impl' : Proper (eq_perm ==> eq ==> Basics.flip Basics.impl) lte_perm.
-Proof.
-  repeat intro. subst. etransitivity; eauto.
+  repeat intro. subst. etransitivity; eauto. etransitivity; eauto.
 Qed.
 
 Program Definition bottom_perm : perm :=
@@ -751,19 +752,9 @@ Proof.
 Qed.
 
 Instance Proper_eq_Perms_lte_Perms :
-  Proper (eq ==> eq_Perms ==> Basics.flip Basics.impl) lte_Perms.
-Proof.
-  do 5 red. etransitivity; subst; eauto. apply H0.
-Qed.
-Instance Proper_eq_Perms_lte_Perms' :
-  Proper (eq_Perms ==> eq ==> Basics.flip Basics.impl) lte_Perms.
-Proof.
-  do 5 red. etransitivity; subst; eauto. apply H.
-Qed.
-Instance Proper_eq_Perms_lte_Perms'' :
   Proper (eq_Perms ==> eq_Perms ==> Basics.flip Basics.impl) lte_Perms.
 Proof.
-  do 5 red. intros. rewrite H. rewrite H0. auto.
+  do 5 red. intros. etransitivity. apply H. etransitivity. apply H1. apply H0.
 Qed.
 
 Program Definition sep_conj_Perms (P Q : Perms) : Perms :=
@@ -871,23 +862,13 @@ Proof.
   constructor; repeat intro; auto.
 Qed.
 
-Instance Proper_entails_Perms_entails_Perms :
-  Proper (eq_Perms ==> eq ==> Basics.flip Basics.impl) entails_Perms.
-Proof.
-  do 5 red. intros. subst. unfold entails_Perms in *. rewrite H. auto.
-Qed.
-Instance Proper_entails_Perms_entails_Perms' :
-  Proper (eq ==> eq_Perms ==> Basics.flip Basics.impl) entails_Perms.
-Proof.
-  do 5 red. intros. subst. unfold entails_Perms in *. subst. rewrite H0. auto.
-Qed.
-Instance Proper_entails_Perms_entails_Perms'' :
+Instance Proper_eq_Perms_entails_Perms :
   Proper (eq_Perms ==> eq_Perms ==> Basics.flip Basics.impl) entails_Perms.
 Proof.
-  do 5 red. intros. rewrite H. rewrite H0. auto.
+  do 6 red. intros. rewrite H. rewrite H0. auto.
 Qed.
 
-Instance entails_Perms_flip_impl :
+Instance Proper_eq_Perms_sep_conj_Perms :
   Proper (eq_Perms ==> eq_Perms ==> eq_Perms) sep_conj_Perms.
 Proof.
   repeat intro. etransitivity.
@@ -906,4 +887,77 @@ Proof.
     unfold impl_Perms.
     rewrite sep_conj_Perms_meet_commute.
     apply meet_Perms_max. intros P' [? [? ?]]. subst. auto.
+Qed.
+
+Program Definition when (n : nat) (p : perm) : perm :=
+  {|
+    dom := fun x => l x n = current /\ dom p x;
+    view := fun x y => x = y \/
+                    (l x n = current /\ l y n = current /\ view p x y);
+    upd := fun x y => x = y \/
+                   (l x n = current /\ l y n = current /\ upd p x y);
+  |}.
+Next Obligation.
+  constructor; repeat intro.
+  - left; auto.
+  - destruct H as [| [? [? ?]]]; auto.
+    right. split; [| split]; auto. symmetry. auto.
+  - destruct H, H0; subst; auto.
+    destruct H as [? [? ?]].
+    destruct H0 as [? [? ?]].
+    right. split; [| split]; auto. etransitivity; eauto.
+Qed.
+Next Obligation.
+  split; intros [].
+  - destruct H as [| [? [? ?]]]; subst; auto. split; auto.
+    eapply dom_respects; eauto. symmetry; auto.
+  - destruct H as [| [? [? ?]]]; subst; auto. split; auto.
+    eapply dom_respects; eauto.
+Qed.
+Next Obligation.
+  constructor; repeat intro; auto.
+  destruct H as [? | [? [? ?]]]; subst; auto.
+  destruct H0 as [? | [? [? ?]]]; subst; auto.
+  right. split; [| split]; auto. etransitivity; eauto.
+Qed.
+
+Program Definition owned (n : nat) (p : perm) : perm :=
+  {|
+    dom := fun x => l x n = current;
+    view := fun x y => x = y \/
+                    (l x n = finished /\ l y n = finished /\ view p x y);
+    upd := clos_trans _
+                      (fun x y =>
+                         x = y \/
+                         (l x n = current /\ l y n = finished /\ forall n', n <> n' -> l x n' = l y n') \/
+                         (l x n = finished /\ l y n = finished /\ upd p x y));
+  |}.
+Next Obligation.
+  constructor; repeat intro.
+  - left; auto.
+  - destruct H as [| [? [? ?]]]; auto.
+    right. split; [| split]; auto. symmetry. auto.
+  - destruct H, H0; subst; auto.
+    destruct H as [? [? ?]].
+    destruct H0 as [? [? ?]].
+    right. split; [| split]; auto. etransitivity; eauto.
+Qed.
+Next Obligation.
+  split; intros.
+  - destruct H as [| [? [? ?]]]; subst; auto.
+    rewrite H in H0. discriminate H0.
+  - destruct H as [| [? [? ?]]]; subst; auto.
+    rewrite H1 in H0. discriminate H0.
+Qed.
+Next Obligation.
+  constructor; repeat intro.
+  - constructor. auto.
+  - econstructor 2; eauto.
+Qed.
+
+Lemma lifetimes_sep n p : when n p ⊥ owned n p.
+Proof.
+  constructor; intros; simpl in *.
+  - induction H.
+    + destruct H as [? | [[? [? ?]] | [? [? ?]]]]; subst; auto.
 Qed.

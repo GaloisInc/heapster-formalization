@@ -1,14 +1,5 @@
 Require Import Heapster.Permissions.
 
-Inductive type :=
-| TUnit : type
-| TNat : type
-.
-
-Inductive term (T : Type) :=
-| Var : T -> term T
-.
-
 Definition apply {T} (P : T -> Perms) (x : T) := P x.
 Notation "x : P" := (apply P x) (at level 40).
 
@@ -53,7 +44,7 @@ Lemma copy {T} (x : T) P : (forall p, p ∈ x:P -> read_perm p) ->
 Proof.
   repeat intro. exists p, p. split; [| split]; auto.
   specialize (H _ H0). apply separate_self_read in H. split; intros; simpl; eauto.
-  induction H1.
+v  induction H1.
   - destruct H1; auto.
   - etransitivity; eauto.
 Qed.
@@ -143,7 +134,7 @@ Qed.
 Instance Ivar_eq_elim {T} (x y : T) lhs P_y P_x rem1 rhs :
   Ilookup y lhs P_y rem1 ->
   Ivar x P_y rem1 P_x rhs ->
-  Ivar x (eq_p(y)) lhs P_x rhs. (* does y:P_y ** rhs not work here? *)
+  Ivar x (eq_p(y)) lhs P_x rhs.
 Proof.
   intros. red in H, H0. red.
   etransitivity. 2: apply H0.
@@ -188,8 +179,27 @@ Proof.
   specialize (H x3). apply H. exists x0, x1. auto.
 Qed.
 
+Instance Ivar_ptr_elim {T} (x y : T) (l : lifetime) (e : nat) (P Q : T -> Perms) lhs rem rhs :
+  l e = true ->
+  Ilookup y lhs P rem ->
+  Ivar x P rem Q rhs ->
+  Ivar x (ptr l e (eq_p(y))) lhs Q rhs.
+Proof.
+  intros. red in H0, H1 |- *. rewrite ptr_current; auto. eapply Ivar_eq_elim; eauto.
+Qed.
+
 Class Implies (lhs rhs rem : Perms) : Prop :=
   impl: lhs ⊦ rhs ** rem.
+
+(* results in an infinite typeclass resolution loop *)
+(* Instance Implies_test (lhs P : Perms) : *)
+(*   Implies lhs (P ** empty) lhs -> *)
+(*   Implies lhs P lhs. *)
+(* Proof. *)
+(*   red. intros. red in H. *)
+(*   rewrite <- sep_conj_Perms_bottom_identity at 2. *)
+(*   rewrite sep_conj_Perms_assoc. apply H. *)
+(* Qed. *)
 
 Instance Implies_empty (lhs : Perms) :
   Implies lhs empty lhs.
@@ -208,9 +218,14 @@ Proof.
   apply sep_conj_Perms_monotone; intuition.
 Qed.
 
-Typeclasses eauto := debug.
+(* Typeclasses eauto := debug. *)
 
 Goal forall T (x y : T), Ilookup x (x:true_p ** y:true_p ** empty) true_p (y:true_p ** empty).
+Proof.
+  typeclasses eauto.
+Qed.
+
+Goal forall T (x y : T), Ilookup y (x:true_p ** y:true_p ** empty) true_p (x:true_p ** empty).
 Proof.
   typeclasses eauto.
 Qed.
@@ -232,3 +247,14 @@ Proof.
   eexists.
   typeclasses eauto.
 Qed.
+
+Goal forall T (x : T) P, exists rem y,
+      Implies (x:(exists_Perms P) ** empty) (x:P(y) ** empty) rem.
+Proof.
+(*   do 2 eexists. *)
+(*   eapply Implies_nonempty. *)
+(*   - apply Ilookup_base. *)
+(*   - apply Ivar_exists_elim. intros. apply Ivar_base. *)
+(*   typeclasses eauto. *)
+(* Qed. *)
+Abort.

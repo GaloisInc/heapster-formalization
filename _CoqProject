@@ -1,6 +1,6 @@
--R theories Heapster
+-R src Heapster
 -R ../../InteractionTrees/theories ITree
 
-theories/Permissions.v
-theories/Implication.v
-theories/Typing.v
+src/Permissions.v
+src/Implication.v
+src/Typing.v
