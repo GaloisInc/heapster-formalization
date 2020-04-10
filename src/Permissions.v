@@ -893,58 +893,58 @@ Program Definition when (n : nat) (p : perm) : perm :=
   {|
     dom := fun x => l x n = current /\ dom p x;
     view := fun x y => x = y \/
-                    (l x n = current /\ l y n = current /\ view p x y);
+                    l x n <> current /\ l y n <> current \/
+                    l x n = current /\ l y n = current /\ view p x y;
     upd := fun x y => x = y \/
-                   (l x n = current /\ l y n = current /\ upd p x y);
+                    l x n <> current /\ l y n <> current \/
+                    l x n = current /\ l y n = current /\ upd p x y;
   |}.
 Next Obligation.
   constructor; repeat intro.
   - left; auto.
-  - destruct H as [| [? [? ?]]]; auto.
-    right. split; [| split]; auto. symmetry. auto.
-  - destruct H, H0; subst; auto.
-    destruct H as [? [? ?]].
-    destruct H0 as [? [? ?]].
-    right. split; [| split]; auto. etransitivity; eauto.
+  - destruct H as [| [[? ?] | [? [? ?]]]]; auto.
+    right; right. split; [| split]; auto. symmetry. auto.
+  - destruct H as [| [[? ?] | [? [? ?]]]], H0 as [| [[? ?] | [? [? ?]]]]; subst; intuition.
+    right; right. split; [| split]; auto. etransitivity; eauto.
 Qed.
 Next Obligation.
   split; intros [].
-  - destruct H as [| [? [? ?]]]; subst; auto. split; auto.
+  - destruct H as [| [[? ?] | [? [? ?]]]]; subst; intuition.
     eapply dom_respects; eauto. symmetry; auto.
-  - destruct H as [| [? [? ?]]]; subst; auto. split; auto.
+  - destruct H as [| [[? ?] | [? [? ?]]]]; subst; intuition.
     eapply dom_respects; eauto.
 Qed.
 Next Obligation.
   constructor; repeat intro; auto.
-  destruct H as [? | [? [? ?]]]; subst; auto.
-  destruct H0 as [? | [? [? ?]]]; subst; auto.
-  right. split; [| split]; auto. etransitivity; eauto.
+  destruct H as [| [[? ?] | [? [? ?]]]], H0 as [| [[? ?] | [? [? ?]]]]; subst; intuition.
+  right; right. split; [| split]; auto. etransitivity; eauto.
 Qed.
 
 Program Definition owned (n : nat) (p : perm) : perm :=
   {|
     dom := fun x => l x n = current;
     view := fun x y => x = y \/
-                    (l x n = finished /\ l y n = finished /\ view p x y);
-    upd := clos_trans _
-                      (fun x y =>
-                         x = y \/
-                         (l x n = current /\ l y n = finished /\ forall n', n <> n' -> l x n' = l y n') \/
-                         (l x n = finished /\ l y n = finished /\ upd p x y));
+                    (* l x n <> finished /\ l y n <> finished \/ *)
+                    l x n = finished /\ l y n = finished /\ view p x y;
+    upd := clos_trans _ (fun x y =>
+                           x = y \/
+                           (l x n = current /\ l y n = finished /\ forall n', n <> n' -> l x n' = l y n') \/
+                           (l x n = finished /\ l y n = finished /\ upd p x y));
   |}.
 Next Obligation.
-  constructor; repeat intro.
-  - left; auto.
+  constructor; repeat intro; auto.
   - destruct H as [| [? [? ?]]]; auto.
     right. split; [| split]; auto. symmetry. auto.
-  - destruct H, H0; subst; auto.
-    destruct H as [? [? ?]].
-    destruct H0 as [? [? ?]].
+  - destruct H as [| [? [? ?]]], H0 as [| [? [? ?]]]; subst; intuition.
     right. split; [| split]; auto. etransitivity; eauto.
+  (* - destruct H as [| [[? ?] | [? [? ?]]]]; auto. *)
+  (*   right; right. split; [| split]; auto. symmetry. auto. *)
+  (* - destruct H as [| [[? ?] | [? [? ?]]]], H0 as [| [[? ?] | [? [? ?]]]]; subst; intuition. *)
+  (*   right; right. split; [| split]; auto. etransitivity; eauto. *)
 Qed.
 Next Obligation.
   split; intros.
-  - destruct H as [| [? [? ?]]]; subst; auto.
+  - destruct H as [| [? [? ?]]]; subst; intuition.
     rewrite H in H0. discriminate H0.
   - destruct H as [| [? [? ?]]]; subst; auto.
     rewrite H1 in H0. discriminate H0.
@@ -960,4 +960,8 @@ Proof.
   constructor; intros; simpl in *.
   - induction H.
     + destruct H as [? | [[? [? ?]] | [? [? ?]]]]; subst; auto.
+      * admit.
+      * right; left. split; admit.
+    + admit.
+  -
 Qed.
