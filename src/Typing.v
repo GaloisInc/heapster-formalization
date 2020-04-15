@@ -131,7 +131,7 @@ Section ts.
 
   Lemma sep_step_upd : forall p q x y, sep_step p q ->
                                   upd q x y ->
-                                  clos_refl_sym_trans config (upd p) x y.
+                                  upd p x y.
   Proof.
     intros. specialize (H (sym_upd_perm p) (separate_self_sym _)).
     apply H; auto.
@@ -270,7 +270,7 @@ Section ts.
           exists (p * p2). split; [| split]; auto.
           * apply sep_step_sep_conj_l; auto.
           * split; [| split]; auto.
-            rewrite dom_respects. 2: { symmetry. apply Hsep'. apply H0. } auto.
+            eapply dom_respects. apply Hsep'. apply H0. auto.
         + destruct (H _ Hdom1' _ _ (step_nondet_true _ _)) as [? [p [? [? ?]]]]. pclearbot.
           split; intuition.
           exists (p * p2). split; [| split]; auto.
@@ -309,7 +309,7 @@ Section ts.
           exists (p1 * p). split; [| split]; auto.
           * apply sep_step_sep_conj_r; auto.
           * split; [| split]; auto. 2: symmetry; apply H2; auto.
-            rewrite dom_respects. 2: { symmetry. apply Hsep'. apply H0. } auto.
+            eapply dom_respects. apply Hsep'. apply H0. auto.
         + destruct (H _ Hdom2' _ _ (step_nondet_true _ _)) as [? [p [? [? ?]]]]. pclearbot.
           split; intuition.
           exists (p1 * p). split; [| split]; auto.

@@ -18,9 +18,9 @@ Record config : Type :=
 Record perm : Type :=
   {
     view : config -> config -> Prop;  (* ER over configs *)
-    view_ER : Equivalence view;
+    view_ER : PreOrder view;
     dom : config -> Prop; (* domain of valid configs *)
-    dom_respects : forall x y, view x y -> (dom x <-> dom y);
+    dom_respects : forall x y, view x y -> (dom x -> dom y);
     upd : config -> config -> Prop;  (* allowed transitions *)
     upd_PO : PreOrder upd;
   }.
@@ -30,7 +30,7 @@ Hint Unfold dom.
 Hint Unfold upd.
 Hint Resolve dom_respects.
 
-Instance view_is_ER p : Equivalence (view p) := view_ER p.
+Instance view_is_ER p : PreOrder (view p) := view_ER p.
 Instance upd_is_preorder p : PreOrder (upd p) := upd_PO p.
 
 Record lte_perm (p q: perm) : Prop :=
@@ -87,9 +87,6 @@ Next Obligation.
   constructor; repeat intro; subst; auto.
 Qed.
 Next Obligation.
-  tauto.
-Qed.
-Next Obligation.
   constructor; repeat intro; subst; auto.
 Qed.
 
@@ -108,9 +105,6 @@ Next Obligation.
   constructor; repeat intro; subst; auto.
 Qed.
 Next Obligation.
-  tauto.
-Qed.
-Next Obligation.
   constructor; repeat intro; subst; auto.
 Qed.
 
@@ -119,7 +113,7 @@ Proof.
   constructor; simpl; repeat intro; subst; intuition.
 Qed.
 
-Ltac respects := eapply dom_respects; eauto; symmetry; auto.
+Ltac respects := eapply dom_respects; eauto.
 
 Program Definition join_perm (p q: perm) : perm :=
   {|
@@ -130,11 +124,10 @@ Program Definition join_perm (p q: perm) : perm :=
 Next Obligation.
   constructor; repeat intro.
   - split; reflexivity.
-  - destruct H. split; symmetry; auto.
   - destruct H. destruct H0. split; etransitivity; eauto.
 Qed.
 Next Obligation.
-  split; intros []; split; respects.
+  split; respects.
 Qed.
 Next Obligation.
   constructor.
@@ -242,37 +235,24 @@ Definition meet_view p q := clos_trans _ (fun x y => (view p x y) \/ (view q x y
 
 Program Definition meet_perm (p q:perm) : perm :=
   {|
-    dom := fun x => dom p x \/ dom q x \/ exists y, (dom p y \/ dom q y) /\ meet_view p q x y;
+    dom := fun x => dom p x \/ dom q x \/ exists y, (dom p y \/ dom q y) /\ meet_view p q y x;
     view := meet_view p q;
     upd  := fun x y => upd p x y /\ upd q x y;
   |}.
 Next Obligation.
   constructor; repeat intro.
   - constructor. left. reflexivity.
-  - induction H.
-    + constructor. destruct H; symmetry in H; auto.
-    + econstructor 2; eauto.
   - econstructor 2; eauto.
 Qed.
 Next Obligation.
-  induction H; [| rewrite IHclos_trans1; auto].
-  split.
-  { destruct 1 as [? | [? | [z [? ?]]]].
-    - destruct H; symmetry in H; try solve [left; respects].
-      right. right. exists x. split; auto. constructor 1. auto.
-    - destruct H; symmetry in H; try solve [right; left; respects].
-      right. right. exists x. split; auto. constructor 1. auto.
-    - destruct H; symmetry in H; right; right; exists z; split; auto;
-        econstructor 2; eauto; constructor 1; auto.
-  }
-  { destruct 1 as [? | [? | [z [? ?]]]].
-    - destruct H; try solve [left; respects].
-      right. right. exists y. split; auto. constructor 1. auto.
-    - destruct H; try solve [right; left; respects].
-      right. right. exists y. split; auto. constructor 1. auto.
-    - destruct H; right; right; exists z; split; auto;
-        econstructor 2; eauto; constructor 1; auto.
-  }
+  induction H; auto.
+  destruct H0 as [? | [? | [z [? ?]]]].
+  - destruct H; try solve [left; respects].
+    right; right. exists x. split; auto. constructor 1. auto.
+  - destruct H; try solve [right; left; respects].
+    right; right. exists x. split; auto. constructor 1. auto.
+  - destruct H; right; right; exists z; split; auto;
+      econstructor 2; eauto; constructor 1; auto.
 Qed.
 Next Obligation.
   constructor.
@@ -300,16 +280,16 @@ Lemma meet_perm_max : forall p q r,
     r <= meet_perm p q.
 Proof.
   intros p q r [] []. constructor; intros; simpl; auto.
-  - simpl in H. destruct H as [? | [? | [? [? ?]]]]; auto. (* why is this case so bad *)
+  - simpl in H. destruct H as [? | [? | [? [? ?]]]]; auto.
     induction H0.
     + destruct H, H0; respects.
-    + apply IHclos_trans2 in H.
-      clear IHclos_trans1 IHclos_trans2 H0_0.
-      induction H0_; auto.
+    + apply IHclos_trans1 in H.
+      clear IHclos_trans1 IHclos_trans2 H0_.
+      induction H0_0; auto.
       destruct H0; respects.
   - induction H.
     + destruct H; auto.
-    + transitivity y; auto.
+    + etransitivity; eauto.
 Qed.
 
 (*
@@ -413,23 +393,12 @@ Qed.
 Program Definition sym_upd_perm (p : perm) : perm :=
   {|
     dom x := False;
-    view := clos_refl_sym_trans _ (upd p);
+    view := upd p;
     upd := view p;
   |}.
-Next Obligation.
-  (* apply clos_rst_is_equiv. *)
-  constructor; repeat intro.
-  - constructor 1; reflexivity.
-  - constructor 3; auto.
-  - econstructor 4; eauto.
-Qed.
-Next Obligation.
-  tauto.
-Qed.
 Lemma separate_self_sym : forall p, p ⊥ sym_upd_perm p.
 Proof.
   intros. split; intros; auto.
-  constructor; auto.
 Qed.
 
 Definition read_perm p := forall x y, upd p x y -> x = y.
@@ -455,16 +424,16 @@ Program Definition sep_conj_perm (p q: perm) : perm :=
 Next Obligation.
   constructor; repeat intro.
   - split; reflexivity.
-  - destruct H; split; symmetry; auto.
+  (* - destruct H; split; symmetry; auto. *)
   - destruct H, H0.
     split; etransitivity; eauto.
 Qed.
 Next Obligation.
-  split; intros [? [? ?]]; (split; [respects | split; [respects | auto]]).
+  split; [respects | split; [respects | auto]].
 Qed.
 Next Obligation.
   constructor.
-  - constructor; left; reflexivity.
+  - constructor; intuition.
   - repeat intro. destruct H, H0.
     + destruct H, H0; econstructor 2; constructor; eauto.
     + econstructor 2. left. apply H. econstructor 2; eauto.
@@ -889,79 +858,80 @@ Proof.
     apply meet_Perms_max. intros P' [? [? ?]]. subst. auto.
 Qed.
 
-Program Definition when (n : nat) (p : perm) : perm :=
-  {|
-    dom := fun x => l x n = current /\ dom p x;
-    view := fun x y => x = y \/
-                    l x n <> current /\ l y n <> current \/
-                    l x n = current /\ l y n = current /\ view p x y;
-    upd := fun x y => x = y \/
-                    l x n <> current /\ l y n <> current \/
-                    l x n = current /\ l y n = current /\ upd p x y;
-  |}.
-Next Obligation.
-  constructor; repeat intro.
-  - left; auto.
-  - destruct H as [| [[? ?] | [? [? ?]]]]; auto.
-    right; right. split; [| split]; auto. symmetry. auto.
-  - destruct H as [| [[? ?] | [? [? ?]]]], H0 as [| [[? ?] | [? [? ?]]]]; subst; intuition.
-    right; right. split; [| split]; auto. etransitivity; eauto.
-Qed.
-Next Obligation.
-  split; intros [].
-  - destruct H as [| [[? ?] | [? [? ?]]]]; subst; intuition.
-    eapply dom_respects; eauto. symmetry; auto.
-  - destruct H as [| [[? ?] | [? [? ?]]]]; subst; intuition.
-    eapply dom_respects; eauto.
-Qed.
-Next Obligation.
-  constructor; repeat intro; auto.
-  destruct H as [| [[? ?] | [? [? ?]]]], H0 as [| [[? ?] | [? [? ?]]]]; subst; intuition.
-  right; right. split; [| split]; auto. etransitivity; eauto.
-Qed.
+(* Program Definition when (n : nat) (p : perm) : perm := *)
+(*   {| *)
+(*     dom := fun x => l x n = current /\ dom p x; *)
+(*     view := fun x y => x = y \/ *)
+(*                     l x n <> current /\ l y n <> current \/ *)
+(*                     l x n = current /\ l y n = finished \/ *)
+(*                     l x n = current /\ l y n = current /\ view p x y; *)
+(*     upd := fun x y => x = y \/ *)
+(*                     l x n <> current /\ l y n <> current \/ *)
+(*                     l x n = current /\ l y n = current /\ upd p x y; *)
+(*   |}. *)
+(* Next Obligation. *)
+(*   constructor; repeat intro. *)
+(*   - left; auto. *)
+(*   - destruct H as [| [[? ?] | [? [? ?]]]]; auto. *)
+(*     right; right. split; [| split]; auto. symmetry. auto. *)
+(*   - destruct H as [| [[? ?] | [? [? ?]]]], H0 as [| [[? ?] | [? [? ?]]]]; subst; intuition. *)
+(*     right; right. split; [| split]; auto. etransitivity; eauto. *)
+(* Qed. *)
+(* Next Obligation. *)
+(*   split; intros []. *)
+(*   - destruct H as [| [[? ?] | [? [? ?]]]]; subst; intuition. *)
+(*     eapply dom_respects; eauto. symmetry; auto. *)
+(*   - destruct H as [| [[? ?] | [? [? ?]]]]; subst; intuition. *)
+(*     eapply dom_respects; eauto. *)
+(* Qed. *)
+(* Next Obligation. *)
+(*   constructor; repeat intro; auto. *)
+(*   destruct H as [| [[? ?] | [? [? ?]]]], H0 as [| [[? ?] | [? [? ?]]]]; subst; intuition. *)
+(*   right; right. split; [| split]; auto. etransitivity; eauto. *)
+(* Qed. *)
 
-Program Definition owned (n : nat) (p : perm) : perm :=
-  {|
-    dom := fun x => l x n = current;
-    view := fun x y => x = y \/
-                    (* l x n <> finished /\ l y n <> finished \/ *)
-                    l x n = finished /\ l y n = finished /\ view p x y;
-    upd := clos_trans _ (fun x y =>
-                           x = y \/
-                           (l x n = current /\ l y n = finished /\ forall n', n <> n' -> l x n' = l y n') \/
-                           (l x n = finished /\ l y n = finished /\ upd p x y));
-  |}.
-Next Obligation.
-  constructor; repeat intro; auto.
-  - destruct H as [| [? [? ?]]]; auto.
-    right. split; [| split]; auto. symmetry. auto.
-  - destruct H as [| [? [? ?]]], H0 as [| [? [? ?]]]; subst; intuition.
-    right. split; [| split]; auto. etransitivity; eauto.
-  (* - destruct H as [| [[? ?] | [? [? ?]]]]; auto. *)
-  (*   right; right. split; [| split]; auto. symmetry. auto. *)
-  (* - destruct H as [| [[? ?] | [? [? ?]]]], H0 as [| [[? ?] | [? [? ?]]]]; subst; intuition. *)
-  (*   right; right. split; [| split]; auto. etransitivity; eauto. *)
-Qed.
-Next Obligation.
-  split; intros.
-  - destruct H as [| [? [? ?]]]; subst; intuition.
-    rewrite H in H0. discriminate H0.
-  - destruct H as [| [? [? ?]]]; subst; auto.
-    rewrite H1 in H0. discriminate H0.
-Qed.
-Next Obligation.
-  constructor; repeat intro.
-  - constructor. auto.
-  - econstructor 2; eauto.
-Qed.
+(* Program Definition owned (n : nat) (p : perm) : perm := *)
+(*   {| *)
+(*     dom := fun x => l x n = current; *)
+(*     view := fun x y => x = y \/ *)
+(*                     (* l x n <> finished /\ l y n <> finished \/ *) *)
+(*                     l x n = finished /\ l y n = finished /\ view p x y; *)
+(*     upd := clos_trans _ (fun x y => *)
+(*                            x = y \/ *)
+(*                            (l x n = current /\ l y n = finished /\ forall n', n <> n' -> l x n' = l y n') \/ *)
+(*                            (l x n = finished /\ l y n = finished /\ upd p x y)); *)
+(*   |}. *)
+(* Next Obligation. *)
+(*   constructor; repeat intro; auto. *)
+(*   - destruct H as [| [? [? ?]]]; auto. *)
+(*     right. split; [| split]; auto. symmetry. auto. *)
+(*   - destruct H as [| [? [? ?]]], H0 as [| [? [? ?]]]; subst; intuition. *)
+(*     right. split; [| split]; auto. etransitivity; eauto. *)
+(*   (* - destruct H as [| [[? ?] | [? [? ?]]]]; auto. *) *)
+(*   (*   right; right. split; [| split]; auto. symmetry. auto. *) *)
+(*   (* - destruct H as [| [[? ?] | [? [? ?]]]], H0 as [| [[? ?] | [? [? ?]]]]; subst; intuition. *) *)
+(*   (*   right; right. split; [| split]; auto. etransitivity; eauto. *) *)
+(* Qed. *)
+(* Next Obligation. *)
+(*   split; intros. *)
+(*   - destruct H as [| [? [? ?]]]; subst; intuition. *)
+(*     rewrite H in H0. discriminate H0. *)
+(*   - destruct H as [| [? [? ?]]]; subst; auto. *)
+(*     rewrite H1 in H0. discriminate H0. *)
+(* Qed. *)
+(* Next Obligation. *)
+(*   constructor; repeat intro. *)
+(*   - constructor. auto. *)
+(*   - econstructor 2; eauto. *)
+(* Qed. *)
 
-Lemma lifetimes_sep n p : when n p ⊥ owned n p.
-Proof.
-  constructor; intros; simpl in *.
-  - induction H.
-    + destruct H as [? | [[? [? ?]] | [? [? ?]]]]; subst; auto.
-      * admit.
-      * right; left. split; admit.
-    + admit.
-  -
-Qed.
+(* Lemma lifetimes_sep n p : when n p ⊥ owned n p. *)
+(* Proof. *)
+(*   constructor; intros; simpl in *. *)
+(*   - induction H. *)
+(*     + destruct H as [? | [[? [? ?]] | [? [? ?]]]]; subst; auto. *)
+(*       * admit. *)
+(*       * right; left. split; admit. *)
+(*     + admit. *)
+(*   - *)
+(* Qed. *)

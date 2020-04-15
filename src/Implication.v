@@ -44,7 +44,7 @@ Lemma copy {T} (x : T) P : (forall p, p ∈ x:P -> read_perm p) ->
 Proof.
   repeat intro. exists p, p. split; [| split]; auto.
   specialize (H _ H0). apply separate_self_read in H. split; intros; simpl; eauto.
-v  induction H1.
+  induction H1.
   - destruct H1; auto.
   - etransitivity; eauto.
 Qed.
@@ -179,14 +179,14 @@ Proof.
   specialize (H x3). apply H. exists x0, x1. auto.
 Qed.
 
-Instance Ivar_ptr_elim {T} (x y : T) (l : lifetime) (e : nat) (P Q : T -> Perms) lhs rem rhs :
-  l e = true ->
-  Ilookup y lhs P rem ->
-  Ivar x P rem Q rhs ->
-  Ivar x (ptr l e (eq_p(y))) lhs Q rhs.
-Proof.
-  intros. red in H0, H1 |- *. rewrite ptr_current; auto. eapply Ivar_eq_elim; eauto.
-Qed.
+(* Instance Ivar_ptr_elim {T} (x y : T) (l : lifetime) (e : nat) (P Q : T -> Perms) lhs rem rhs : *)
+(*   l e = true -> *)
+(*   Ilookup y lhs P rem -> *)
+(*   Ivar x P rem Q rhs -> *)
+(*   Ivar x (ptr l e (eq_p(y))) lhs Q rhs. *)
+(* Proof. *)
+(*   intros. red in H0, H1 |- *. rewrite ptr_current; auto. eapply Ivar_eq_elim; eauto. *)
+(* Qed. *)
 
 Class Implies (lhs rhs rem : Perms) : Prop :=
   impl: lhs ⊦ rhs ** rem.
