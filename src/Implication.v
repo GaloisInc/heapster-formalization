@@ -6,6 +6,31 @@ Notation "x : P" := (apply P x) (at level 40).
 Definition empty := bottom_Perms.
 Definition true_p {T} := fun (_ : T) => bottom_Perms.
 
+Program Definition when' {T} (n : nat) (P : T -> Perms) (x : T) :=
+  {|
+    in_Perms := fun p => exists p', in_Perms (P x) p' /\ when n p' <= p;
+  |}.
+Next Obligation.
+  exists H. split; auto. etransitivity; eauto.
+Qed.
+
+Program Definition owned' (P : Perms) (n : nat) :=
+  {|
+    in_Perms := fun p => exists p', in_Perms P p' /\ owned n p' <= p;
+  |}.
+Next Obligation.
+  exists H. split; auto. etransitivity; eauto.
+Qed.
+
+Lemma convert {T} (x : T) P n : x:P ** (owned' empty n) ⊦ x:(when' n P) ** (owned' (x:P) n).
+Proof.
+  repeat intro. simpl in H. decompose [ex and] H. simpl.
+  exists (when n x0), (owned n x2). split; [| split]; auto.
+  - exists x0. split; intuition.
+  - admit.
+  - etransitivity; eauto. apply sep_conj_perm_monotone; intuition.
+Qed.
+
 Lemma drop {T} (x : T) P : x:P ⊦ empty.
 Proof.
   repeat intro. simpl. auto.
@@ -16,11 +41,10 @@ Proof.
 Qed.
 
 (* Perms where domain is x = y *)
-Program Definition eq_p {T} (y : T) :=
-  fun (x : T) =>
-    {|
-      in_Perms := fun _ => x = y;
-    |}.
+Program Definition eq_p {T} (y : T) (x : T) :=
+  {|
+    in_Perms := fun _ => x = y;
+  |}.
 
 Lemma eq_refl {T} (x : T) : empty ⊦ x:eq_p(x).
 Proof.

@@ -858,80 +858,70 @@ Proof.
     apply meet_Perms_max. intros P' [? [? ?]]. subst. auto.
 Qed.
 
-(* Program Definition when (n : nat) (p : perm) : perm := *)
-(*   {| *)
-(*     dom := fun x => l x n = current /\ dom p x; *)
-(*     view := fun x y => x = y \/ *)
-(*                     l x n <> current /\ l y n <> current \/ *)
-(*                     l x n = current /\ l y n = finished \/ *)
-(*                     l x n = current /\ l y n = current /\ view p x y; *)
-(*     upd := fun x y => x = y \/ *)
-(*                     l x n <> current /\ l y n <> current \/ *)
-(*                     l x n = current /\ l y n = current /\ upd p x y; *)
-(*   |}. *)
-(* Next Obligation. *)
-(*   constructor; repeat intro. *)
-(*   - left; auto. *)
-(*   - destruct H as [| [[? ?] | [? [? ?]]]]; auto. *)
-(*     right; right. split; [| split]; auto. symmetry. auto. *)
-(*   - destruct H as [| [[? ?] | [? [? ?]]]], H0 as [| [[? ?] | [? [? ?]]]]; subst; intuition. *)
-(*     right; right. split; [| split]; auto. etransitivity; eauto. *)
-(* Qed. *)
-(* Next Obligation. *)
-(*   split; intros []. *)
-(*   - destruct H as [| [[? ?] | [? [? ?]]]]; subst; intuition. *)
-(*     eapply dom_respects; eauto. symmetry; auto. *)
-(*   - destruct H as [| [[? ?] | [? [? ?]]]]; subst; intuition. *)
-(*     eapply dom_respects; eauto. *)
-(* Qed. *)
-(* Next Obligation. *)
-(*   constructor; repeat intro; auto. *)
-(*   destruct H as [| [[? ?] | [? [? ?]]]], H0 as [| [[? ?] | [? [? ?]]]]; subst; intuition. *)
-(*   right; right. split; [| split]; auto. etransitivity; eauto. *)
-(* Qed. *)
+Program Definition when (n : nat) (p : perm) : perm :=
+  {|
+    dom := fun x => l x n = current /\ dom p x \/
+                  l x n = finished;
+    view := fun x y => x = y \/
+                     l y n = finished \/
+                     l x n = current /\ l y n = current /\ view p x y;
+    upd := fun x y => x = y \/
+                    l x n = current /\ l y n = current /\ upd p x y;
+  |}.
+Next Obligation.
+  constructor; repeat intro.
+  - left; auto.
+  - decompose [and or] H; decompose [and or] H0; subst; auto.
+    + rewrite H1 in H2. discriminate H2.
+    + right. right. split; [| split]; auto. etransitivity; eauto.
+Qed.
+Next Obligation.
+  decompose [and or] H; subst; auto.
+  decompose [and or] H0.
+  - left. split; auto. eapply dom_respects; eauto.
+  - rewrite H1 in H3. discriminate H3.
+Qed.
+Next Obligation.
+  constructor; repeat intro; auto.
+  decompose [and or] H; decompose [and or] H0; subst; auto.
+  right. split; [| split]; auto. etransitivity; eauto.
+Qed.
 
-(* Program Definition owned (n : nat) (p : perm) : perm := *)
-(*   {| *)
-(*     dom := fun x => l x n = current; *)
-(*     view := fun x y => x = y \/ *)
-(*                     (* l x n <> finished /\ l y n <> finished \/ *) *)
-(*                     l x n = finished /\ l y n = finished /\ view p x y; *)
-(*     upd := clos_trans _ (fun x y => *)
-(*                            x = y \/ *)
-(*                            (l x n = current /\ l y n = finished /\ forall n', n <> n' -> l x n' = l y n') \/ *)
-(*                            (l x n = finished /\ l y n = finished /\ upd p x y)); *)
-(*   |}. *)
-(* Next Obligation. *)
-(*   constructor; repeat intro; auto. *)
-(*   - destruct H as [| [? [? ?]]]; auto. *)
-(*     right. split; [| split]; auto. symmetry. auto. *)
-(*   - destruct H as [| [? [? ?]]], H0 as [| [? [? ?]]]; subst; intuition. *)
-(*     right. split; [| split]; auto. etransitivity; eauto. *)
-(*   (* - destruct H as [| [[? ?] | [? [? ?]]]]; auto. *) *)
-(*   (*   right; right. split; [| split]; auto. symmetry. auto. *) *)
-(*   (* - destruct H as [| [[? ?] | [? [? ?]]]], H0 as [| [[? ?] | [? [? ?]]]]; subst; intuition. *) *)
-(*   (*   right; right. split; [| split]; auto. etransitivity; eauto. *) *)
-(* Qed. *)
-(* Next Obligation. *)
-(*   split; intros. *)
-(*   - destruct H as [| [? [? ?]]]; subst; intuition. *)
-(*     rewrite H in H0. discriminate H0. *)
-(*   - destruct H as [| [? [? ?]]]; subst; auto. *)
-(*     rewrite H1 in H0. discriminate H0. *)
-(* Qed. *)
-(* Next Obligation. *)
-(*   constructor; repeat intro. *)
-(*   - constructor. auto. *)
-(*   - econstructor 2; eauto. *)
-(* Qed. *)
+Lemma when_monotone n p1 p2 : p1 <= p2 -> when n p1 <= when n p2.
+Proof.
+  intros. destruct H. constructor; simpl; intros; decompose [and or] H; auto 6.
+Qed.
 
-(* Lemma lifetimes_sep n p : when n p ⊥ owned n p. *)
-(* Proof. *)
-(*   constructor; intros; simpl in *. *)
-(*   - induction H. *)
-(*     + destruct H as [? | [[? [? ?]] | [? [? ?]]]]; subst; auto. *)
-(*       * admit. *)
-(*       * right; left. split; admit. *)
-(*     + admit. *)
-(*   - *)
-(* Qed. *)
+Program Definition owned (n : nat) (p : perm) : perm :=
+  {|
+    dom := fun x => l x n = current;
+    view := fun x y => x = y \/
+                    l x n = l y n /\ (l x n = current \/ view p x y);
+    upd := fun x y => x = y \/
+                    l y n = finished /\ upd p x y;
+  |}.
+Next Obligation.
+  constructor; repeat intro; auto.
+  decompose [and or] H; decompose [and or] H0; subst; auto;
+    right; split; auto; rewrite H2; auto.
+  right. etransitivity; eauto.
+Qed.
+Next Obligation.
+  decompose [and or] H; subst; auto; rewrite <- H2; auto.
+Qed.
+Next Obligation.
+  constructor; repeat intro; auto.
+  decompose [and or] H; decompose [and or] H0; subst; auto.
+  right. split; auto. etransitivity; eauto.
+Qed.
+
+Lemma owned_monotone n p1 p2 : p1 <= p2 -> owned n p1 <= owned n p2.
+Proof.
+  intros. destruct H. constructor; simpl; intros; decompose [and or] H; auto 6.
+Qed.
+
+Lemma lifetimes_sep n p : when n p ⊥ owned n p.
+Proof.
+  constructor; intros; simpl in *; decompose [and or] H; auto.
+  right. split; auto. rewrite H1; auto.
+Qed.
