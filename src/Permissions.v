@@ -8,10 +8,10 @@ From Coq Require Import
 Import ListNotations.
 
 (* TODO: move to another file, this file is for abstract config stuff *)
-Variant Lifetime := invalid | current | finished.
+Variant Lifetime := current | finished.
 Record config : Type :=
   {
-    l : nat -> Lifetime;
+    l : list Lifetime;
   }.
 
 (* A single permission *)
@@ -858,26 +858,33 @@ Proof.
     apply meet_Perms_max. intros P' [? [? ?]]. subst. auto.
 Qed.
 
+Definition lifetime : config -> nat -> option Lifetime :=
+  fun c => nth_error (l c).
+
 Program Definition when (n : nat) (p : perm) : perm :=
   {|
-    dom := fun x => l x n = current /\ dom p x \/
-                  l x n = finished;
-    view := fun x y => x = y \/
-                     l y n = finished \/
-                     l x n = current /\ l y n = current /\ view p x y;
+    dom := fun x => (lifetime x n = Some current /\ dom p x) \/
+                  lifetime x n = Some finished;
+    view := fun x y => lifetime x n = None /\ lifetime y n = None \/
+                     lifetime y n = Some finished \/
+                     lifetime x n = Some current /\ lifetime y n = Some current /\ view p x y;
     upd := fun x y => x = y \/
-                    l x n = current /\ l y n = current /\ upd p x y;
+                    lifetime x n = Some current /\ lifetime y n = Some current /\ upd p x y;
   |}.
 Next Obligation.
   constructor; repeat intro.
-  - left; auto.
+  - destruct (lifetime x n) as [[] |]; intuition.
   - decompose [and or] H; decompose [and or] H0; subst; auto.
+    + rewrite H1 in H3. discriminate H3.
+    + rewrite H2 in H3. discriminate H3.
     + rewrite H1 in H2. discriminate H2.
-    + right. right. split; [| split]; auto. etransitivity; eauto.
+    + rewrite H2 in H5. discriminate H5.
+    + right; right. split; [| split]; auto. etransitivity; eauto.
 Qed.
 Next Obligation.
-  decompose [and or] H; subst; auto.
-  decompose [and or] H0.
+  decompose [and or] H; decompose [or and] H0; subst; auto.
+  - rewrite H2 in H4. discriminate H4.
+  - rewrite H1 in H2. discriminate H2.
   - left. split; auto. eapply dom_respects; eauto.
   - rewrite H1 in H3. discriminate H3.
 Qed.
@@ -889,25 +896,21 @@ Qed.
 
 Lemma when_monotone n p1 p2 : p1 <= p2 -> when n p1 <= when n p2.
 Proof.
-  intros. destruct H. constructor; simpl; intros; decompose [and or] H; auto 6.
+  intros. destruct H. constructor; simpl; intros; decompose [and or] H; auto 7.
 Qed.
 
 Program Definition owned (n : nat) (p : perm) : perm :=
   {|
-    dom := fun x => l x n = current;
-    view := fun x y => x = y \/
-                    l x n = l y n /\ (l x n = current \/ view p x y);
+    dom := fun x => lifetime x n = Some current;
+    view := fun x y => lifetime x n = lifetime y n /\ (lifetime x n = Some finished -> view p x y);
     upd := fun x y => x = y \/
-                    l y n = finished /\ upd p x y;
+                    lifetime y n = Some finished /\ upd p x y;
   |}.
 Next Obligation.
   constructor; repeat intro; auto.
-  decompose [and or] H; decompose [and or] H0; subst; auto;
-    right; split; auto; rewrite H2; auto.
-  right. etransitivity; eauto.
-Qed.
-Next Obligation.
-  decompose [and or] H; subst; auto; rewrite <- H2; auto.
+  - split; intuition.
+  - destruct H, H0.
+    split; etransitivity; eauto. apply H2. rewrite <- H. auto.
 Qed.
 Next Obligation.
   constructor; repeat intro; auto.
@@ -920,8 +923,81 @@ Proof.
   intros. destruct H. constructor; simpl; intros; decompose [and or] H; auto 6.
 Qed.
 
+Lemma lifetimes_sep_gen p p' n : p ⊥ owned n p' -> when n p ⊥ owned n (p * p').
+Proof.
+  split; intros.
+  - simpl in H0. decompose [and or] H0. subst; intuition.
+    simpl. right; left; auto.
+  - simpl in H0. decompose [and or] H0. subst; intuition.
+    simpl. split. rewrite H1, H2; auto.
+    intros. rewrite H2 in H3. discriminate H3.
+Qed.
+
+
 Lemma lifetimes_sep n p : when n p ⊥ owned n p.
 Proof.
-  constructor; intros; simpl in *; decompose [and or] H; auto.
-  right. split; auto. rewrite H1; auto.
+  (* rewrite <- sep_conj_perm_bottom. *)
+  constructor; intros; simpl in H; auto.
+  - decompose [and or] H; subst; try reflexivity.
+    simpl. right; left; auto.
+  - decompose [and or] H; subst; try reflexivity.
+    simpl. split. rewrite H1, H0. auto. intros. rewrite H1 in H2. discriminate H2.
+Qed.
+
+Lemma convert_bottom p n : when n p * owned n p <= p * owned n bottom_perm.
+Proof.
+  split; intros.
+  - simpl in *. decompose [and or] H; auto. split; [| split]; auto. apply lifetimes_sep.
+  - simpl in *. decompose [and or] H; auto. destruct (lifetime x n) as [[] | ]; auto 7.
+  - simpl in *. induction H. 2: { econstructor 2; eauto. }
+    decompose [and or] H; subst; constructor; auto.
+Qed.
+
+(* Lemma owned_sep p p' n: *)
+(*   p ⊥ p' -> owned n p ⊥ owned n p'. *)
+(* Proof. *)
+(*   intros Hsep. split; intros. *)
+(*   - simpl in H; decompose [and or] H. subst; intuition. *)
+(*     simpl. split. 2: { intros. apply Hsep; auto. } *)
+(* Qed. *)
+
+(* useless, owned perms are not separate from each other *)
+Lemma test p p' n:
+  owned n p ⊥ owned n p' ->
+  owned n p * owned n p' <= owned n (p * p') .
+Proof.
+  intros Hsep. split; intros.
+  - simpl in *. split; [| split]; auto.
+  - simpl in *. decompose [and] H. split; split; auto; apply H1.
+  - simpl in *. induction H.
+    + decompose [and or] H; auto.
+      * right. split; auto. constructor. left. auto.
+      * right. split; auto. constructor. right. auto.
+    + decompose [and or] IHclos_trans1; decompose [and or] IHclos_trans2; subst; auto.
+      right. split; auto. econstructor 2; eauto.
+Qed.
+
+(* Initially I tried the following: *)
+(* Lemma convert p p' n : when n p * owned n (p * p') <= p * owned n p'. *)
+(* but this doesn't work due to the update relations---owned n (p*p') allows us to
+   use the update relations of p and p', as long as the final state of the entire thing
+   has a finished lifetime. However, the RHS only allows us to use the update relation
+   of p' if the final state of each use has a final lifetime. *)
+(* This lemma would have had to be true: *)
+Lemma foo n p p' x y: upd (owned n (p * p')) x y -> upd (p * owned n p') x y.
+Proof.
+  intros. simpl in *. decompose [and or] H; subst; auto. constructor; auto. clear H.
+  induction H2; auto.
+  - destruct H; constructor; auto.
+  - Abort.
+
+Lemma convert p p' n : when n p * owned n (p * p') <= p * owned n (p * p').
+Proof.
+  split; intros.
+  - simpl in *. decompose [and or] H; auto. split; auto. split; auto.
+    apply lifetimes_sep_gen; auto.
+    eapply separate_antimonotone; eauto. apply owned_monotone. apply lte_r_sep_conj_perm.
+  - simpl in *. decompose [and or] H; auto. destruct (lifetime x n) as [[] | ]; auto 7.
+  - simpl in H. induction H. 2: { econstructor 2; eauto. }
+    decompose [and or] H; simpl; subst; try solve [constructor; auto].
 Qed.

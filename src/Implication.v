@@ -25,8 +25,8 @@ Qed.
 Lemma convert {T} (x : T) P n : x:P ** (owned' empty n) ⊦ x:(when' n P) ** (owned' (x:P) n).
 Proof.
   repeat intro. simpl in H. decompose [ex and] H. simpl.
-  exists (when n x0), (owned n x2). split; [| split]; auto.
-  - exists x0. split; intuition.
+  (* exists x0, (owned n x2). *) eexists. eexists. split; [| split]; auto.
+  - exists x0. split; intuition. admit.
   - admit.
   - etransitivity; eauto. apply sep_conj_perm_monotone; intuition.
 Qed.
