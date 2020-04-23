@@ -22,13 +22,18 @@ Next Obligation.
   exists H. split; auto. etransitivity; eauto.
 Qed.
 
+Lemma convert' p p' n : when n p * owned n (p * p') <= p * owned n p'.
+Admitted.
+
 Lemma convert {T} (x : T) P n : x:P ** (owned' empty n) ⊦ x:(when' n P) ** (owned' (x:P) n).
 Proof.
   repeat intro. simpl in H. decompose [ex and] H. simpl.
-  (* exists x0, (owned n x2). *) eexists. eexists. split; [| split]; auto.
-  - exists x0. split; intuition. admit.
-  - admit.
-  - etransitivity; eauto. apply sep_conj_perm_monotone; intuition.
+  eexists. eexists. split; [| split]; auto.
+  3: { etransitivity. 2: apply H3. etransitivity.
+       2: { apply sep_conj_perm_monotone. reflexivity. apply H4. }
+       apply convert'. }
+  - exists x0. split; intuition.
+  - exists x0. split; auto. apply owned_monotone. apply lte_l_sep_conj_perm.
 Qed.
 
 Lemma drop {T} (x : T) P : x:P ⊦ empty.

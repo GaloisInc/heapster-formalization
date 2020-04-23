@@ -72,7 +72,8 @@ Proof.
   - intros x y z [] []. split; etransitivity; eauto.
 Qed.
 
-Instance Proper_eq_perm_lte_perm : Proper (eq_perm ==> eq_perm ==> Basics.flip Basics.impl) lte_perm.
+Instance Proper_eq_perm_lte_perm :
+  Proper (eq_perm ==> eq_perm ==> Basics.flip Basics.impl) lte_perm.
 Proof.
   repeat intro. subst. etransitivity; eauto. etransitivity; eauto.
 Qed.
@@ -480,35 +481,11 @@ Proof.
     + econstructor 2; eauto.
 Qed.
 
-(* Lemma sep_conj_perm_monotone_l : forall p p' q, *)
-(*     p' <= p -> p' * q <= p * q. *)
-(* Proof. *)
-(*   constructor; intros; simpl. *)
-(*   - destruct H0 as [? [? ?]]; split; [| split]; auto. *)
-(*     + apply H; auto. *)
-(*     + symmetry. symmetry in H2. eapply separate_antimonotone; eauto. *)
-(*   - split. *)
-(*     + apply H. apply H0. *)
-(*     + apply H0. *)
-(*   - induction H0. *)
-(*     + constructor. destruct H0; auto. left. apply H. auto. *)
-(*     + econstructor 2; eauto. *)
-(* Qed. *)
-
-(* Lemma sep_conj_perm_monotone_r : forall p q q', *)
-(*     q' <= q -> p * q' <= p * q. *)
-(* Proof. *)
-(*   constructor; intros; simpl. *)
-(*   - destruct H0 as [? [? ?]]; split; [| split]; auto. *)
-(*     + apply H; auto. *)
-(*     + eapply separate_antimonotone; eauto. *)
-(*   - split. *)
-(*     + apply H0. *)
-(*     + apply H. apply H0. *)
-(*   - induction H0. *)
-(*     + constructor. destruct H0; auto. right. apply H. auto. *)
-(*     + econstructor 2; eauto. *)
-(* Qed. *)
+Instance Proper_eq_perm_sep_conj_perm :
+  Proper (eq_perm ==> eq_perm ==> eq_perm) sep_conj_perm.
+Proof.
+  repeat intro. split; apply sep_conj_perm_monotone; auto.
+Qed.
 
 Lemma sep_conj_perm_bottom' : forall p, p * bottom_perm <= p.
 Proof.
@@ -899,6 +876,18 @@ Proof.
   intros. destruct H. constructor; simpl; intros; decompose [and or] H; auto 7.
 Qed.
 
+Instance Proper_lte_perm_when :
+  Proper (eq ==> lte_perm ==> lte_perm) when.
+Proof.
+  repeat intro; subst. apply when_monotone; auto.
+Qed.
+
+Instance Proper_eq_perm_when :
+  Proper (eq ==> eq_perm ==> eq_perm) when.
+Proof.
+  repeat intro; subst. split; apply when_monotone; auto.
+Qed.
+
 Program Definition owned (n : nat) (p : perm) : perm :=
   {|
     dom := fun x => lifetime x n = Some current;
@@ -923,6 +912,18 @@ Proof.
   intros. destruct H. constructor; simpl; intros; decompose [and or] H; auto 6.
 Qed.
 
+Instance Proper_lte_perm_owned :
+  Proper (eq ==> lte_perm ==> lte_perm) owned.
+Proof.
+  repeat intro; subst. apply owned_monotone; auto.
+Qed.
+
+Instance Proper_eq_perm_owned :
+  Proper (eq ==> eq_perm ==> eq_perm) owned.
+Proof.
+  repeat intro; subst. split; apply owned_monotone; auto.
+Qed.
+
 Lemma lifetimes_sep_gen p p' n : p ⊥ owned n p' -> when n p ⊥ owned n (p * p').
 Proof.
   split; intros.
@@ -933,7 +934,6 @@ Proof.
     intros. rewrite H2 in H3. discriminate H3.
 Qed.
 
-
 Lemma lifetimes_sep n p : when n p ⊥ owned n p.
 Proof.
   (* rewrite <- sep_conj_perm_bottom. *)
@@ -942,39 +942,6 @@ Proof.
     simpl. right; left; auto.
   - decompose [and or] H; subst; try reflexivity.
     simpl. split. rewrite H1, H0. auto. intros. rewrite H1 in H2. discriminate H2.
-Qed.
-
-Lemma convert_bottom p n : when n p * owned n p <= p * owned n bottom_perm.
-Proof.
-  split; intros.
-  - simpl in *. decompose [and or] H; auto. split; [| split]; auto. apply lifetimes_sep.
-  - simpl in *. decompose [and or] H; auto. destruct (lifetime x n) as [[] | ]; auto 7.
-  - simpl in *. induction H. 2: { econstructor 2; eauto. }
-    decompose [and or] H; subst; constructor; auto.
-Qed.
-
-(* Lemma owned_sep p p' n: *)
-(*   p ⊥ p' -> owned n p ⊥ owned n p'. *)
-(* Proof. *)
-(*   intros Hsep. split; intros. *)
-(*   - simpl in H; decompose [and or] H. subst; intuition. *)
-(*     simpl. split. 2: { intros. apply Hsep; auto. } *)
-(* Qed. *)
-
-(* useless, owned perms are not separate from each other *)
-Lemma test p p' n:
-  owned n p ⊥ owned n p' ->
-  owned n p * owned n p' <= owned n (p * p') .
-Proof.
-  intros Hsep. split; intros.
-  - simpl in *. split; [| split]; auto.
-  - simpl in *. decompose [and] H. split; split; auto; apply H1.
-  - simpl in *. induction H.
-    + decompose [and or] H; auto.
-      * right. split; auto. constructor. left. auto.
-      * right. split; auto. constructor. right. auto.
-    + decompose [and or] IHclos_trans1; decompose [and or] IHclos_trans2; subst; auto.
-      right. split; auto. econstructor 2; eauto.
 Qed.
 
 (* Initially I tried the following: *)
@@ -989,7 +956,8 @@ Proof.
   intros. simpl in *. decompose [and or] H; subst; auto. constructor; auto. clear H.
   induction H2; auto.
   - destruct H; constructor; auto.
-  - Abort.
+  - econstructor 2; eauto.
+Abort.
 
 Lemma convert p p' n : when n p * owned n (p * p') <= p * owned n (p * p').
 Proof.
@@ -1000,4 +968,15 @@ Proof.
   - simpl in *. decompose [and or] H; auto. destruct (lifetime x n) as [[] | ]; auto 7.
   - simpl in H. induction H. 2: { econstructor 2; eauto. }
     decompose [and or] H; simpl; subst; try solve [constructor; auto].
+Qed.
+
+(* Note that this isn't a special case of convert. This is in a different form
+   since bottom_perm cannot do anything using its update. *)
+Lemma convert_bottom p n : when n p * owned n p <= p * owned n bottom_perm.
+Proof.
+  split; intros.
+  - simpl in *. decompose [and or] H; auto. split; [| split]; auto. apply lifetimes_sep.
+  - simpl in *. decompose [and or] H; auto. destruct (lifetime x n) as [[] | ]; auto 7.
+  - simpl in *. induction H. 2: { econstructor 2; eauto. }
+    decompose [and or] H; subst; constructor; auto.
 Qed.
