@@ -1,4 +1,6 @@
-Require Import Heapster.Permissions.
+From Heapster Require Import
+     Permissions
+     Config.
 
 Definition apply {T} (P : T -> Perms) (x : T) := P x.
 Notation "x : P" := (apply P x) (at level 40).
@@ -14,7 +16,7 @@ Next Obligation.
   exists H. split; auto. etransitivity; eauto.
 Qed.
 
-Program Definition owned' (P : Perms) (n : nat) :=
+Program Definition owned' (n : nat) (P : Perms) :=
   {|
     in_Perms := fun p => exists p', in_Perms P p' /\ owned n p' <= p;
   |}.
@@ -22,18 +24,25 @@ Next Obligation.
   exists H. split; auto. etransitivity; eauto.
 Qed.
 
-Lemma convert' p p' n : when n p * owned n (p * p') <= p * owned n p'.
-Admitted.
+(* Lemma convert' p p' n : when n p * owned n (p * p') <= p * owned n p'. *)
+(* Admitted. *)
 
-Lemma convert {T} (x : T) P n : x:P ** (owned' empty n) ⊦ x:(when' n P) ** (owned' (x:P) n).
+Lemma convert {T} (x : T) P Q n : x:P ** (owned' n Q) ⊦ x:(when' n P) ** (owned' n (x:P ** Q)).
 Proof.
-  repeat intro. simpl in H. decompose [ex and] H. simpl.
-  eexists. eexists. split; [| split]; auto.
-  3: { etransitivity. 2: apply H3. etransitivity.
-       2: { apply sep_conj_perm_monotone. reflexivity. apply H4. }
-       apply convert'. }
-  - exists x0. split; intuition.
-  - exists x0. split; auto. apply owned_monotone. apply lte_l_sep_conj_perm.
+  repeat intro. simpl in H. decompose [ex and] H. clear H. simpl.
+  exists (when n (restrict_monotonic_at x0 n)).
+  exists (owned n ((restrict_monotonic_at x0 n) * (restrict_monotonic_at x2 n))). split; [| split].
+  3: {
+    etransitivity.
+    { apply convert; intros ? ? []; auto. }
+    rewrite <- owned_restrict_monotonic_at.
+    etransitivity; eauto.
+    apply sep_conj_perm_monotone; eauto. apply restrict_monotonic_at_lte.
+  }
+  - exists x0. split; auto. apply when_restrict_monotonic_at.
+  - exists (x0 * x2). split.
+    + exists x0, x2. split; [| split]; intuition.
+    + (* TODO *) rewrite <- foo. rewrite owned_restrict_monotonic_at. reflexivity.
 Qed.
 
 Lemma drop {T} (x : T) P : x:P ⊦ empty.

@@ -2,5 +2,6 @@
 -R ../../InteractionTrees/theories ITree
 
 src/Permissions.v
+src/Config.v
 src/Implication.v
 src/Typing.v
