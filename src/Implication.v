@@ -27,22 +27,31 @@ Qed.
 (* Lemma convert' p p' n : when n p * owned n (p * p') <= p * owned n p'. *)
 (* Admitted. *)
 
-Lemma convert {T} (x : T) P Q n : x:P ** (owned' n Q) ⊦ x:(when' n P) ** (owned' n (x:P ** Q)).
+Lemma convert {T} (x : T) P Q n (Hmon : monotonic (x:P) n) (Hmon' : monotonic Q n) :
+  x:P ** (owned' n Q) ⊦ x:(when' n P) ** (owned' n (x:P ** Q)).
 Proof.
   repeat intro. simpl in H. decompose [ex and] H. clear H. simpl.
-  exists (when n (restrict_monotonic_at x0 n)).
-  exists (owned n ((restrict_monotonic_at x0 n) * (restrict_monotonic_at x2 n))). split; [| split].
+  specialize (Hmon _ H0).
+  specialize (Hmon' _ H1).
+  decompose [ex and] Hmon. clear Hmon.
+  decompose [ex and] Hmon'. clear Hmon'.
+
+  (* exists (when n (restrict_monotonic_at x0 n)). *)
+  (* exists (owned n ((restrict_monotonic_at x0 n) * (restrict_monotonic_at x2 n))). *)
+
+  exists (when n x3).
+  exists (owned n (x3 * x4)).
+  split; [| split].
   3: {
     etransitivity.
-    { apply convert; intros ? ? []; auto. }
-    rewrite <- owned_restrict_monotonic_at.
+    { apply convert; auto. }
     etransitivity; eauto.
-    apply sep_conj_perm_monotone; eauto. apply restrict_monotonic_at_lte.
+    apply sep_conj_perm_monotone; eauto.
+    etransitivity; eauto. apply owned_monotone; auto.
   }
-  - exists x0. split; auto. apply when_restrict_monotonic_at.
-  - exists (x0 * x2). split.
-    + exists x0, x2. split; [| split]; intuition.
-    + (* TODO *) rewrite <- foo. rewrite owned_restrict_monotonic_at. reflexivity.
+  - exists x3. split; intuition.
+  - exists (x3 * x4). split; intuition.
+    exists x3, x4. intuition.
 Qed.
 
 Lemma drop {T} (x : T) P : x:P ⊦ empty.

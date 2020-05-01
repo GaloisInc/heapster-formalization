@@ -80,6 +80,20 @@ Proof.
   repeat intro. reflexivity.
 Qed.
 
+Lemma bottom_monotonic_at n : forall x y, monotonic_at bottom_perm n x y.
+Proof.
+  repeat intro. simpl in H. subst. reflexivity.
+Qed.
+
+Definition monotonic (P : Perms) (n : nat) : Prop :=
+  forall p, p ∈ P -> exists p', p' <= p /\ p' ∈ P /\ forall x y, monotonic_at p' n x y.
+
+Lemma foo n : monotonic bottom_Perms n.
+Proof.
+  repeat intro. exists bottom_perm. split; [| split].
+  apply bottom_perm_is_bottom. auto. apply bottom_monotonic_at.
+Qed.
+
 Program Definition restrict_monotonic_at (p : perm) (n : nat) : perm :=
   {|
   dom := dom p;
@@ -266,8 +280,8 @@ Qed.
 (*     + *)
 (* Abort. *)
 
-Lemma lifetimes_sep_gen p p' n :
-  p ⊥ owned n p' -> when n p ⊥ owned n (p * p').
+Lemma lifetimes_sep_gen p q n :
+  p ⊥ owned n q -> when n p ⊥ owned n (p * q).
 Proof.
   split; intros.
   - simpl in H0. decompose [and or] H0. subst; intuition.
@@ -277,9 +291,9 @@ Proof.
     intros. rewrite H2 in H3. discriminate H3.
 Qed.
 
+(* not actually a special case of the above *)
 Lemma lifetimes_sep n p : when n p ⊥ owned n p.
 Proof.
-  (* rewrite <- sep_conj_perm_bottom. *)
   constructor; intros; simpl in H; auto.
   - decompose [and or] H; subst; try reflexivity.
     simpl. right; left; auto.
@@ -294,8 +308,7 @@ Proof.
   - simpl in *. decompose [and or] H; auto. split; auto. split; auto.
     eapply lifetimes_sep_gen; eauto.
   - simpl in *. decompose [and or] H; auto. destruct (lifetime x n) as [[] | ]; auto 7.
-  -
-    simpl in H. induction H. 2: { econstructor 2; eauto. }
+  - simpl in H. induction H. 2: { econstructor 2; eauto. }
     decompose [and or] H; simpl; subst; try solve [constructor; auto].
     clear H.
     apply Operators_Properties.clos_trans_t1n_iff.
@@ -318,5 +331,5 @@ Lemma convert_bottom p n (Hmon : forall x y, monotonic_at p n x y) :
   when n p * owned n p <= p * owned n bottom_perm.
 Proof.
   rewrite <- (sep_conj_perm_bottom p) at 2. apply convert; auto.
-  - repeat intro. simpl in H. subst. reflexivity.
+  repeat intro. simpl in H. subst. reflexivity.
 Qed.
