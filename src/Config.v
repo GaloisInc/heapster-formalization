@@ -88,7 +88,7 @@ Qed.
 Definition monotonic (P : Perms) (n : nat) : Prop :=
   forall p, p ∈ P -> exists p', p' <= p /\ p' ∈ P /\ forall x y, monotonic_at p' n x y.
 
-Lemma foo n : monotonic bottom_Perms n.
+Lemma monotonic_bottom n : monotonic bottom_Perms n.
 Proof.
   repeat intro. exists bottom_perm. split; [| split].
   apply bottom_perm_is_bottom. auto. apply bottom_monotonic_at.

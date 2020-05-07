@@ -1,6 +1,7 @@
 -R src Heapster
 -R ../../InteractionTrees/theories ITree
 
+src/PropT.v
 src/Permissions.v
 src/Config.v
 src/Implication.v

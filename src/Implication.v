@@ -2,13 +2,17 @@ From Heapster Require Import
      Permissions
      Config.
 
-Definition apply {T} (P : T -> Perms) (x : T) := P x.
+Definition value_Perms {T} := T -> Perms.
+
+Definition apply {T} (P : value_Perms) (x : T) := P x.
 Notation "x : P" := (apply P x) (at level 40).
 
-Definition empty := bottom_Perms.
-Definition true_p {T} := fun (_ : T) => bottom_Perms.
+Definition value_Perms_monotonic {T} (P : value_Perms) := forall (x : T) n, monotonic (x:P) n.
 
-Program Definition when' {T} (n : nat) (P : T -> Perms) (x : T) :=
+Definition empty := bottom_Perms.
+Definition true_p {T} : @value_Perms T := fun _ => bottom_Perms.
+
+Program Definition when' {T} (n : nat) (P : value_Perms) (x : T) :=
   {|
     in_Perms := fun p => exists p', in_Perms (P x) p' /\ when n p' <= p;
   |}.
@@ -24,10 +28,9 @@ Next Obligation.
   exists H. split; auto. etransitivity; eauto.
 Qed.
 
-(* Lemma convert' p p' n : when n p * owned n (p * p') <= p * owned n p'. *)
-(* Admitted. *)
-
-Lemma convert {T} (x : T) P Q n (Hmon : monotonic (x:P) n) (Hmon' : monotonic Q n) :
+(* TODO: strengthen to value_Perms_monotonic? *)
+Lemma convert {T} (x : T) (P : value_Perms) (Q : Perms) n
+      (Hmon : monotonic (x:P) n) (Hmon' : monotonic Q n) :
   x:P ** (owned' n Q) ⊦ x:(when' n P) ** (owned' n (x:P ** Q)).
 Proof.
   repeat intro. simpl in H. decompose [ex and] H. clear H. simpl.
@@ -35,10 +38,6 @@ Proof.
   specialize (Hmon' _ H1).
   decompose [ex and] Hmon. clear Hmon.
   decompose [ex and] Hmon'. clear Hmon'.
-
-  (* exists (when n (restrict_monotonic_at x0 n)). *)
-  (* exists (owned n ((restrict_monotonic_at x0 n) * (restrict_monotonic_at x2 n))). *)
-
   exists (when n x3).
   exists (owned n (x3 * x4)).
   split; [| split].
@@ -54,7 +53,7 @@ Proof.
     exists x3, x4. intuition.
 Qed.
 
-Lemma drop {T} (x : T) P : x:P ⊦ empty.
+Lemma drop {T} (x : T) (P : value_Perms) : x:P ⊦ empty.
 Proof.
   repeat intro. simpl. auto.
 Qed.
@@ -63,11 +62,18 @@ Proof.
   repeat intro; auto.
 Qed.
 
-(* Perms where domain is x = y *)
-Program Definition eq_p {T} (y : T) (x : T) :=
+Program Definition eq_p {T} (y x : T) :=
   {|
     in_Perms := fun _ => x = y;
   |}.
+
+Lemma eq_p_monotonic {T} (y : T) :
+  value_Perms_monotonic (eq_p(y)).
+Proof.
+  repeat intro. simpl in H; subst. exists bottom_perm.
+  split; [apply bottom_perm_is_bottom |]; simpl; intuition.
+  repeat intro. inversion H. reflexivity.
+Qed.
 
 Lemma eq_refl {T} (x : T) : empty ⊦ x:eq_p(x).
 Proof.
@@ -96,7 +102,19 @@ Proof.
   - etransitivity; eauto.
 Qed.
 
-Definition or_Perms {T} (P Q : T -> Perms) := fun x => meet_Perms2 (x:P) (x:Q).
+Definition or_Perms {T} (P Q : @value_Perms T) := fun x => meet_Perms2 (x:P) (x:Q).
+
+Lemma or_Perms_monotonic {T} (P Q : @value_Perms T)
+      (Hmon : value_Perms_monotonic P)
+      (Hmon' : value_Perms_monotonic Q) :
+  value_Perms_monotonic (or_Perms P Q).
+Proof.
+  repeat intro. simpl in *. decompose [ex and or] H; clear H; subst.
+  - specialize (Hmon _ n _ H2). decompose [ex and] Hmon; clear Hmon.
+    eexists; split; eauto.
+  - specialize (Hmon' _ n _ H2). decompose [ex and] Hmon'; clear Hmon'.
+    eexists; split; eauto.
+Qed.
 
 Lemma or_intro_l {T} (x : T) P Q : x:P ⊦ x:(or_Perms P Q).
 Proof.
@@ -114,8 +132,8 @@ Proof.
   repeat intro. destruct H1 as [X [? ?]]. destruct H1; subst; auto.
 Qed.
 
-Definition exists_Perms {T} (P : T -> T -> Perms) : T -> Perms :=
-  fun x => meet_Perms (fun Q => exists y, Q = x:P(y)).
+Definition exists_Perms {T} (P : T -> value_Perms) : value_Perms :=
+  fun (x : T) => meet_Perms (fun Q => exists (y : T), Q = x:P(y)).
 
 Lemma exists_intro {T} (x e : T) P : x:P(e) ⊦ x:(exists_Perms P).
 Proof.
@@ -128,7 +146,7 @@ Proof.
   repeat intro. destruct H0 as [X [[? ?] ?]]. subst. eapply H; eauto.
 Qed.
 
-Class Ilookup {T} (x : T) (lhs : Perms) (x_P : T -> Perms) rem : Prop :=
+Class Ilookup {T} (x : T) (lhs : Perms) (x_P : value_Perms) rem : Prop :=
   ilookup : lhs ⊦ x:x_P ** rem.
 
 Instance Ilookup_empty {T} (x : T) :
@@ -137,13 +155,13 @@ Proof.
   red. rewrite sep_conj_Perms_bottom_identity. reflexivity.
 Qed.
 
-Instance Ilookup_base {T} (x : T) (P : T -> Perms) (lhs : Perms) :
+Instance Ilookup_base {T} (x : T) (P : value_Perms) (lhs : Perms) :
   Ilookup x (x:P ** lhs) P lhs.
 Proof.
   red. reflexivity.
 Qed.
 
-Instance Ilookup_step {T T' : Type} (x: T) (x' : T') (lhs rem : Perms) (P : T -> Perms) (P' : T' -> Perms) :
+Instance Ilookup_step {T T' : Type} (x: T) (x' : T') (lhs rem : Perms) (P : value_Perms) (P' : value_Perms) :
   Ilookup x lhs P rem ->
   Ilookup x (x':P' ** lhs) P (x':P' ** rem).
 Proof.
@@ -152,7 +170,7 @@ Proof.
   apply sep_conj_Perms_monotone; intuition. rewrite sep_conj_Perms_commut. apply H.
 Qed.
 
-Class Ivar {T} (x : T) (P_lhs : T -> Perms) (lhs : Perms) P_rhs rem : Prop :=
+Class Ivar {T} (x : T) (P_lhs : value_Perms) (lhs : Perms) P_rhs rem : Prop :=
   ivar : x:P_lhs ** lhs ⊦ x:P_rhs ** rem.
 
 Instance Ivar_base {T} (x : T) lhs P_lhs :
@@ -211,13 +229,13 @@ Proof.
   - apply H0. exists x0, x1; auto.
 Qed.
 
-Instance Ivar_exists_intro {T} (x e : T) lhs (P : T -> T -> Perms) :
+Instance Ivar_exists_intro {T} (x e : T) lhs (P : T -> value_Perms) :
   Ivar x (P e) lhs (exists_Perms P) lhs.
 Proof.
   eapply sep_conj_Perms_monotone; intuition. apply exists_intro.
 Qed.
 
-Instance Ivar_exists_elim {T} (x : T) (P : T -> T -> Perms) lhs R rhs:
+Instance Ivar_exists_elim {T} (x : T) (P : T -> value_Perms) lhs R rhs:
   (forall (y : T), Ivar x (P y) lhs R rhs) ->
   Ivar x (exists_Perms P) lhs R rhs.
 Proof.

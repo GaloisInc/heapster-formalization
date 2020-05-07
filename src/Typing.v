@@ -1,10 +1,14 @@
-Require Import Heapster.Permissions.
+From Heapster Require Import
+     Permissions
+     Config
+     PropT.
 
 From Coq Require Import
      Classes.Morphisms
      Classes.RelationClasses
      Relations.Relation_Operators
-     Relations.Operators_Properties.
+     Relations.Operators_Properties
+     Program.Equality.
 
 From ITree Require Import
      ITree
@@ -12,15 +16,14 @@ From ITree Require Import
      Events.State
      Events.Nondeterminism
      Eq.Eq
-     Eq.UpToTaus.
+     Eq.UpToTaus
+     Eq.EqAxiom.
 
 From Paco Require Import
      paco.
 
 Import ITreeNotations.
 Import ITree.Basics.Basics.Monads.
-
-Require Import ITree.Eq.EqAxiom.
 
 Section ts.
 
@@ -234,8 +237,6 @@ Section ts.
     intros. eapply type_lte; eauto. apply lte_r_sep_conj_Perms.
   Qed.
 
-  Require Import Coq.Program.Equality.
-
   Lemma parallel_perm : forall p1 p2 t1 t2,
       typing_perm p1 t1 -> typing_perm p2 t2 -> typing_perm (p1 * p2) (par t1 t2).
   Proof.
@@ -335,9 +336,6 @@ Section ts.
     specialize (Ht2 _ H0). eapply typing_perm_lte; eauto. eapply parallel_perm; eauto.
   Qed.
 End ts.
-
-Import ITreeNotations.
-Import ITree.Basics.Basics.Monads.
 
 Definition test : itree (stateE config +' _) unit :=
   par
