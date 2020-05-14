@@ -260,26 +260,6 @@ Proof.
   apply sep_conj_perm_monotone; apply restrict_monotonic_at_lte.
 Qed.
 
-(* The direction we would like to have, but it's false *)
-(* Lemma foo p p' n : *)
-(*   owned n (restrict_monotonic_at (p * p') n) (* ≡ owned n (p * p') *) <= *)
-(*   owned n (restrict_monotonic_at p n * restrict_monotonic_at p' n). *)
-(* Proof. *)
-(*   constructor; auto. simpl. *)
-(*   constructor; intros; simpl in *; intuition. *)
-(*   right. split; auto. *)
-(*   apply Operators_Properties.clos_trans_t1n_iff. *)
-(*   apply Operators_Properties.clos_trans_t1n_iff in H0. *)
-(*   remember (replace_lifetime _ _ _). *)
-(*   generalize dependent x. *)
-(*   induction H0; intros; subst. *)
-(*   - constructor. destruct H0; auto. *)
-(*     + left. split; auto. intro. apply H2. constructor; auto. *)
-(*     + right. split; auto. intro. apply H2. constructor; auto. *)
-(*   - econstructor 2; eauto. 2: eapply IHclos_trans_1n; eauto. *)
-(*     + *)
-(* Abort. *)
-
 Lemma lifetimes_sep_gen p q n :
   p ⊥ owned n q -> when n p ⊥ owned n (p * q).
 Proof.
