@@ -1,7 +1,6 @@
 From Heapster Require Import
      Permissions
-     Config
-     PropT.
+     Config.
 
 From Coq Require Import
      Ensembles
@@ -18,6 +17,7 @@ From ExtLib Require Import
 From ITree Require Import
      ITree
      ITreeFacts
+     Basics.MonadState
      Events.State
      Events.Nondeterminism
      Eq.Eq
@@ -28,93 +28,266 @@ From Paco Require Import
      paco.
 
 Import ITreeNotations.
+Import CatNotations.
 Import ITree.Basics.Basics.Monads.
 
-Global Instance EqM_Prop : EqM Ensembles.Ensemble := Ensembles.Same_set.
+Section PropM.
 
-Global Instance Functor_Prop : Functor.Functor Ensembles.Ensemble :=
-  {| fmap := fun _ _ f Pa b => exists a, Pa a /\ f a = b |}.
+  (* Global Instance EqM_Prop : EqM Ensembles.Ensemble := Ensembles.Same_set. *)
 
-Global Instance Monad_Prop : Monad Ensembles.Ensemble :=
-  {|
-  ret := fun _ x y => x = y;
-  bind := fun _ _ Pa K b => exists a, In _ Pa a /\ In _ (K a) b
-  |}.
+  (* Global Instance Functor_Prop : Functor.Functor Ensembles.Ensemble := *)
+  (*   {| fmap := fun _ _ f Pa b => exists a, Pa a /\ f a = b |}. *)
 
-Lemma bind_ret_l_Prop : forall A B (f : A -> Ensembles.Ensemble B) a,
-    eqm (bind (ret a) f) (f a).
+  (* Global Instance Monad_Prop : Monad Ensembles.Ensemble := *)
+  (*   {| *)
+  (*   ret := fun _ x y => x = y; *)
+  (*   bind := fun _ _ Pa K b => exists a, In _ Pa a /\ In _ (K a) b *)
+  (*   |}. *)
+
+  (* Lemma bind_ret_l_Prop : forall A B (f : A -> Ensembles.Ensemble B) a, *)
+  (*     eqm (bind (ret a) f) (f a). *)
+  (* Proof. *)
+  (*   split; repeat intro; simpl in *. *)
+  (*   - destruct H as (? & ? & ?). red in H. subst; auto. *)
+  (*   - eexists; split; eauto. reflexivity. *)
+  (* Qed. *)
+
+  (* Lemma bind_ret_r_Prop : forall (A : Type) (Pa : Ensembles.Ensemble A), *)
+  (*     eqm (bind Pa (fun a => ret a)) Pa. *)
+  (* Proof. *)
+  (*   split. repeat intro; simpl in *. *)
+  (*   - destruct H as (? & ? & ?). red in H0; subst; auto. *)
+  (*   - red. repeat intro. eexists; split; eauto. reflexivity. *)
+  (* Qed. *)
+
+  (* Lemma bind_bind_Prop : *)
+  (*   forall A B C (Pa : Ensembles.Ensemble A) *)
+  (*     (f : A -> Ensembles.Ensemble B) (g : B -> Ensembles.Ensemble C), *)
+  (*     eqm (bind (bind Pa f) g) (bind Pa (fun y => bind (f y) g)). *)
+  (* Proof. *)
+  (*   intros. split; repeat intro; simpl in *; *)
+  (*             [destruct H as (? & (? & ? & ?) & ?) | destruct H as (? & ? & (? & ? & ?))]; *)
+  (*             do 2 (eexists; split; eauto). *)
+  (* Qed. *)
+
+  Definition PropM (T : Type) (R : Type) := Ensembles.Ensemble (T * R).
+
+  Global Instance EqM_PropM T : EqM (PropM T) := fun _ => Ensembles.Same_set _.
+
+  Global Instance Functor_PropM T : Functor.Functor (PropM T) :=
+    {|
+    fmap := fun A B (f : A -> B) (Pa : PropM T A) (pb : T * B) =>
+              exists (pa : T * A), Pa pa /\ (fst pa, f (snd pa)) = pb
+    |}.
+
+  Global Instance Monad_PropM T : Monad (PropM T) :=
+    {|
+    ret := fun A a pa => a = snd pa;
+    bind := fun A B (Pa : PropM T A) (K : A -> PropM T B) (pb : T * B) =>
+              exists (a : A), In _ Pa (fst pb, a) /\ In _ (K a) pb
+    |}.
+
+  Lemma bind_ret_l_PropM : forall T A B (f : A -> PropM T B) a,
+      eqm (bind (ret a) f) (f a).
+  Proof.
+    split; repeat intro; simpl in *.
+    - destruct H as (? & ? & ?). red in H. subst. auto.
+    - exists a; split; [split |]; auto.
+  Qed.
+
+  Lemma bind_ret_r_PropM : forall T (A : Type) (Pa : PropM T A),
+      eqm (bind Pa (fun a => ret a)) Pa.
+  Proof.
+    split; repeat intro; simpl in *.
+    - destruct H as (? & ? & ?). red in H0. destruct x; subst; auto.
+    - exists (snd x); split; auto; destruct x; red; auto.
+  Qed.
+
+  Lemma bind_bind_PropM :
+    forall T A B C (Pa : PropM T A)
+      (f : A -> PropM T B) (g : B -> PropM T C),
+      eqm (bind (bind Pa f) g) (bind Pa (fun y => bind (f y) g)).
+  Proof.
+    intros. split; repeat intro; simpl in *;
+              [destruct H as (? & (? & ? & ?) & ?) | destruct H as (? & ? & (? & ? & ?))];
+              do 2 (eexists; split; eauto).
+  Qed.
+
+  Instance MonadLaws_PropM T : @MonadLaws (PropM T) _ _.
+  Proof.
+    constructor; [apply bind_ret_l_PropM | apply bind_ret_r_PropM | apply bind_bind_PropM |].
+    repeat intro. (* TODO: clean up this case *)
+    destruct H.
+    split; repeat red; repeat intro.
+    - repeat red in H2. decompose [ex and] H2; clear H2.
+      exists x2. split; auto. apply H0; auto.
+    - repeat red in H2. decompose [ex and] H2; clear H2.
+      exists x2. split; auto. apply H0; auto.
+  Qed.
+
+End PropM.
+
+Definition sep_step p q : Prop :=
+  forall r, p ⊥ r -> q ⊥ r.
+
+Instance sep_step_refl : Reflexive sep_step.
 Proof.
-  split; repeat intro; simpl in *.
-  - destruct H as (? & ? & ?). red in H. subst; auto.
-  - eexists; split; eauto. reflexivity.
+  repeat intro; auto.
 Qed.
 
-Lemma bind_ret_r_Prop : forall (A : Type) (Pa : Ensembles.Ensemble A),
-    eqm (bind Pa (fun a => ret a)) Pa.
+Instance sep_step_trans : Transitive sep_step.
 Proof.
-  split. repeat intro; simpl in *.
-  - destruct H as (? & ? & ?). red in H0; subst; auto.
-  - red. repeat intro. eexists; split; eauto. reflexivity.
+  repeat intro. auto.
 Qed.
 
-Lemma bind_bind_Prop :
-  forall A B C (Pa : Ensembles.Ensemble A)
-    (f : A -> Ensembles.Ensemble B) (g : B -> Ensembles.Ensemble C),
-    eqm (bind (bind Pa f) g) (bind Pa (fun y => bind (f y) g)).
+Lemma sep_step_lte : forall p p' q, p <= p' -> sep_step p q -> sep_step p' q.
 Proof.
-  intros. split; repeat intro; simpl in *;
-            [destruct H as (? & (? & ? & ?) & ?) | destruct H as (? & ? & (? & ? & ?))];
-            do 2 (eexists; split; eauto).
+  repeat intro. apply H0. symmetry. symmetry in H1. eapply separate_antimonotone; eauto.
 Qed.
 
-Definition PropM (T : Type) (R : Type) := Ensembles.Ensemble (T * R).
-Global Instance EqM_PropM T : EqM (PropM T) := fun _ => Ensembles.Same_set _.
-
-Global Instance Functor_PropM T : Functor.Functor (PropM T) :=
-  {|
-  fmap := fun A B (f : A -> B) (Pa : PropM T A) (pb : T * B) =>
-            exists (pa : T * A), Pa pa /\ (fst pa, f (snd pa)) = pb
-  |}.
-
-Global Instance Monad_PropM T : Monad (PropM T) :=
-  {|
-  ret := fun A a pa => a = snd pa;
-  bind := fun A B (Pa : PropM T A) (K : A -> PropM T B) (pb : T * B) =>
-            exists (a : A), In _ Pa (fst pb, a) /\ In _ (K a) pb
-  |}.
-
-Lemma bind_ret_l_PropM : forall T A B (f : A -> PropM T B) a,
-    eqm (bind (ret a) f) (f a).
+Lemma sep_step_view : forall p q x y, sep_step p q -> view p x y -> view q x y.
 Proof.
-  split; repeat intro; simpl in *.
-  - destruct H as (? & ? & ?). red in H. subst. auto.
-  - exists a; split; [split |]; auto.
+  intros. specialize (H (sym_upd_perm p) (separate_self_sym _)).
+  apply H; auto.
 Qed.
 
-Lemma bind_ret_r_PropM : forall T (A : Type) (Pa : PropM T A),
-    eqm (bind Pa (fun a => ret a)) Pa.
+Lemma sep_step_upd : forall p q x y, sep_step p q ->
+                                upd q x y ->
+                                upd p x y.
 Proof.
-  split; repeat intro; simpl in *.
-  - destruct H as (? & ? & ?). red in H0. destruct x; subst; auto.
-  - exists (snd x); split; auto; destruct x; red; auto.
+  intros. specialize (H (sym_upd_perm p) (separate_self_sym _)).
+  apply H; auto.
 Qed.
 
-Lemma bind_bind_PropM :
-  forall T A B C (Pa : PropM T A)
-    (f : A -> PropM T B) (g : B -> PropM T C),
-    eqm (bind (bind Pa f) g) (bind Pa (fun y => bind (f y) g)).
+Lemma sep_step_sep_conj_l : forall p1 p2 q, p1 ⊥ q -> sep_step p1 p2 -> sep_step (p1 * q) (p2 * q).
 Proof.
-  intros. split; repeat intro; simpl in *;
-            [destruct H as (? & (? & ? & ?) & ?) | destruct H as (? & ? & (? & ? & ?))];
-            do 2 (eexists; split; eauto).
+  intros p1 p2 q ? ?.
+  repeat intro; auto. symmetry in H1. symmetry. apply separate_sep_conj_perm; symmetry; auto.
+  - apply H0. symmetry. eapply separate_sep_conj_perm_l; eauto.
+  - symmetry. eapply separate_sep_conj_perm_r; eauto.
 Qed.
+Lemma sep_step_sep_conj_r : forall p1 p2 q, p1 ⊥ q -> sep_step p1 p2 -> sep_step (q * p1) (q * p2).
+Proof.
+  intros p1 p2 q ? ?.
+  repeat intro; auto. symmetry in H1. symmetry. apply separate_sep_conj_perm; symmetry; auto.
+  - symmetry. eapply separate_sep_conj_perm_l; eauto.
+  - apply H0. symmetry. eapply separate_sep_conj_perm_r; eauto.
+  - symmetry. auto.
+Qed.
+
+Section MonadIter.
+  (* should probably give this a shorter name later *)
+  Variant iter_stateT_PropM_perm_gen
+          {X I : Type}
+          iter'
+          (step : I -> config -> (PropM perm (config * (I + X))))
+          (i : I)
+          (c : config)
+          (pcr : perm * (config * X))
+  : Prop :=
+  | iter_done :
+      let p := fst pcr in
+      let c' := fst (snd pcr) in
+      let r := snd (snd pcr) in
+      (* dom p c -> *) (* for a ret, any perm should be fine. *)
+      step i c (p, (c', inr r)) ->
+      iter_stateT_PropM_perm_gen iter' step i c pcr
+  | iter_step :
+      let p := fst pcr in
+      let c'' := fst (snd pcr) in
+      let r := snd (snd pcr) in
+      (* dom p c -> *)
+      (* exists i' c', step i c (p, (c' (inl i'))) /\ *)
+
+      (forall i' c',
+                dom p c ->
+                step i c (p, (c', (inl i'))) ->
+                upd p c c' /\ (* needs to be here rather than in the handlers, since this is not a precondition *)
+                (* as a result, we don't actually need to give the handlers access to the perm anymore *)
+                (exists p', sep_step p p' /\
+                       dom p' c' /\
+                       iter' step i' c' (p', (c'', r)))) ->
+      iter_stateT_PropM_perm_gen iter' step i c pcr.
+
+  Definition iter_stateT_PropM_perm {R I : Type} step i c pcr : Prop :=
+    paco4 (@iter_stateT_PropM_perm_gen R I) bot4 step i c pcr.
+
+  Lemma iter_stateT_PropM_perm_gen_mon X I : monotone4 (@iter_stateT_PropM_perm_gen X I).
+  Proof.
+    repeat intro.
+    destruct x3 as (? & ? & ?).
+    inversion IN.
+    - constructor. auto.
+    - econstructor 2; intros; eauto. simpl in *.
+      edestruct H; eauto.
+      split; auto. decompose [ex and] H3; clear H3; eauto.
+  Qed.
+  Hint Resolve iter_stateT_PropM_perm_gen_mon : paco.
+
+  (* CoInductive iter_stateT_PropM_perm *)
+  (*             {R I : Type} *)
+  (*             (step : I -> config -> (PropM perm (config * (I + R)))) *)
+  (*             (i : I) *)
+  (*             (c : config) *)
+  (*             (pcr : perm * (config * R)) *)
+  (*   : Prop := *)
+  (* | iter_done : *)
+  (*     let p := fst pcr in *)
+  (*     let c' := fst (snd pcr) in *)
+  (*     let r := snd (snd pcr) in *)
+  (*     (* dom p c -> *) (* for a ret, any perm should be fine. *) *)
+  (*     step i c (p, (c', inr r)) -> *)
+  (*     iter_stateT_PropM_perm step i c pcr *)
+  (* | iter_step : *)
+  (*     let p := fst pcr in *)
+  (*     let c'' := fst (snd pcr) in *)
+  (*     let r := snd (snd pcr) in *)
+  (*     (forall i' c', dom p c -> *)
+  (*               step i c (p, (c', (inl i'))) -> *)
+  (*               upd p c c' /\ (* needs to be here rather than in the handlers, since this is not a precondition *) *)
+  (*               (* as a result, we don't actually need to give the handlers access to the perm anymore *) *)
+  (*               (exists p', sep_step p p' /\ *)
+  (*                      dom p' c' /\ *)
+  (*                      iter_stateT_PropM_perm step i' c' (p', (c'', r)))) -> *)
+  (*     iter_stateT_PropM_perm step i c pcr. *)
+
+  Global Instance MonadIter_stateT' : MonadIter (stateT config (PropM perm)) :=
+    @iter_stateT_PropM_perm.
+
+  (* CoInductive iter_PropM_perm {R I : Type} (step : I -> PropM perm (I + R)) (i : I) (pr : perm * R) *)
+  (*   : Prop := *)
+  (* | iter_done *)
+  (*   : step i (fst pr, (inr (snd pr))) -> iter_PropM_perm step i pr *)
+  (* | iter_step i' *)
+  (*   : let p := fst pr in *)
+  (*     let r := snd pr in *)
+  (*     step i (p, (inl i')) -> *)
+  (*     (exists p', sep_step p p' /\ *)
+  (*            iter_PropM_perm step i' (p', r)) -> *)
+  (*     iter_PropM_perm step i pr *)
+  (* . *)
+  (* Global Instance MonadIter_PropM : MonadIter (PropM perm) := @iter_PropM_perm. *)
+
+  (** Iter Laws **)
+  Global Instance IterUnfold_TODO : IterUnfold (Kleisli (stateT config (PropM perm))) sum.
+  Proof.
+    repeat intro. split; repeat intro.
+    - destruct x as (? & ? & ?). red in H.
+      pinversion H; simpl in *.
+      + replace p0 with p in *; auto. replace c' with c in *; auto.
+        replace r with b0 in *; auto. clear p0 c' r.
+        eexists; split; eauto. repeat red; auto.
+      + replace p0 with p in *; auto. replace c'' with c in *; auto.
+        replace r with b0 in *; auto. clear p0 c'' r.
+        Abort.
+
+End MonadIter.
 
 Section ts.
 
   Definition E := (stateE config +' nondetE).
 
-  (* Context {R : Type}. *)
-  Definition R := nat.
+  Context {R : Type}.
 
   Definition par_match
              (par : itree E R -> itree E R -> itree E R)
@@ -199,76 +372,12 @@ Section ts.
       (rewrite rewrite_par; unfold par_match; simpl; repeat eexists; constructor).
   Qed.
 
-  Definition sep_step p q : Prop :=
-    (* (forall x, dom p x -> dom q x) /\ *)
-    (forall r, p ⊥ r -> q ⊥ r).
-
-  Instance sep_step_refl : Reflexive sep_step.
-  Proof.
-    repeat intro; auto.
-  Qed.
-
-  Instance sep_step_trans : Transitive sep_step.
-  Proof.
-    repeat intro. auto.
-  Qed.
-
-  Lemma sep_step_lte : forall p p' q, p <= p' -> sep_step p q -> sep_step p' q.
-  Proof.
-    repeat intro. apply H0. symmetry. symmetry in H1. eapply separate_antimonotone; eauto.
-  Qed.
-
-  Lemma sep_step_view : forall p q x y, sep_step p q -> view p x y -> view q x y.
-  Proof.
-    intros. specialize (H (sym_upd_perm p) (separate_self_sym _)).
-    apply H; auto.
-  Qed.
-
-  Lemma sep_step_upd : forall p q x y, sep_step p q ->
-                                  upd q x y ->
-                                  upd p x y.
-  Proof.
-    intros. specialize (H (sym_upd_perm p) (separate_self_sym _)).
-    apply H; auto.
-  Qed.
-
-  Lemma sep_step_sep_conj_l : forall p1 p2 q, p1 ⊥ q -> sep_step p1 p2 -> sep_step (p1 * q) (p2 * q).
-  Proof.
-    intros p1 p2 q ? ?.
-    repeat intro; auto. symmetry in H1. symmetry. apply separate_sep_conj_perm; symmetry; auto.
-    - apply H0. symmetry. eapply separate_sep_conj_perm_l; eauto.
-    - symmetry. eapply separate_sep_conj_perm_r; eauto.
-  Qed.
-  Lemma sep_step_sep_conj_r : forall p1 p2 q, p1 ⊥ q -> sep_step p1 p2 -> sep_step (q * p1) (q * p2).
-  Proof.
-    intros p1 p2 q ? ?.
-    repeat intro; auto. symmetry in H1. symmetry. apply separate_sep_conj_perm; symmetry; auto.
-    - symmetry. eapply separate_sep_conj_perm_l; eauto.
-    - apply H0. symmetry. eapply separate_sep_conj_perm_r; eauto.
-    - symmetry. auto.
-  Qed.
-
-  CoInductive iter_PropM_perm {R I : Type} (step : I -> PropM perm (I + R)) (i : I) (pr : perm * R)
-    : Prop :=
-  | iter_done
-    : step i (fst pr, (inr (snd pr))) -> iter_PropM_perm step i pr
-  | iter_step i'
-    : let p := fst pr in
-      let r := snd pr in
-      step i (p, (inl i')) ->
-      (exists p', sep_step p p' /\
-             iter_PropM_perm step i' (p', r)) ->
-      iter_PropM_perm step i pr
-  .
-  Global Instance MonadIter_PropM : MonadIter (PropM perm) := @iter_PropM_perm.
-
   Definition h_nondet : nondetE ~> stateT config (PropM perm) :=
     fun R e c =>
       fun (pcr : perm * (config * R)) =>
         let p := fst pcr in
         let c' := fst (snd pcr) in
         let r := snd (snd pcr) in
-        dom p c ->
         c = c' /\
         match e in (nondetE bool) return bool -> Prop with
         | Or => fun r => r = true \/ r = false
@@ -280,79 +389,67 @@ Section ts.
         let p := fst pcr in
         let c' := fst (snd pcr) in
         let r := snd (snd pcr) in
-        dom p c ->
         match e in (stateE _ X) return X -> Prop with
         | Get _ => fun r => c' = c /\ r = c
-        | Put _ c'' => fun r =>
-                        upd p c c' /\ (* true for all other cases since c = c' there *)
-                        c' = c'' /\
-                        r = tt
+        | Put _ c'' => fun r => c' = c'' /\
+                              r = tt
         end r.
 
-
-  Lemma h_nondet_lte R e c p q r :
-    p <= q -> h_nondet R e c (p, r) -> h_nondet R e c (q, r).
+  Lemma h_nondet_perm X e c p q x :
+    h_nondet X e c (p, x) -> h_nondet X e c (q, x).
   Proof.
-    intros. destruct e; repeat intro; simpl in *.
-    apply H0; auto. apply H; auto.
+    intros. destruct e; simpl in *; auto.
   Qed.
-  Lemma h_state_lte R e c p q r :
-    p <= q -> h_state R e c (p, r) -> h_state R e c (q, r).
+  Lemma h_state_perm X e c p q x :
+    h_state X e c (p, x) -> h_state X e c (q, x).
   Proof.
-    intros. destruct e; repeat intro; simpl in *.
-    - apply H0; auto. apply H; auto.
-    - destruct H0 as (? & ? & ?).
-      + apply H; auto.
-      + split; auto. apply H; auto.
+    intros. destruct e; simpl in *; auto.
   Qed.
 
   Definition handler : E ~> stateT config (PropM perm) := case_ h_state h_nondet.
 
-  Definition test1 := par (Ret 0) (Ret 1).
-  Definition test2 : itree E R := Ret 1.
-  Definition test_interp := interp handler test2.
-
   Definition empty_config := Build_config nil.
-  Eval cbv in test_interp empty_config.
 
-  Goal forall p c (n : R), interp handler (Ret n) c (p, (c, n)).
+  Lemma type_interp_ret :
+    forall p c (r : R) (Hdom: dom p c), interp handler (Ret r) c (p, (c, r)).
   Proof.
-    intros. repeat red. constructor. repeat red. cbn. eexists. split; auto.
+    intros. repeat red. pstep. constructor; auto.
+    cbn; auto.
   Qed.
 
-  Goal forall p q (t : itree E R) c n,
-      interp handler t c (p, (c, n)) -> p <= q -> interp handler t c (q, (c, n)).
+  Lemma type_interp_lte :
+    forall p q (t : itree E R) c r,
+      interp handler t c (p, (c, r)) -> p <= q -> interp handler t c (q, (c, r)).
   Proof.
-    intros. repeat red in H. destruct H; auto.
-    - constructor 1. simpl in *. decompose [ex and] H; clear H.
-      exists x; split; auto. destruct x. repeat red. repeat red in H3; simpl in *.
-      destruct s; inversion H3. subst.
-      unfold observe in H2. destruct (_observe t0); simpl; auto.
-      red in H2. decompose [ex and] H2; clear H2. inversion H4.
-    - simpl in p0, r. replace p0 with p in H, H1; auto. clear p0.
-      replace r with (c, n) in H1; auto. clear r.
-      econstructor 2.
-      + repeat red. clear H1. repeat red in H. decompose [ex and] H; clear H.
-        exists x. destruct x. split; auto.
-        * clear H3. simpl in *. destruct (observe t0); simpl in *; auto. repeat red in H2 |- *.
-          decompose [ex and] H2; clear H2. destruct x as (? & ? & ?).
-          inversion H3; clear H3; subst.
-          exists (q, (c0, x)). split; auto.
-          destruct e; [eapply h_state_lte | eapply h_nondet_lte]; eauto.
-        * clear H2. repeat red in H3 |- *; simpl in *. destruct s; inversion H3.
-          f_equal.
-      + decompose [ex and] H1; clear H1. exists x. split; auto. eapply sep_step_lte; eauto.
+    intros. pinversion H; auto.
+    - simpl in p0, c', r. replace p0 with p in *; auto. replace c' with c in *; auto.
+      replace r0 with r in *; auto. clear p0 c' r0.
+      pstep. constructor.
+      destruct (observe t0); simpl in *; auto.
+      decompose [ex and] H1; clear H1. inversion H4.
+    - simpl in p0, c'', r0. replace p0 with p in *; auto. replace c'' with c in *; auto.
+      replace r0 with r in *; auto. clear p0 c'' r0.
+      pstep. constructor 2; intros.
+      edestruct H1; clear H1.
+      + apply H0; auto.
+      + destruct (observe t0); simpl in *; inversion H3; clear H3; subst; auto.
+        destruct x as (? & ? & ?). decompose [and] H1; clear H1. simpl in *.
+        inversion H4; clear H4; subst. exists (p, (c', x)). split; simpl; auto.
+        destruct e; [apply (h_state_perm _ _ _ p) | apply (h_nondet_perm _ _ _ p)]; auto.
+      + split; simpl; [apply H0; auto |].
+        decompose [ex and] H5; clear H5. exists x. split; [| split]; auto.
+        eapply sep_step_lte; eauto.
+    - apply iter_stateT_PropM_perm_gen_mon. (* TODO automation *)
   Qed.
 
-  Goal forall p c n,
+  Lemma type_interp_spin :
+    forall p c n (Hdom: dom p c),
       interp handler (ITree.spin : itree E R) c (p, (c, n)).
   Proof.
-    repeat red. cofix CIH.
-    econstructor 2.
-    - repeat red. eexists; split; repeat red; simpl.
-      + rewrite rewrite_spin. simpl. auto.
-      + simpl. auto.
-    - exists p. split; simpl; intuition.
+    Set Printing All. pcofix CIH. Unset Printing All.
+    pstep. econstructor 2; intros.
+    rewrite rewrite_spin in H0. inversion H0; subst.
+    split; intuition. exists p. split; [| split]; simpl; intuition.
   Qed.
 
   Variant typing_perm_gen typing (p : perm) (t : itree E R) : Prop :=
