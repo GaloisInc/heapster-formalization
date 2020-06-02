@@ -2,7 +2,8 @@ From Coq Require Import
      Classes.Morphisms
      Relations.Relation_Operators
      Logic.JMeq
-     Lists.List.
+     Lists.List
+     Arith.PeanoNat.
 
 Require Export Heapster.Permissions.
 
@@ -10,9 +11,26 @@ Import ListNotations.
 
 Variant Lifetime := current | finished.
 
+(* Memory model *)
+Definition addr : Set := nat * nat.
+
+Inductive SByte :=
+| Byte : nat -> SByte
+| Ptr : addr -> SByte
+| PtrFrag : SByte
+| SUndef : SByte.
+
+Definition mem_block := nat -> option SByte.
+
+Inductive logical_block :=
+| LBlock (size : nat) (bytes : mem_block) : logical_block.
+
+Definition memory := nat -> option logical_block.
+
 Record config : Type :=
   {
   l : list Lifetime;
+  m : memory;
   }.
 Module Config <: Permissions.Config.
   Definition t := config.
@@ -21,6 +39,8 @@ End Config.
 Module Permissions' := Permissions Config.
 Export Config.
 Export Permissions'.
+
+(** lifetime helpers **)
 
 Definition lifetime : config -> nat -> option Lifetime :=
   fun c => nth_error (l c).
@@ -34,7 +54,10 @@ Fixpoint replace_list_index {A : Type} (l : list A) (n : nat) (new : A) :=
             end
   end.
 Definition replace_lifetime (c : config) (n : nat) (new : Lifetime) : config :=
-  {| l := replace_list_index (l c) n new |}.
+  {|
+  l := replace_list_index (l c) n new;
+  m := m c
+  |}.
 
 Lemma replace_lifetime_same c n l :
   lifetime c n = Some l -> replace_lifetime c n l = c.
@@ -139,6 +162,33 @@ Proof.
   intros.
   rewrite <- (replace_lifetime_same x n l1) at 2; auto.
 Qed.
+
+(** memory helpers **)
+
+Definition read (c : config) (ptr : addr) : option SByte :=
+  match m c (fst ptr) with
+  | Some (LBlock size bytes) => if snd ptr <? size then bytes (snd ptr) else None
+  | _ => None
+  end.
+
+Definition write (c : config) (ptr : addr) (val : SByte)
+  : option config :=
+  match m c (fst ptr) with
+  | Some (LBlock size bytes) =>
+    if snd ptr <? size
+    then Some {|
+             l := l c;
+             m := fun b => if b =? fst ptr
+                        then Some (LBlock size (fun o => if o =? snd ptr
+                                                      then Some val
+                                                      else bytes o))
+                        else m c b
+           |}
+    else None
+  | _ => None
+  end.
+
+(** Lifetime permissions **)
 
 Program Definition when (n : nat) (p : perm) : perm :=
   {|
@@ -312,4 +362,97 @@ Lemma convert_bottom p n (Hmon : forall x y, monotonic_at p n x y) :
 Proof.
   rewrite <- (sep_conj_perm_bottom p) at 2. apply convert; auto.
   repeat intro. simpl in H. subst. reflexivity.
+Qed.
+
+(** memory permissions **)
+
+Program Definition read_p (ptr : addr) : perm :=
+  {|
+  (* ptr points to valid memory *)
+  dom x := exists v, read x ptr = Some v;
+  (* only checks if the memory ptr points to in the 2 configs are equal *)
+  view x y := match m x (fst ptr), m y (fst ptr) with
+              | Some (LBlock size1 bytes1), Some (LBlock size2 bytes2) =>
+                (snd ptr < size1 <-> snd ptr < size2) /\
+                bytes1 (snd ptr) = bytes2 (snd ptr)
+              | Some _, None => False
+              | None, Some _ => False
+              | _, _ => True
+              end;
+  (* no updates allowed *)
+  upd x y := x = y;
+  |}.
+Next Obligation.
+  split; intuition. inversion H0. inversion H1. inversion H0.
+Qed.
+Next Obligation.
+  constructor; repeat intro; simpl; auto; destruct (m x (fst ptr)); auto.
+  - destruct l0. split; reflexivity.
+  - destruct l0. destruct (m y (fst ptr)); destruct (m z (fst ptr)); auto; destruct l0;
+                   intros; auto. destruct l1; intros.
+    + destruct H, H0. split; etransitivity; eauto.
+    + contradiction H.
+  - destruct (m z (fst ptr)); auto. destruct (m y (fst ptr)); try intuition.
+Qed.
+Next Obligation.
+  unfold read in *.
+  destruct (m y (fst ptr)).
+  - destruct l0. destruct (m x (fst ptr)); [destruct l0 | contradiction H]; auto.
+    destruct H. destruct (snd ptr <? size0) eqn:?.
+    + repeat rewrite (Bool.reflect_iff _ _ (Nat.ltb_spec0 _ _)) in H.
+      exists H0. rewrite H in Heqb. rewrite Heqb. rewrite <- H2. auto.
+    + inversion H1.
+  - destruct (m x (fst ptr)). destruct l0; contradiction H. inversion H1.
+Qed.
+Next Obligation.
+  constructor; repeat intro; subst; auto.
+Qed.
+
+(* TODO factor out common dom and view *)
+Program Definition write_p (ptr : addr) : perm :=
+  {|
+  (* ptr points to valid memory *)
+  dom x := exists v, read x ptr = Some v;
+  (* only checks if the memory ptr points to in the 2 configs are equal *)
+  view x y := match m x (fst ptr), m y (fst ptr) with
+              | Some (LBlock size1 bytes1), Some (LBlock size2 bytes2) =>
+                (snd ptr < size1 <-> snd ptr < size2) /\
+                bytes1 (snd ptr) = bytes2 (snd ptr)
+              | Some _, None => False
+              | None, Some _ => False
+              | _, _ => True
+              end;
+  (* only the pointer we have write permission to may change *)
+  upd x y := forall ptr', ptr <> ptr' -> read x ptr' = read y ptr';
+  |}.
+Next Obligation.
+  split; intuition. inversion H0. inversion H1. inversion H0.
+Qed.
+Next Obligation.
+  constructor; repeat intro; simpl; auto; destruct (m x (fst ptr)); auto.
+  - destruct l0. split; reflexivity.
+  - destruct l0. destruct (m y (fst ptr)); destruct (m z (fst ptr)); auto; destruct l0;
+                   intros; auto. destruct l1; intros.
+    + destruct H, H0. split; etransitivity; eauto.
+    + contradiction H.
+  - destruct (m z (fst ptr)); auto. destruct (m y (fst ptr)); try intuition.
+Qed.
+Next Obligation.
+  unfold read in *.
+  destruct (m y (fst ptr)).
+  - destruct l0. destruct (m x (fst ptr)); [destruct l0 | contradiction H]; auto.
+    destruct H. destruct (snd ptr <? size0) eqn:?.
+    + repeat rewrite (Bool.reflect_iff _ _ (Nat.ltb_spec0 _ _)) in H.
+      exists H0. rewrite H in Heqb. rewrite Heqb. rewrite <- H2. auto.
+    + inversion H1.
+  - destruct (m x (fst ptr)). destruct l0; contradiction H. inversion H1.
+Qed.
+Next Obligation.
+  constructor; repeat intro; auto.
+  etransitivity. apply H; auto. apply H0; auto.
+Qed.
+
+Lemma read_lte_write : forall ptr, read_p ptr <= write_p ptr.
+Proof.
+  constructor; simpl; repeat intro; subst; auto.
 Qed.

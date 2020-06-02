@@ -16,7 +16,7 @@ Module Permissions (C : Config).
   Record perm : Type :=
     {
     view : config -> config -> Prop;  (* ER over configs *)
-    view_ER : PreOrder view;
+    view_PO : PreOrder view;
     dom : config -> Prop; (* domain of valid configs *)
     dom_respects : forall x y, view x y -> (dom x -> dom y);
     upd : config -> config -> Prop;  (* allowed transitions *)
