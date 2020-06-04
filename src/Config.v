@@ -3,10 +3,15 @@ From Coq Require Import
      Relations.Relation_Operators
      Logic.JMeq
      Lists.List
-     Arith.PeanoNat.
+     Arith.PeanoNat
+     Logic.FunctionalExtensionality.
+
+Require Import ExtLib.Structures.Monads.
+Require Import ExtLib.Data.Monads.OptionMonad.
 
 Require Export Heapster.Permissions.
 
+Import MonadNotation.
 Import ListNotations.
 
 Variant Lifetime := current | finished.
@@ -17,7 +22,6 @@ Definition addr : Set := nat * nat.
 Inductive SByte :=
 | Byte : nat -> SByte
 | Ptr : addr -> SByte
-| PtrFrag : SByte
 | SUndef : SByte.
 
 Definition mem_block := nat -> option SByte.
@@ -187,6 +191,46 @@ Definition write (c : config) (ptr : addr) (val : SByte)
     else None
   | _ => None
   end.
+
+(* TODO clean up these proofs (ssreflect?) *)
+Lemma write_read : forall c ptr val,
+    (exists c', write c ptr val = Some c') ->
+    (* TODO notation not working? *)
+    bind (write c ptr val) (fun c' => read c' ptr) = Some val.
+Proof.
+  intros. destruct H. simpl. rewrite H. unfold write in H. unfold read. destruct ptr. simpl in *.
+  destruct (m c n); try solve [inversion H]. destruct l0.
+  destruct (n0 <? size) eqn:?; inversion H. simpl. rewrite Nat.eqb_refl.
+  rewrite Heqb. rewrite Nat.eqb_refl. reflexivity.
+Qed.
+
+Lemma read_write : forall c ptr,
+    (exists val, read c ptr = Some val) ->
+    bind (read c ptr) (fun val => write c ptr val) = Some c.
+Proof.
+  intros. destruct H. simpl. rewrite H. unfold read in H. unfold write.
+  destruct ptr as (b & o). destruct c. simpl in *.
+  destruct (m0 b) eqn:?; try solve [inversion H]. destruct l1.
+  destruct (o <? size); try solve [inversion H].
+  apply f_equal. (* not sure why I need apply *)
+  f_equal. apply functional_extensionality. intros. destruct (x0 =? b) eqn:?; auto.
+  rewrite <- (Bool.reflect_iff _ _ (Nat.eqb_spec _ _)) in Heqb0; subst.
+  rewrite Heqo0. f_equal. f_equal. apply functional_extensionality. intros.
+  destruct (x0 =? o) eqn:?; auto.
+  rewrite <- (Bool.reflect_iff _ _ (Nat.eqb_spec _ _)) in Heqb0. subst. auto.
+Qed.
+
+Lemma write_write : forall c ptr val,
+    bind (write c ptr val) (fun c' => write c' ptr val) = write c ptr val.
+Proof.
+  simpl. intros. destruct (write c ptr val) eqn:?; auto. unfold write in *.
+  destruct (m c (fst ptr)) eqn:?; try solve [inversion Heqo].
+  destruct l0 eqn:?. destruct (snd ptr <? size) eqn:?; inversion Heqo.
+  simpl. rewrite Nat.eqb_refl. rewrite Heqb. apply f_equal. f_equal.
+  apply functional_extensionality. intros. destruct (x =? fst ptr); auto.
+  repeat f_equal. apply functional_extensionality. intros.
+  destruct (x0 =? snd ptr); auto.
+Qed.
 
 (** Lifetime permissions **)
 
@@ -456,3 +500,9 @@ Lemma read_lte_write : forall ptr, read_p ptr <= write_p ptr.
 Proof.
   constructor; simpl; repeat intro; subst; auto.
 Qed.
+
+(* Lemma read_separate : forall ptr ptr', read_p ptr ⊥ read_p ptr'. *)
+(* Proof. *)
+(*   constructor; intros; auto. *)
+(*   - simpl. *)
+(* Qed. *)

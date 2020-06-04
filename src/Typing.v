@@ -95,7 +95,8 @@ Section ts.
   (* Definition E := (stateE config +' nondetE). *)
   Definition E := (MemoryE +' nondetE).
 
-  Context {R : Type}.
+  (* Context {R : Type}. *)
+  Definition R := unit.
 
   Definition par_match
              (par : itree E R -> itree E R -> itree E R)
@@ -221,6 +222,11 @@ Section ts.
     - eapply sep_step_lte; eauto.
   Qed.
 
+  Lemma typing_perm_ret : forall p r, typing_perm p (Ret r).
+  Proof.
+    pstep. constructor. intros. inversion H0.
+  Qed.
+
   Lemma typing_perm_spin : forall p, typing_perm p ITree.spin.
   Proof.
     pcofix CIH. pstep. constructor. intros. rewrite rewrite_spin in H0.
@@ -228,29 +234,37 @@ Section ts.
     exists p. split; eauto; intuition.
   Qed.
 
-  Definition typing P t := forall p, p ∈ P -> typing_perm p t.
+  Lemma typing_perm_store ptr val :
+    typing_perm (write_p ptr) (trigger (Store (Ptr ptr) val)).
+  Proof.
+    pcofix CIH. pstep. constructor. intros. inversion H0; auto_inj_pair2; subst.
+    split; simpl; auto.
+    - intros. admit.
+    - exists (write_p ptr).
+      split; [| split].
+      + left. eapply paco2_mon_bot; eauto. apply typing_perm_ret.
+      + reflexivity.
+      + admit.
+  Admitted.
 
+  Definition typing P t := forall p, p ∈ P -> typing_perm p t.
   Lemma type_lte : forall P Q t, typing P t -> P ⊑ Q -> typing Q t.
   Proof.
     repeat intro. specialize (H p (H0 _ H1)). auto.
   Qed.
-
   Lemma type_spin : forall P, typing P ITree.spin.
   Proof.
     repeat intro. apply typing_perm_spin.
   Qed.
-
   Lemma type_ret : forall P r, typing P (Ret r).
   Proof.
     repeat intro.
     pstep. constructor. intros. inversion H1.
   Qed.
-
   Lemma type_top : forall t, typing top_Perms t.
   Proof.
     repeat intro. pstep. constructor. intros. inversion H.
   Qed.
-
   Lemma type_tau : forall P t, typing P t -> typing P (Tau t).
   Proof.
     repeat intro. specialize (H _ H0). pinversion H.
@@ -259,7 +273,6 @@ Section ts.
     split; intuition.
     exists p. split; intuition.
   Qed.
-
   Lemma frame : forall P1 P2 t, typing P1 t -> typing (P1 ** P2) t.
   Proof.
     intros. eapply type_lte; eauto. apply lte_l_sep_conj_Perms.
@@ -269,7 +282,6 @@ Section ts.
   Proof.
     intros. eapply type_lte; eauto. apply lte_r_sep_conj_Perms.
   Qed.
-
   Lemma parallel_perm : forall p1 p2 t1 t2,
       typing_perm p1 t1 -> typing_perm p2 t2 -> typing_perm (p1 * p2) (par t1 t2).
   Proof.

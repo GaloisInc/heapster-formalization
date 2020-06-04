@@ -28,7 +28,7 @@ Module Permissions (C : Config).
   Hint Unfold upd.
   Hint Resolve dom_respects.
 
-  Instance view_is_ER p : PreOrder (view p) := view_ER p.
+  Instance view_is_preorder p : PreOrder (view p) := view_PO p.
   Instance upd_is_preorder p : PreOrder (upd p) := upd_PO p.
 
   Record lte_perm (p q: perm) : Prop :=
