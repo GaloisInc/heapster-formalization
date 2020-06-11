@@ -3,6 +3,7 @@ From Heapster Require Import
      Config.
 
 From Coq Require Import
+     Structures.Equalities
      Ensembles
      Classes.Morphisms
      Classes.RelationClasses
@@ -29,8 +30,9 @@ From Paco Require Import
      paco.
 
 Import ITreeNotations.
-Import CatNotations.
-Import ITree.Basics.Basics.Monads.
+(* Import CatNotations. *)
+(* Import MonadNotation. *)
+Open Scope monad_scope.
 
 Definition sep_step p q : Prop :=
   forall r, p ⊥ r -> q ⊥ r.
@@ -95,8 +97,8 @@ Section ts.
   (* Definition E := (stateE config +' nondetE). *)
   Definition E := (MemoryE +' nondetE).
 
-  (* Context {R : Type}. *)
-  Definition R := unit.
+  Context {R : Type}.
+  (* Definition R := SByte. *)
 
   Definition par_match
              (par : itree E R -> itree E R -> itree E R)
@@ -234,18 +236,26 @@ Section ts.
     exists p. split; eauto; intuition.
   Qed.
 
-  Lemma typing_perm_store ptr val :
-    typing_perm (write_p ptr) (trigger (Store (Ptr ptr) val)).
-  Proof.
-    pcofix CIH. pstep. constructor. intros. inversion H0; auto_inj_pair2; subst.
-    split; simpl; auto.
-    - intros. admit.
-    - exists (write_p ptr).
-      split; [| split].
-      + left. eapply paco2_mon_bot; eauto. apply typing_perm_ret.
-      + reflexivity.
-      + admit.
-  Admitted.
+  (* Lemma typing_perm_load' ptr val : *)
+  (*   typing_perm (read_perm_p ptr val) (trigger (Load (Ptr ptr))). *)
+  (* Proof. *)
+  (*   pcofix CIH. pstep. constructor. intros. inversion H0; auto_inj_pair2; subst. *)
+  (*   split; intuition. *)
+  (*   eexists. split; [| split]; eauto; intuition. *)
+  (*   left. eapply paco2_mon_bot; eauto. apply typing_perm_ret. *)
+  (* Qed. *)
+
+  (* Lemma typing_perm_store ptr val : *)
+  (*   typing_perm (write_p ptr) (trigger (Store (Ptr ptr) val)). *)
+  (* Proof. *)
+  (*   pcofix CIH. pstep. constructor. intros. inversion H0; auto_inj_pair2; subst. *)
+  (*   split; simpl; auto. *)
+  (*   - intros. admit. *)
+  (*   - exists (write_p ptr). split; [| split]. *)
+  (*     + left. eapply paco2_mon_bot; eauto. apply typing_perm_ret. *)
+  (*     + reflexivity. *)
+  (*     + admit. *)
+  (* Abort. *)
 
   Definition typing P t := forall p, p ∈ P -> typing_perm p t.
   Lemma type_lte : forall P Q t, typing P t -> P ⊑ Q -> typing Q t.
@@ -381,3 +391,82 @@ Section ts.
     specialize (Ht2 _ H0). eapply typing_perm_lte; eauto. eapply parallel_perm; eauto.
   Qed.
 End ts.
+
+Lemma typing_perm_load p ptr :
+  typing_perm p (trigger (Load (Ptr ptr))).
+Proof.
+  pcofix CIH. pstep. constructor. intros. inversion H0; auto_inj_pair2; subst.
+  split; intuition.
+  eexists. split; [| split]; eauto; intuition.
+  left. eapply paco2_mon_bot; eauto. apply typing_perm_ret.
+Qed.
+
+Lemma typing_load ptr P :
+  typing (read_Perms ptr P) (trigger (Load (Ptr ptr))).
+Proof.
+  repeat intro. apply typing_perm_load.
+Qed.
+
+Definition load_store ptr val : itree E _ :=
+  vis (Load (Ptr ptr)) (fun ptr' => vis (Store ptr' val) (fun _ => Ret tt)).
+
+(* TODO GET THESE TO WORK *)
+Lemma bind_trigger' {R} X (e : E X) k :
+  x <- trigger e ;; k x = (Vis e (fun x => k x) : itree E R).
+Proof.
+  apply bisimulation_is_eq. apply bind_trigger.
+Qed.
+
+Lemma unfold_bind' {R S : Type} (t : itree E R) (k : R -> itree E S) :
+    x <- t;; k x = ITree._bind k (fun t0 : itree E R => x <- t0;; k x) (observe t).
+Proof.
+  apply bisimulation_is_eq. apply unfold_bind.
+Qed.
+
+Lemma typing_perm_store ptr val :
+  typing_perm (write_p ptr) (vis (Store (Ptr ptr) val) (fun _ => Ret tt)).
+Proof.
+  pstep. constructor. intros. inversion H0; auto_inj_pair2; subst. split.
+  - split; intros; simpl.
+    + eapply write_success_other_ptr; eauto.
+    + eapply write_success_allocation; eauto.
+  - eexists; split; [| split].
+    + left. apply typing_perm_ret.
+    + reflexivity.
+    + simpl. simpl in H.
+      apply write_success_allocation in H7. admit.
+Admitted.
+
+Lemma typing_load_store ptr val :
+  typing (read_Perms ptr (fun val' => match val' with
+                                   | Ptr ptr' => singleton_Perms (write_p ptr')
+                                   | _ => bottom_Perms
+                                   end))
+         (load_store ptr val).
+Proof.
+  repeat intro. simpl in H. decompose [ex and] H; clear H.
+  subst. simpl in H2. decompose [ex and] H2; clear H2.
+  pstep. constructor. intros. unfold load_store in *.
+  inversion H2; auto_inj_pair2; subst.
+  split; intuition.
+  assert (x0 = v). {
+    destruct H3. specialize (dom_inc0 _ H1). destruct dom_inc0. destruct H.
+    specialize (dom_inc0 _ H3). simpl in dom_inc0. rewrite dom_inc0 in H9. inversion H9. auto.
+  }
+  subst. destruct v.
+  - eexists. split; [| split]. left. pstep. constructor. intros. inversion H5. reflexivity. auto.
+  - simpl in H0. exists (read_perm_p ptr (Ptr a) * write_p a). split; [| split].
+    + left. eapply typing_perm_lte. apply typing_perm_store.
+      apply lte_r_sep_conj_perm.
+    + eapply sep_step_lte; eauto.
+      eapply sep_step_lte; eauto. 2: reflexivity.
+      apply sep_conj_perm_monotone; auto.
+    + simpl. split; auto. split; auto.
+      * destruct H3. specialize (dom_inc0 _ H1). destruct dom_inc0 as (? & ? & ?).
+        destruct H0. specialize (dom_inc0 _ H4). simpl in dom_inc0. auto.
+      * destruct H3. specialize (dom_inc0 _ H1). simpl in dom_inc0.
+        destruct dom_inc0 as (? & ? & ?).
+        eapply separate_antimonotone; eauto. symmetry. eapply separate_antimonotone; eauto.
+        symmetry; auto.
+  - eexists. split; [| split]. left. pstep. constructor. intros. inversion H5. reflexivity. auto.
+Qed.

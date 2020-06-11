@@ -18,6 +18,21 @@ Variant Lifetime := current | finished.
 
 (* Memory model *)
 Definition addr : Set := nat * nat.
+Lemma addr_dec : forall (a b : addr), {a = b} + {a <> b}.
+Proof.
+  intros [a1 a2] [b1 b2].
+  destruct (Nat.eq_dec a1 b1); destruct (Nat.eq_dec a2 b2); subst; auto.
+  - right. intros H. inversion H; subst. apply n. reflexivity.
+  - right. intros H. inversion H; subst. apply n. reflexivity.
+  - right. intros H. inversion H; subst. apply n. reflexivity.
+Qed.
+
+Lemma addr_neq_cases (b b' o o' : nat) :
+  (b, o) <> (b', o') -> b <> b' \/ o <> o'.
+Proof.
+  intros.
+  destruct (Nat.eq_dec b b'); destruct (Nat.eq_dec o o'); subst; auto.
+Qed.
 
 Inductive SByte :=
 | Byte : nat -> SByte
@@ -26,7 +41,7 @@ Inductive SByte :=
 
 Definition mem_block := nat -> option SByte.
 
-Inductive logical_block :=
+Variant logical_block :=
 | LBlock (size : nat) (bytes : mem_block) : logical_block.
 
 Definition memory := nat -> option logical_block.
@@ -169,17 +184,49 @@ Qed.
 
 (** memory helpers **)
 
-Definition read (c : config) (ptr : addr) : option SByte :=
+(* read c at memory location ptr. ptr must be a valid location and allocated. *)
+Definition read (c : config) (ptr : addr)
+  : option SByte :=
   match m c (fst ptr) with
   | Some (LBlock size bytes) => if snd ptr <? size then bytes (snd ptr) else None
   | _ => None
   end.
 
+Definition is_some {A} (o : option A) : bool :=
+  match o with
+  | Some _ => true
+  | None => false
+  end.
+
+Definition allocated (c : config) (ptr : addr) : Prop :=
+  match m c (fst ptr) with
+  | Some (LBlock size bytes) =>
+    match bytes (snd ptr) with
+    | Some _ => snd ptr < size
+    | _ => False
+    end
+  | _ => False
+  end.
+
+Definition alloc_invariant (c1 c2 : config) (ptr : addr) : Prop :=
+  allocated c1 ptr = allocated c2 ptr.
+
+Lemma alloc_invariant_read c1 c2 ptr :
+  alloc_invariant c1 c2 ptr ->
+  read c2 ptr = None ->
+  read c1 ptr = None.
+Proof.
+  unfold alloc_invariant. unfold allocated. unfold read. intros.
+  destruct (m c1 (fst ptr)), (m c2 (fst ptr)); try solve [inversion H0].
+  - destruct l0, l1.
+Admitted.
+
+(* write val to c at memory location ptr. ptr must be a valid location and allocated. *)
 Definition write (c : config) (ptr : addr) (val : SByte)
   : option config :=
   match m c (fst ptr) with
   | Some (LBlock size bytes) =>
-    if snd ptr <? size
+    if andb (snd ptr <? size) (is_some (bytes (snd ptr)))
     then Some {|
              l := l c;
              m := fun b => if b =? fst ptr
@@ -192,45 +239,80 @@ Definition write (c : config) (ptr : addr) (val : SByte)
   | _ => None
   end.
 
+Lemma write_success_allocation c c' ptr val :
+  write c ptr val = Some c' ->
+  alloc_invariant c c' ptr.
+Proof.
+  destruct ptr as [b o].
+  intros. unfold alloc_invariant. unfold allocated. unfold write in H. simpl in *.
+  destruct (m c b) eqn:?; try solve [inversion H]. destruct l0.
+  destruct (o <? size) eqn:?; try solve [inversion H].
+  destruct (is_some (bytes o)) eqn:?; try solve [inversion H].
+  inversion H; subst; clear H. simpl. repeat rewrite Nat.eqb_refl.
+  destruct (bytes o); auto. inversion Heqb1.
+Qed.
+
+Lemma write_success_other_ptr c c' ptr val :
+  write c ptr val = Some c' ->
+  forall ptr', ptr <> ptr' -> read c ptr' = read c' ptr'.
+Proof.
+  destruct ptr as [b o].
+  unfold write. unfold read. simpl. intros.
+  destruct (m c b) eqn:?; try solve [inversion H]. destruct l0.
+  destruct (o <? size) eqn:?; try solve [inversion H].
+  destruct (is_some (bytes o)) eqn:?; try solve [inversion H].
+  inversion H; subst; clear H. destruct ptr' as [b' o']. simpl.
+  destruct (addr_neq_cases b b' o o' H0).
+  - rewrite (Bool.reflect_iff _ _ (Nat.eqb_spec _ _)) in H.
+    apply Bool.not_true_is_false in H. rewrite Nat.eqb_sym.
+    rewrite H. reflexivity.
+  - destruct (b' =? b) eqn:?; auto.
+    rewrite <- (Bool.reflect_iff _ _ (Nat.eqb_spec _ _)) in Heqb2. subst.
+    rewrite Heqo0.
+    rewrite (Bool.reflect_iff _ _ (Nat.eqb_spec _ _)) in H.
+    apply Bool.not_true_is_false in H. rewrite Nat.eqb_sym.
+    rewrite H. reflexivity.
+Qed.
+
 (* TODO clean up these proofs (ssreflect?) *)
-Lemma write_read : forall c ptr val,
-    (exists c', write c ptr val = Some c') ->
-    (* TODO notation not working? *)
-    bind (write c ptr val) (fun c' => read c' ptr) = Some val.
-Proof.
-  intros. destruct H. simpl. rewrite H. unfold write in H. unfold read. destruct ptr. simpl in *.
-  destruct (m c n); try solve [inversion H]. destruct l0.
-  destruct (n0 <? size) eqn:?; inversion H. simpl. rewrite Nat.eqb_refl.
-  rewrite Heqb. rewrite Nat.eqb_refl. reflexivity.
-Qed.
+(* Lemma write_read : forall c ptr val, *)
+(*     (exists c', write c ptr val = Some c') -> *)
+(*     (* TODO notation not working? *) *)
+(*     bind (write c ptr val) (fun c' => read c' ptr) = Some val. *)
+(* Proof. *)
+(*   intros. destruct H. simpl. rewrite H. unfold write in H. unfold read. destruct ptr. simpl in *. *)
+(*   destruct (m c n); try solve [inversion H]. destruct l0. *)
+(*   destruct (n0 <? size) eqn:?; inversion H. simpl. rewrite Nat.eqb_refl. *)
+(*   rewrite Heqb. rewrite Nat.eqb_refl. reflexivity. *)
+(* Qed. *)
 
-Lemma read_write : forall c ptr,
-    (exists val, read c ptr = Some val) ->
-    bind (read c ptr) (fun val => write c ptr val) = Some c.
-Proof.
-  intros. destruct H. simpl. rewrite H. unfold read in H. unfold write.
-  destruct ptr as (b & o). destruct c. simpl in *.
-  destruct (m0 b) eqn:?; try solve [inversion H]. destruct l1.
-  destruct (o <? size); try solve [inversion H].
-  apply f_equal. (* not sure why I need apply *)
-  f_equal. apply functional_extensionality. intros. destruct (x0 =? b) eqn:?; auto.
-  rewrite <- (Bool.reflect_iff _ _ (Nat.eqb_spec _ _)) in Heqb0; subst.
-  rewrite Heqo0. f_equal. f_equal. apply functional_extensionality. intros.
-  destruct (x0 =? o) eqn:?; auto.
-  rewrite <- (Bool.reflect_iff _ _ (Nat.eqb_spec _ _)) in Heqb0. subst. auto.
-Qed.
+(* Lemma read_write : forall c ptr, *)
+(*     (exists val, read c ptr = Some val) -> *)
+(*     bind (read c ptr) (fun val => write c ptr val) = Some c. *)
+(* Proof. *)
+(*   intros. destruct H. simpl. rewrite H. unfold read in H. unfold write. *)
+(*   destruct ptr as (b & o). destruct c. simpl in *. *)
+(*   destruct (m0 b) eqn:?; try solve [inversion H]. destruct l1. *)
+(*   destruct (o <? size); try solve [inversion H]. *)
+(*   apply f_equal. (* not sure why I need apply *) *)
+(*   f_equal. apply functional_extensionality. intros. destruct (x0 =? b) eqn:?; auto. *)
+(*   rewrite <- (Bool.reflect_iff _ _ (Nat.eqb_spec _ _)) in Heqb0; subst. *)
+(*   rewrite Heqo0. f_equal. f_equal. apply functional_extensionality. intros. *)
+(*   destruct (x0 =? o) eqn:?; auto. *)
+(*   rewrite <- (Bool.reflect_iff _ _ (Nat.eqb_spec _ _)) in Heqb0. subst. auto. *)
+(* Qed. *)
 
-Lemma write_write : forall c ptr val,
-    bind (write c ptr val) (fun c' => write c' ptr val) = write c ptr val.
-Proof.
-  simpl. intros. destruct (write c ptr val) eqn:?; auto. unfold write in *.
-  destruct (m c (fst ptr)) eqn:?; try solve [inversion Heqo].
-  destruct l0 eqn:?. destruct (snd ptr <? size) eqn:?; inversion Heqo.
-  simpl. rewrite Nat.eqb_refl. rewrite Heqb. apply f_equal. f_equal.
-  apply functional_extensionality. intros. destruct (x =? fst ptr); auto.
-  repeat f_equal. apply functional_extensionality. intros.
-  destruct (x0 =? snd ptr); auto.
-Qed.
+(* Lemma write_write : forall c ptr val, *)
+(*     bind (write c ptr val) (fun c' => write c' ptr val) = write c ptr val. *)
+(* Proof. *)
+(*   simpl. intros. destruct (write c ptr val) eqn:?; auto. unfold write in *. *)
+(*   destruct (m c (fst ptr)) eqn:?; try solve [inversion Heqo]. *)
+(*   destruct l0 eqn:?. destruct (snd ptr <? size) eqn:?; inversion Heqo. *)
+(*   simpl. rewrite Nat.eqb_refl. rewrite Heqb. apply f_equal. f_equal. *)
+(*   apply functional_extensionality. intros. destruct (x =? fst ptr); auto. *)
+(*   repeat f_equal. apply functional_extensionality. intros. *)
+(*   destruct (x0 =? snd ptr); auto. *)
+(* Qed. *)
 
 (** Lifetime permissions **)
 
@@ -415,41 +497,35 @@ Program Definition read_p (ptr : addr) : perm :=
   (* ptr points to valid memory *)
   dom x := exists v, read x ptr = Some v;
   (* only checks if the memory ptr points to in the 2 configs are equal *)
-  view x y := match m x (fst ptr), m y (fst ptr) with
-              | Some (LBlock size1 bytes1), Some (LBlock size2 bytes2) =>
-                (snd ptr < size1 <-> snd ptr < size2) /\
-                bytes1 (snd ptr) = bytes2 (snd ptr)
-              | Some _, None => False
-              | None, Some _ => False
-              | _, _ => True
-              end;
-  (* no updates allowed *)
+  view x y := alloc_invariant x y ptr;
+  (* read x ptr = None <-> read y ptr = None; *)
+  (* only the pointer we have write permission to may change *)
   upd x y := x = y;
   |}.
 Next Obligation.
-  split; intuition. inversion H0. inversion H1. inversion H0.
+  constructor; unfold alloc_invariant; unfold allocated; repeat intro; auto.
+  destruct (m x (fst ptr)), (m y (fst ptr)), (m z (fst ptr)); intuition.
+  - destruct l0, l1, l2.
+    destruct (bytes (snd ptr)), (bytes0 (snd ptr)), (bytes1 (snd ptr)); subst;
+      etransitivity; eauto.
+  - destruct l0, l1.
+    destruct (bytes (snd ptr)), (bytes0 (snd ptr)); subst;
+      etransitivity; eauto.
+  - destruct l0, l1.
+    destruct (bytes (snd ptr)), (bytes0 (snd ptr)); subst;
+      etransitivity; eauto.
+  - destruct l0, l1.
+    destruct (bytes (snd ptr)), (bytes0 (snd ptr)); subst;
+      etransitivity; eauto.
 Qed.
 Next Obligation.
-  constructor; repeat intro; simpl; auto; destruct (m x (fst ptr)); auto.
-  - destruct l0. split; reflexivity.
-  - destruct l0. destruct (m y (fst ptr)); destruct (m z (fst ptr)); auto; destruct l0;
-                   intros; auto. destruct l1; intros.
-    + destruct H, H0. split; etransitivity; eauto.
-    + contradiction H.
-  - destruct (m z (fst ptr)); auto. destruct (m y (fst ptr)); try intuition.
+  destruct (read y ptr) eqn:?.
+  eexists; eauto.
+  assert ((None : option SByte) = None) by reflexivity.
+  eapply alloc_invariant_read in Heqo; eauto. rewrite H1 in Heqo. inversion Heqo.
 Qed.
 Next Obligation.
-  unfold read in *.
-  destruct (m y (fst ptr)).
-  - destruct l0. destruct (m x (fst ptr)); [destruct l0 | contradiction H]; auto.
-    destruct H. destruct (snd ptr <? size0) eqn:?.
-    + repeat rewrite (Bool.reflect_iff _ _ (Nat.ltb_spec0 _ _)) in H.
-      exists H0. rewrite H in Heqb. rewrite Heqb. rewrite <- H2. auto.
-    + inversion H1.
-  - destruct (m x (fst ptr)). destruct l0; contradiction H. inversion H1.
-Qed.
-Next Obligation.
-  constructor; repeat intro; subst; auto.
+  constructor; repeat intro; auto. etransitivity; eauto.
 Qed.
 
 (* TODO factor out common dom and view *)
@@ -458,51 +534,86 @@ Program Definition write_p (ptr : addr) : perm :=
   (* ptr points to valid memory *)
   dom x := exists v, read x ptr = Some v;
   (* only checks if the memory ptr points to in the 2 configs are equal *)
-  view x y := match m x (fst ptr), m y (fst ptr) with
-              | Some (LBlock size1 bytes1), Some (LBlock size2 bytes2) =>
-                (snd ptr < size1 <-> snd ptr < size2) /\
-                bytes1 (snd ptr) = bytes2 (snd ptr)
-              | Some _, None => False
-              | None, Some _ => False
-              | _, _ => True
-              end;
+  view x y := read x ptr = read y ptr;
   (* only the pointer we have write permission to may change *)
-  upd x y := forall ptr', ptr <> ptr' -> read x ptr' = read y ptr';
+  (* TODO: cannot dealloc or alloc here... *)
+  upd x y := (forall ptr', ptr <> ptr' -> read x ptr' = read y ptr') /\
+             alloc_invariant x y ptr;
   |}.
 Next Obligation.
-  split; intuition. inversion H0. inversion H1. inversion H0.
+  constructor; repeat intro; auto. etransitivity; eauto.
 Qed.
 Next Obligation.
-  constructor; repeat intro; simpl; auto; destruct (m x (fst ptr)); auto.
-  - destruct l0. split; reflexivity.
-  - destruct l0. destruct (m y (fst ptr)); destruct (m z (fst ptr)); auto; destruct l0;
-                   intros; auto. destruct l1; intros.
-    + destruct H, H0. split; etransitivity; eauto.
-    + contradiction H.
-  - destruct (m z (fst ptr)); auto. destruct (m y (fst ptr)); try intuition.
+  eexists; eauto.
 Qed.
 Next Obligation.
-  unfold read in *.
-  destruct (m y (fst ptr)).
-  - destruct l0. destruct (m x (fst ptr)); [destruct l0 | contradiction H]; auto.
-    destruct H. destruct (snd ptr <? size0) eqn:?.
-    + repeat rewrite (Bool.reflect_iff _ _ (Nat.ltb_spec0 _ _)) in H.
-      exists H0. rewrite H in Heqb. rewrite Heqb. rewrite <- H2. auto.
-    + inversion H1.
-  - destruct (m x (fst ptr)). destruct l0; contradiction H. inversion H1.
+  constructor; split; repeat intro; try solve [intuition].
+  - reflexivity.
+  - destruct H, H0. etransitivity. apply H; auto. auto.
+  - destruct H, H0. etransitivity. apply H1. auto.
+Qed.
+
+Program Definition read_perm_p (ptr : addr) (v : SByte) : perm :=
+  {|
+  (* ptr points to valid memory *)
+  dom x := read x ptr = Some v;
+  (* only checks if the memory ptr points to in the 2 configs are equal *)
+  view x y := read x ptr = read y ptr;
+  (* no updates allowed *)
+  upd x y := x = y;
+  |}.
+Next Obligation.
+  constructor; repeat intro; auto. etransitivity; eauto.
 Qed.
 Next Obligation.
-  constructor; repeat intro; auto.
-  etransitivity. apply H; auto. apply H0; auto.
+  constructor; repeat intro; subst; auto.
 Qed.
+
+(* TODO factor out common dom and view *)
+Program Definition write_perm_p (ptr : addr) (v : SByte) : perm :=
+  {|
+  (* ptr points to valid memory *)
+  dom x := read x ptr = Some v;
+  (* only checks if the memory ptr points to in the 2 configs are equal *)
+  view x y := read x ptr = read y ptr;
+  (* only the pointer we have write permission to may change *)
+  (* TODO: cannot dealloc or alloc here... *)
+  upd x y := (forall ptr', ptr <> ptr' -> read x ptr' = read y ptr') /\
+             alloc_invariant x y ptr;
+  |}.
+Next Obligation.
+  constructor; repeat intro; auto. etransitivity; eauto.
+Qed.
+Next Obligation.
+  constructor; split; repeat intro; try solve [intuition].
+  - reflexivity.
+  - destruct H, H0. etransitivity. apply H; auto. auto.
+  - destruct H, H0. etransitivity. apply H1. auto.
+Qed.
+
+Definition read_Perms (ptr : addr) (P : SByte -> Perms) : Perms :=
+  meet_Perms (fun Q => exists y : SByte, Q = singleton_Perms (read_perm_p ptr y) ** P y).
+
+Definition write_Perms (ptr : addr) (P : SByte -> Perms) : Perms :=
+  meet_Perms (fun Q => exists y : SByte, Q = singleton_Perms (write_perm_p ptr y) ** P y).
 
 Lemma read_lte_write : forall ptr, read_p ptr <= write_p ptr.
 Proof.
   constructor; simpl; repeat intro; subst; auto.
+  - unfold alloc_invariant, allocated, read in *. admit.
+    (* destruct (m x (fst ptr)), (m y (fst ptr)); simpl in *; auto. *)
+    (* + destruct l0, l1. *)
+  - split; reflexivity.
+Admitted.
+
+Lemma read_write_sep : forall ptr, read_p ptr ⊥ write_p ptr.
+Proof.
+  constructor; repeat intro; simpl in *.
+  - destruct H. auto.
+  - subst. reflexivity.
 Qed.
 
-(* Lemma read_separate : forall ptr ptr', read_p ptr ⊥ read_p ptr'. *)
-(* Proof. *)
-(*   constructor; intros; auto. *)
-(*   - simpl. *)
-(* Qed. *)
+Lemma read_separate : forall ptr ptr', read_p ptr ⊥ read_p ptr'.
+Proof.
+  constructor; intros; simpl in *; subst; reflexivity.
+Qed.
