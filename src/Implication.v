@@ -92,11 +92,11 @@ Proof.
   eapply Perms_upwards_closed; eauto. etransitivity. apply lte_r_sep_conj_perm. eauto.
 Qed.
 
-Lemma copy {T} (x : T) P : (forall p, p ∈ x:P -> read_perm p) ->
+Lemma copy {T} (x : T) P : (forall p, p ∈ x:P -> copyable p) ->
                            x:P ⊦ x:P ** x:P.
 Proof.
   repeat intro. exists p, p. split; [| split]; auto.
-  specialize (H _ H0). apply separate_self_read in H. split; intros; simpl; eauto.
+  specialize (H _ H0). apply copyable_separate in H. split; intros; simpl; eauto.
   induction H1.
   - destruct H1; auto.
   - etransitivity; eauto.

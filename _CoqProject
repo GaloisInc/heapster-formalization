@@ -3,6 +3,7 @@
 
 src/PropT.v
 src/Permissions.v
+src/Memory.v
 src/Config.v
 src/Implication.v
 src/Typing.v

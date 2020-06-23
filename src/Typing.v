@@ -52,6 +52,11 @@ Proof.
   repeat intro. apply H0. symmetry. symmetry in H1. eapply separate_antimonotone; eauto.
 Qed.
 
+Lemma sep_step_lte' : forall p q, q <= p -> sep_step p q.
+Proof.
+  repeat intro. symmetry. eapply separate_antimonotone; eauto. symmetry; auto.
+Qed.
+
 Lemma sep_step_view : forall p q x y, sep_step p q -> view p x y -> view q x y.
 Proof.
   intros. specialize (H (sym_upd_perm p) (separate_self_sym _)).
@@ -402,11 +407,12 @@ Proof.
 Qed.
 
 Lemma typing_load ptr P :
-  typing (read_Perms ptr P) (trigger (Load (Ptr ptr))).
+  typing P (trigger (Load (Ptr ptr))).
 Proof.
   repeat intro. apply typing_perm_load.
 Qed.
 
+(* Load an addr from ptr, and store val into it *)
 Definition load_store ptr val : itree E _ :=
   vis (Load (Ptr ptr)) (fun ptr' => vis (Store ptr' val) (fun _ => Ret tt)).
 
@@ -423,50 +429,92 @@ Proof.
   apply bisimulation_is_eq. apply unfold_bind.
 Qed.
 
-Lemma typing_perm_store ptr val :
-  typing_perm (write_p ptr) (vis (Store (Ptr ptr) val) (fun _ => Ret tt)).
+Lemma typing_perm_store ptr v1 v2 :
+  typing_perm (write_perm ptr v1) (vis (Store (Ptr ptr) v2) (fun _ => Ret tt)).
 Proof.
   pstep. constructor. intros. inversion H0; auto_inj_pair2; subst. split.
   - split; intros; simpl.
     + eapply write_success_other_ptr; eauto.
     + eapply write_success_allocation; eauto.
-  - eexists; split; [| split].
+  - exists (write_perm ptr v2); split; [| split].
     + left. apply typing_perm_ret.
-    + reflexivity.
-    + simpl. simpl in H.
-      apply write_success_allocation in H7. admit.
-Admitted.
+    + repeat intro. destruct H1. constructor; auto.
+    + simpl. eapply write_success_ptr; eauto.
+Qed.
+
+Lemma typing_perm_load_store ptr ptr' v v' :
+  typing_perm (read_perm ptr (Ptr ptr') * write_perm ptr' v) (load_store ptr v').
+Proof.
+  intros. pstep. constructor. intros. inversion H0; auto_inj_pair2; subst. split; intuition.
+  eexists. split; [| split]; eauto; intuition.
+  left. simpl in H. destruct H. rewrite H in H6. inversion H6; subst.
+  eapply typing_perm_lte. apply typing_perm_store. apply lte_r_sep_conj_perm.
+Qed.
 
 Lemma typing_load_store ptr val :
   typing (read_Perms ptr (fun val' => match val' with
-                                   | Ptr ptr' => singleton_Perms (write_p ptr')
+                                   | Ptr ptr' => write_Perms ptr' (fun _ => bottom_Perms)
                                    | _ => bottom_Perms
                                    end))
          (load_store ptr val).
 Proof.
   repeat intro. simpl in H. decompose [ex and] H; clear H.
   subst. simpl in H2. decompose [ex and] H2; clear H2.
-  pstep. constructor. intros. unfold load_store in *.
-  inversion H2; auto_inj_pair2; subst.
-  split; intuition.
-  assert (x0 = v). {
-    destruct H3. specialize (dom_inc0 _ H1). destruct dom_inc0. destruct H.
-    specialize (dom_inc0 _ H3). simpl in dom_inc0. rewrite dom_inc0 in H9. inversion H9. auto.
-  }
-  subst. destruct v.
-  - eexists. split; [| split]. left. pstep. constructor. intros. inversion H5. reflexivity. auto.
-  - simpl in H0. exists (read_perm_p ptr (Ptr a) * write_p a). split; [| split].
-    + left. eapply typing_perm_lte. apply typing_perm_store.
-      apply lte_r_sep_conj_perm.
-    + eapply sep_step_lte; eauto.
-      eapply sep_step_lte; eauto. 2: reflexivity.
-      apply sep_conj_perm_monotone; auto.
-    + simpl. split; auto. split; auto.
-      * destruct H3. specialize (dom_inc0 _ H1). destruct dom_inc0 as (? & ? & ?).
-        destruct H0. specialize (dom_inc0 _ H4). simpl in dom_inc0. auto.
-      * destruct H3. specialize (dom_inc0 _ H1). simpl in dom_inc0.
-        destruct dom_inc0 as (? & ? & ?).
-        eapply separate_antimonotone; eauto. symmetry. eapply separate_antimonotone; eauto.
-        symmetry; auto.
-  - eexists. split; [| split]. left. pstep. constructor. intros. inversion H5. reflexivity. auto.
+  destruct x0 eqn:?.
+  - pstep. constructor. intros. unfold load_store in *.
+    inversion H2; auto_inj_pair2.
+    split; intuition.
+    assert (x0 = v).
+    { subst.
+      destruct H3. specialize (dom_inc0 _ H1). destruct dom_inc0. destruct H.
+      specialize (dom_inc0 _ H3). simpl in dom_inc0. rewrite dom_inc0 in H9. inversion H9. auto.
+    }
+    subst.
+    eexists. split; [| split]; eauto. left. pstep. constructor. intros. inversion H5. reflexivity.
+  - simpl in *. decompose [ex and] H0; clear H0; subst. simpl in H4.
+    decompose [ex and] H4; clear H4.
+    eapply typing_perm_lte. apply typing_perm_load_store.
+    etransitivity; eauto. apply sep_conj_perm_monotone; eauto.
+    etransitivity; eauto. etransitivity; eauto. apply lte_l_sep_conj_perm.
+Qed.
+
+(* Store an addr into ptr, and then use it by loading and storing into it. *)
+Definition store_load_store ptr ptr' : itree E _ :=
+  vis (Store (Ptr ptr) ptr') (fun _ => load_store ptr (Byte 1)).
+
+Lemma typing_perm_store_load_store ptr ptr' v v' :
+  typing_perm (write_perm ptr v * write_perm ptr' v') (store_load_store ptr (Ptr ptr')).
+Proof.
+  pstep. constructor. intros. unfold store_load_store in H0.
+  inversion H0; auto_inj_pair2; subst.
+  (* destruct H as (? & ? & ?). simpl in H. *)
+  split.
+  - constructor. left. simpl.
+    split; [eapply write_success_other_ptr | eapply write_success_allocation]; eauto.
+  - exists (read_perm ptr (Ptr ptr') * write_perm ptr' v'). split; [| split].
+    + left. apply typing_perm_load_store.
+    + (* TODO: factor out this more general version of sep_step_lte' *)
+      repeat intro. destruct H1. constructor; auto. intros.
+      apply sep_r0. clear sep_l0 sep_r0. induction H1.
+      * destruct H1; constructor; [left | right]; simpl in *; subst; auto. split; reflexivity.
+      * econstructor 2; eauto.
+    + destruct H as (? & ? & ?).
+      split; [| split]; simpl in *; auto.
+      * eapply write_success_ptr; eauto.
+      * apply write_write_separate_neq_ptr in H2. erewrite <- write_success_other_ptr; eauto.
+      * rewrite read_write_separate_neq_ptr. apply write_write_separate_neq_ptr in H2; auto.
+Qed.
+
+Lemma typing_store_load_store ptr ptr' :
+  typing (write_Perms ptr (fun _ => bottom_Perms) **
+          write_Perms ptr' (fun _ => bottom_Perms))
+         (store_load_store ptr (Ptr ptr')).
+Proof.
+  repeat intro. simpl in H. decompose [ex and] H; clear H. subst.
+  simpl in H3, H5. decompose [ex and] H3; clear H3.
+  decompose [ex and] H5; clear H5. clear H0 H3.
+  eapply typing_perm_lte. apply typing_perm_store_load_store.
+  etransitivity; eauto.
+  apply sep_conj_perm_monotone; etransitivity; eauto;
+    etransitivity; eauto; apply lte_l_sep_conj_perm.
 Qed.

@@ -400,11 +400,11 @@ Qed. *)
     intros. split; intros; auto.
   Qed.
 
-  Definition read_perm p := forall x y, upd p x y -> x = y.
+  Definition copyable p := forall x y, upd p x y -> view p x y.
 
-  Lemma separate_self_read : forall p, read_perm p -> p ⊥ p.
+  Lemma copyable_separate : forall p, copyable p -> p ⊥ p.
   Proof.
-    intros. split; intros x y Hupd; specialize (H _ _ Hupd); subst; reflexivity.
+    intros. red in H. split; auto.
   Qed.
 
   Lemma separate_antimonotone : forall p q r, p ⊥ q -> r <= q -> p ⊥ r.
