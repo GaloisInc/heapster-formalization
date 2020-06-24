@@ -22,6 +22,7 @@ Record config : Type :=
   {
   l : list Lifetime;
   m : memory;
+  e : bool;
   }.
 Module Config <: Permissions.Config.
   Definition t := config.
@@ -47,7 +48,8 @@ Fixpoint replace_list_index {A : Type} (l : list A) (n : nat) (new : A) :=
 Definition replace_lifetime (c : config) (n : nat) (new : Lifetime) : config :=
   {|
   l := replace_list_index (l c) n new;
-  m := m c
+  m := m c;
+  e := e c;
   |}.
 
 Lemma replace_lifetime_same c n l :
@@ -205,7 +207,8 @@ Definition write (c : config) (ptr : addr) (val : SByte)
                         then Some (LBlock size (fun o => if o =? snd ptr
                                                       then Some val
                                                       else bytes o))
-                        else m c b
+                        else m c b;
+             e := e c;
            |}
     else None
   | _ => None
@@ -293,6 +296,14 @@ Qed.
 (*   repeat f_equal. apply functional_extensionality. intros. *)
 (*   destruct (x0 =? snd ptr); auto. *)
 (* Qed. *)
+
+(** error helpers **)
+Definition error_config (c : config) : config :=
+  {|
+  l := l c;
+  m := m c;
+  e := true;
+  |}.
 
 (** Lifetime permissions **)
 

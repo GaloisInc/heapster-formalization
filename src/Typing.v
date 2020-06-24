@@ -93,12 +93,6 @@ Section ts.
   | Store : forall (p v : SByte) , MemoryE unit
   .
 
-  (* Definition h_memory : MemoryE ~> stateE config := *)
-  (*   fun R e => *)
-  (*     match e with *)
-  (*     | Store p v => Put *)
-  (*     @Get _. *)
-
   (* Definition E := (stateE config +' nondetE). *)
   Definition E := (MemoryE +' nondetE).
 
@@ -147,8 +141,18 @@ Section ts.
                            step (vis (Load (Ptr p)) k) c (k v) c
   | step_store : forall k c c' p v, write c p v = Some c' ->
                                step (vis (Store (Ptr p) v) k) c (k tt) c'
+  | step_load_fail : forall k c p, read c p = None ->
+                                step (vis (Load (Ptr p)) k) c (k (Byte 0)) (error_config c)
+  | step_store_fail : forall k c p v, write c p v = None ->
+                                    step (vis (Store (Ptr p) v) k) c (k tt) (error_config c)
   (* | step_get : forall k c, step (vis (Get _) k) c (k c) c *)
   (* | step_put : forall k c c', step (vis (Put _ c') k) c (k tt) c' *)
+  .
+
+  Inductive multistep : itree E R -> config -> itree E R -> config -> Prop :=
+  | multistep_refl : forall t c, multistep t c t c
+  | multistep_step : forall t c t' c' t'' c'',
+      multistep t c t' c' -> step t' c' t'' c'' -> multistep t c t'' c''
   .
 
   Lemma step_bind : forall (t1 t2 : itree E R) (c1 c2 : config) (k : R -> itree E R),
@@ -168,6 +172,10 @@ Section ts.
       apply (step_load (fun v => x <- k0 v;; k x) _ _ _ H0).
     - pose proof (bind_vis _ _ (subevent _ (Store (Ptr p) v)) k0 k) as bind_vis.
       apply bisimulation_is_eq in bind_vis. rewrite bind_vis. constructor; auto.
+    - pose proof (bind_vis _ _ (subevent _ (Load (Ptr p))) k0 k) as bind_vis.
+      apply bisimulation_is_eq in bind_vis. rewrite bind_vis. constructor; auto.
+    - pose proof (bind_vis _ _ (subevent _ (Store (Ptr p) v)) k0 k) as bind_vis.
+      apply bisimulation_is_eq in bind_vis. rewrite bind_vis. constructor 7; auto.
   Qed.
 
   Lemma step_ret_bind : forall (t1 t2 : itree E R) (c1 c2 : config) (r : R),
@@ -184,7 +192,7 @@ Section ts.
       exists t'', step (par t1 t') c t'' c /\ step t'' c (par t2 t') c'.
   Proof.
     inversion 1; subst;
-      try (rewrite rewrite_par; unfold par_match; simpl; repeat eexists; constructor; auto).
+      try solve [rewrite rewrite_par; unfold par_match; simpl; repeat eexists; constructor; auto].
     (* as above, load case needs its constructor manually applied... *)
     rewrite rewrite_par; unfold par_match; simpl; repeat eexists. constructor.
     apply (step_load (fun x => par (k x) t') _ _ _ H0).
@@ -194,7 +202,7 @@ Section ts.
       exists t'', step (par t' t1) c t'' c /\ step t'' c (par t' t2) c'.
   Proof.
     inversion 1; subst;
-      try (rewrite rewrite_par; unfold par_match; simpl; repeat eexists; constructor; auto).
+      try solve [rewrite rewrite_par; unfold par_match; simpl; repeat eexists; constructor; auto].
     rewrite rewrite_par; unfold par_match; simpl; repeat eexists. constructor 3.
     apply (step_load (fun x => par t' (k x)) _ _ _ H0).
   Qed.
@@ -219,6 +227,69 @@ Section ts.
     destruct H as [? [? [? ?]]]. split; eauto.
   Qed.
   Hint Resolve typing_perm_gen_mon : paco.
+
+  Definition no_error (c : config) :=
+    e c = false.
+  Definition no_upd_error (p : perm) :=
+    forall c c', upd p c c' -> no_error c -> no_error c'.
+
+  (* use instead of no_upd_error? *)
+  Program Definition no_error_perm : perm :=
+    {|
+    dom := fun _ => True;
+    view := fun c c' => no_error c -> no_error c';
+    upd := fun c c' => c = c';
+    |}.
+  Next Obligation.
+    constructor; auto.
+  Qed.
+  Next Obligation.
+    constructor; repeat intro; subst; auto.
+  Qed.
+
+  Lemma no_upd_error_sep_step p p' :
+    no_upd_error p ->
+    sep_step p p' ->
+    no_upd_error p'.
+  Proof.
+    repeat intro. eapply sep_step_upd in H1; eauto.
+  Qed.
+
+  Lemma typing_perm_multistep : forall p t,
+      typing_perm p t ->
+      forall c, dom p c ->
+           forall t' c', multistep t c t' c' ->
+                    exists p', dom p' c' /\ sep_step p p' /\ typing_perm p' t'.
+  Proof.
+    intros. induction H1.
+    - eexists; split; [| split]; eauto; reflexivity.
+    - destruct IHmultistep as (? & ? & ? & ?); eauto. pinversion H5.
+      edestruct H6 as (? & ? & ? & ? & ?); eauto. pclearbot.
+      exists x0; split; [| split]; eauto. etransitivity; eauto.
+  Qed.
+
+  Lemma typing_perm_soundness_step : forall p t,
+      no_upd_error p ->
+      typing_perm p t ->
+      forall c, dom p c -> no_error c ->
+           forall t' c', step t c t' c' -> no_error c'.
+  Proof.
+    intros. pinversion H0. specialize (H4 _ H1 _ _ H3). decompose [ex and] H4; clear H4.
+    eapply H; eauto.
+  Qed.
+
+  Lemma typing_perm_soundness : forall p t,
+      no_upd_error p ->
+      typing_perm p t ->
+      forall c, dom p c -> no_error c ->
+           forall t' c', multistep t c t' c' -> no_error c'.
+  Proof.
+    intros. generalize dependent p. induction H3; intros; auto.
+    destruct (typing_perm_multistep _ _ H1 _ H4 _ _ H3) as (? & ? & ? & ?).
+    specialize (IHmultistep H2 _ H0 H1 H4).
+    eapply no_upd_error_sep_step in H0; eauto.
+    eapply typing_perm_soundness_step; eauto.
+  Qed.
 
   Lemma typing_perm_lte : forall p q t, typing_perm p t -> p <= q -> typing_perm q t.
   Proof.
@@ -321,17 +392,31 @@ Section ts.
           (split; intuition; [| split; [| split]]; auto);
           left; pstep; constructor; intros ? [Hdom1' [Hdom2' Hsep']] ? ? Hstep;
             inversion Hstep; auto_inj_pair2; subst.
-        + destruct (H _ Hdom1' _ _ (step_load _ _ _ _ H5)) as [? [p [? [? ?]]]]. pclearbot.
+        + (* load success *)
+          destruct (H _ Hdom1' _ _ (step_load _ _ _ _ H5)) as [? [p [? [? ?]]]]. pclearbot.
           split; intuition.
           exists (p * p2). split; [| split]; auto.
           * apply sep_step_sep_conj_l; auto.
           * split; [| split]; auto.
+        + (* load error *)
+          destruct (H _ Hdom1' _ _ (step_load_fail _ _ _ H5)) as [? [p [? [? ?]]]]. pclearbot.
+          split; [constructor |]; auto.
+          exists (p * p2). split; [| split]; auto.
+          * apply sep_step_sep_conj_l; auto.
+          * split; [| split]; auto.
+            eapply dom_respects. apply Hsep'. apply H0. auto.
         + destruct (H _ Hdom1' _ _ (step_store _ _ _ _ _ H6)) as [? [p [? [? ?]]]]. pclearbot.
           split; [constructor |]; auto.
           exists (p * p2). split; [| split]; auto.
           * apply sep_step_sep_conj_l; auto.
           * split; [| split]; auto.
-          eapply dom_respects. apply Hsep'. apply H0. auto.
+            eapply dom_respects. apply Hsep'. apply H0. auto.
+        + destruct (H _ Hdom1' _ _ (step_store_fail _ _ _ _ H6)) as [? [p [? [? ?]]]]. pclearbot.
+          split; [constructor |]; auto.
+          exists (p * p2). split; [| split]; auto.
+          * apply sep_step_sep_conj_l; auto.
+          * split; [| split]; auto.
+            eapply dom_respects. apply Hsep'. apply H0. auto.
         + destruct (H _ Hdom1' _ _ (step_nondet_true _ _)) as [? [p [? [? ?]]]]. pclearbot.
           split; intuition.
           exists (p * p2). split; [| split]; auto.
@@ -365,7 +450,19 @@ Section ts.
           exists (p1 * p). split; [| split]; auto.
           * apply sep_step_sep_conj_r; auto.
           * split; [| split]; auto. symmetry. apply H2; auto.
+        + destruct (H _ Hdom2' _ _ (step_load_fail _ _ _ H5)) as [? [p [? [? ?]]]]. pclearbot.
+          split; [constructor |]; auto.
+          exists (p1 * p). split; [| split]; auto.
+          * apply sep_step_sep_conj_r; auto.
+          * split; [| split]; auto. 2: symmetry; apply H2; auto.
+            eapply dom_respects. apply Hsep'. apply H0. auto.
         + destruct (H _ Hdom2' _ _ (step_store _ _ _ _ _ H6)) as [? [p [? [? ?]]]]. pclearbot.
+          split; [constructor |]; auto.
+          exists (p1 * p). split; [| split]; auto.
+          * apply sep_step_sep_conj_r; auto.
+          * split; [| split]; auto. 2: symmetry; apply H2; auto.
+            eapply dom_respects. apply Hsep'. apply H0. auto.
+        + destruct (H _ Hdom2' _ _ (step_store_fail _ _ _ _ H6)) as [? [p [? [? ?]]]]. pclearbot.
           split; [constructor |]; auto.
           exists (p1 * p). split; [| split]; auto.
           * apply sep_step_sep_conj_r; auto.
@@ -381,7 +478,7 @@ Section ts.
           exists (p1 * p). split; [| split]; auto.
           * apply sep_step_sep_conj_r; auto.
           * split; [| split]; auto. symmetry. apply H2; auto.
-      }
+    }
   Qed.
 
   Lemma parallel : forall P1 P2 t1 t2,
@@ -404,7 +501,7 @@ Proof.
   split; intuition.
   eexists. split; [| split]; eauto; intuition.
   left. eapply paco2_mon_bot; eauto. apply typing_perm_ret.
-Qed.
+Abort.
 
 Lemma typing_load ptr P :
   typing P (trigger (Load (Ptr ptr))).
