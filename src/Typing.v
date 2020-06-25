@@ -230,29 +230,16 @@ Section ts.
 
   Definition no_error (c : config) :=
     e c = false.
-  Definition no_upd_error (p : perm) :=
-    forall c c', upd p c c' -> no_error c -> no_error c'.
 
   (* use instead of no_upd_error? *)
   Program Definition no_error_perm : perm :=
     {|
-    dom := fun _ => True;
+    dom := no_error;
     view := fun c c' => no_error c -> no_error c';
-    upd := fun c c' => c = c';
+    upd := eq;
     |}.
   Next Obligation.
     constructor; auto.
-  Qed.
-  Next Obligation.
-    constructor; repeat intro; subst; auto.
-  Qed.
-
-  Lemma no_upd_error_sep_step p p' :
-    no_upd_error p ->
-    sep_step p p' ->
-    no_upd_error p'.
-  Proof.
-    repeat intro. eapply sep_step_upd in H1; eauto.
   Qed.
 
   Lemma typing_perm_multistep : forall p t,
@@ -269,26 +256,27 @@ Section ts.
   Qed.
 
   Lemma typing_perm_soundness_step : forall p t,
-      no_upd_error p ->
       typing_perm p t ->
-      forall c, dom p c -> no_error c ->
+      forall c, dom (p * no_error_perm) c ->
            forall t' c', step t c t' c' -> no_error c'.
   Proof.
-    intros. pinversion H0. specialize (H4 _ H1 _ _ H3). decompose [ex and] H4; clear H4.
-    eapply H; eauto.
+    intros. destruct H0 as (? & ? & ?).
+    pinversion H. specialize (H4 _ H0 _ _ H1). decompose [ex and] H4; clear H4.
+    eapply H3; eauto.
   Qed.
 
   Lemma typing_perm_soundness : forall p t,
-      no_upd_error p ->
       typing_perm p t ->
-      forall c, dom p c -> no_error c ->
+      forall c, dom (p * no_error_perm) c ->
            forall t' c', multistep t c t' c' -> no_error c'.
   Proof.
-    intros. generalize dependent p. induction H3; intros; auto.
-    destruct (typing_perm_multistep _ _ H1 _ H4 _ _ H3) as (? & ? & ? & ?).
-    specialize (IHmultistep H2 _ H0 H1 H4).
-    eapply no_upd_error_sep_step in H0; eauto.
-    eapply typing_perm_soundness_step; eauto.
+    intros.
+    destruct H0 as (? & ? & ?).
+    generalize dependent p. induction H1; intros; auto.
+    destruct (typing_perm_multistep _ _ H0 _ H3 _ _ H1) as (? & ? & ? & ?).
+    specialize (IHmultistep H2 _ H0 H3 H4).
+    apply H6 in H4.
+    eapply typing_perm_soundness_step; eauto. split; [| split]; auto.
   Qed.
 
   Lemma typing_perm_lte : forall p q t, typing_perm p t -> p <= q -> typing_perm q t.
@@ -334,6 +322,22 @@ Section ts.
   (* Abort. *)
 
   Definition typing P t := forall p, p ∈ P -> typing_perm p t.
+
+  Lemma typing_soundness : forall P t,
+      typing P t -> forall p c, p ∈ (P ** singleton_Perms no_error_perm) ->
+                          dom p c ->
+                          forall t' c', multistep t c t' c' ->
+                                   no_error c'.
+  Proof.
+    intros. simpl in *.
+    destruct H0 as (? & ? & ? & ? & ?).
+    eapply typing_perm_soundness; eauto.
+    split; [| split]; auto.
+    - apply H4; auto.
+    - apply H3; apply H4; auto.
+    - eapply separate_antimonotone; eauto. destruct H4 as [? _ _]. apply (dom_inc0 _ H1).
+  Qed.
+
   Lemma type_lte : forall P Q t, typing P t -> P ⊑ Q -> typing Q t.
   Proof.
     repeat intro. specialize (H p (H0 _ H1)). auto.
