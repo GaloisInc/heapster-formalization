@@ -498,28 +498,29 @@ Section ts.
   Qed.
 End ts.
 
-Lemma typing_perm_load p ptr :
-  typing_perm p (trigger (Load (Ptr ptr))).
-Proof.
-  pcofix CIH. pstep. constructor. intros. inversion H0; auto_inj_pair2; subst.
-  split; intuition.
-  eexists. split; [| split]; eauto; intuition.
-  left. eapply paco2_mon_bot; eauto. apply typing_perm_ret.
-Abort.
+Definition fun_typing {R1} (P : Perms) (t : itree E R1) (P': R1 -> Perms) : Prop :=
+  forall R2 (k : R1 -> itree E R2), (forall (r : R1), typing (P' r) (k r)) -> typing P (bind t k).
 
-Lemma typing_load ptr P :
-  typing P (trigger (Load (Ptr ptr))).
+Lemma bind_ret_r' {E R} (t : itree E R) :
+  x <- t;; Ret x = t.
 Proof.
-  repeat intro. apply typing_perm_load.
+  apply bisimulation_is_eq. apply bind_ret_r.
 Qed.
 
-(* Load an addr from ptr, and store val into it *)
-Definition load_store ptr val : itree E _ :=
-  vis (Load (Ptr ptr)) (fun ptr' => vis (Store ptr' val) (fun _ => Ret tt)).
+Lemma bind_ret_l' {E R1 R2} (r : R1) (k : R1 -> itree E R2) :
+  x <- Ret r;; k x = k r.
+Proof.
+  apply bisimulation_is_eq. apply bind_ret_l.
+Qed.
 
-(* TODO GET THESE TO WORK *)
-Lemma bind_trigger' {R} X (e : E X) k :
-  x <- trigger e ;; k x = (Vis e (fun x => k x) : itree E R).
+Lemma bind_bind' {E R1 R2 R3} (t : itree E R1) (k1 : R1 -> itree E R2) (k2 : R2 -> itree E R3) :
+  x <- (x <- t;; k1 x);; k2 x = x1 <- t;; x2 <- k1 x1;; k2 x2.
+Proof.
+  apply bisimulation_is_eq. apply bind_bind.
+Qed.
+
+Lemma bind_trigger' {E' R} `{E' -< E} X (e : E' X) k :
+  x <- trigger e ;; k x = (vis e (fun x => k x) : itree E R).
 Proof.
   apply bisimulation_is_eq. apply bind_trigger.
 Qed.
@@ -530,18 +531,172 @@ Proof.
   apply bisimulation_is_eq. apply unfold_bind.
 Qed.
 
+Lemma read_perm_read_succeed p ptr c v v' :
+  read_perm ptr v <= p ->
+  dom p c ->
+  read c ptr = Some v' ->
+  v = v'.
+Proof.
+  intros. apply H in H0. simpl in H0. rewrite H0 in H1. inversion H1; auto.
+Qed.
+Lemma read_perm_read_fail p ptr c v :
+  read_perm ptr v <= p ->
+  dom p c ->
+  read c ptr = None ->
+  False.
+Proof.
+  intros. apply H in H0. simpl in H0. rewrite H0 in H1. inversion H1.
+Qed.
+Lemma write_perm_write_fail p ptr c v v' :
+  write_perm ptr v <= p ->
+  dom p c ->
+  write c ptr v' = None ->
+  False.
+Proof.
+  intros. apply H in H0. simpl in H0. destruct ptr as [b o].
+  unfold read, write in *. simpl in *.
+  destruct (m c b); try solve [inversion H1]; try solve [inversion H0]. destruct l.
+  destruct (PeanoNat.Nat.ltb o size); destruct (bytes o); simpl in *;
+    try solve [inversion H1]; try solve [inversion H0].
+Qed.
+
+Lemma fun_typing_consequence {R} P (t : itree E R) P' Q Q' :
+  fun_typing P t P' ->
+  P ⊑ Q ->
+  (forall r, Q' r ⊑ P' r) ->
+  fun_typing Q t Q'.
+Proof.
+  red. intros. eapply type_lte; eauto. apply H. intros. eapply type_lte; eauto.
+Qed.
+
+Lemma fun_typing_ret {R} (r : R) P : fun_typing (P r) (Ret r) P.
+Proof.
+  repeat intro. simpl. rewrite bind_ret_l'. apply H; auto.
+Qed.
+
+Lemma fun_typing_bind {R1 R2} (P1 : Perms) (t1 : itree E R1) (P2 : R1 -> Perms) (k : R1 -> itree E R2) (P3 : R2 -> Perms) :
+  fun_typing P1 t1 P2 ->
+  (forall r, fun_typing (P2 r) (k r) P3) ->
+  fun_typing P1 (bind t1 k) P3.
+Proof.
+  repeat intro. simpl. rewrite bind_bind'. apply H; auto.
+  repeat intro. apply H0; auto.
+Qed.
+
+Lemma fun_typing_pre {R} P (t : itree E R) P' :
+  fun_typing P t P' ->
+  typing P t.
+Proof.
+  intros. rewrite <- bind_ret_r'. apply H. intros. apply type_ret.
+Qed.
+
+Lemma fun_typing_load ptr P : fun_typing
+                                (read_Perms ptr P)
+                                (trigger (Load (Ptr ptr)))
+                                P.
+Proof.
+  repeat intro. pstep. constructor. intros.
+  destruct H0 as (? & (v & ?) & ?); subst.
+  destruct H3 as (pr & p' & (? & ? & ?)).
+
+  simpl in *. rewrite bind_trigger' in H2.
+  inversion H2; auto_inj_pair2; subst; clear H2.
+  - eapply read_perm_read_succeed in H10; eauto. subst.
+    2: { eapply dom_inc; eauto. etransitivity; eauto. apply lte_l_sep_conj_perm. }
+    split; intuition. exists p'. split; [| split].
+    + left. apply H; auto.
+    + apply sep_step_lte'. etransitivity. apply lte_r_sep_conj_perm. eauto.
+    + eapply dom_inc; eauto. etransitivity; eauto. apply lte_r_sep_conj_perm.
+  - exfalso. eapply read_perm_read_fail; [| eauto | eauto].
+    etransitivity. apply H0. etransitivity; eauto. apply lte_l_sep_conj_perm.
+Qed.
+
+Lemma fun_typing_store ptr val P P' : fun_typing
+                                        (write_Perms ptr P ** (P' val))
+                                        (trigger (Store (Ptr ptr) val))
+                                        (fun _ => write_Perms ptr P'). (* P? *)
+Proof.
+  repeat intro. pstep. constructor. intros.
+  destruct H0 as (? & p' & (? & (v & ?) & ?) & ? & ?). subst.
+  destruct H3 as (pw & ? & ? & ? & ?). simpl in *.
+  rewrite bind_trigger' in H2.
+  inversion H2; auto_inj_pair2; subst; clear H2.
+  - split. {
+      apply (upd_inc (write_perm ptr v)).
+      - etransitivity; eauto. etransitivity; eauto.
+        etransitivity. 2: apply lte_l_sep_conj_perm.
+        etransitivity; eauto. apply lte_l_sep_conj_perm.
+      - split; [eapply write_success_other_ptr |
+                split; [eapply write_success_allocation | eapply write_success_others]]; eauto.
+    }
+    exists (write_perm ptr val * p'). split; [| split].
+    + left. apply H. simpl. eexists. split; eauto.
+      simpl. exists (write_perm ptr val), p'. split; [| split]; eauto; intuition.
+    + repeat intro. symmetry in H2. eapply separate_antimonotone in H2; eauto.
+      eapply separate_antimonotone in H2.
+      2: { apply sep_conj_perm_monotone. 2: reflexivity.
+           etransitivity. 2: eauto. etransitivity. 2: apply lte_l_sep_conj_perm. eauto. }
+      constructor; apply H2.
+    + assert (write_perm ptr val ⊥ p'). {
+        eapply dom_inc in H1; eauto. destruct H1 as (_ & _ & ?).
+        symmetry in H1. eapply separate_antimonotone in H1; eauto.
+        eapply separate_antimonotone in H1; eauto. 2: apply lte_l_sep_conj_perm.
+        eapply separate_antimonotone in H1; eauto. constructor; apply H1.
+      }
+      split; [| split]; auto.
+      * eapply write_read; eauto.
+      * respects. 2: { eapply dom_inc. apply lte_r_sep_conj_perm. eapply dom_inc; eauto. }
+        apply H2. simpl.
+        split; [eapply write_success_other_ptr |
+                split; [eapply write_success_allocation | eapply write_success_others]]; eauto.
+  - exfalso. eapply write_perm_write_fail. 2, 3: eauto. etransitivity; eauto.
+    etransitivity. apply lte_l_sep_conj_perm. etransitivity; eauto.
+    etransitivity; eauto. apply lte_l_sep_conj_perm.
+Qed.
+
+Lemma fun_typing_frame {R} P (t : itree E R) P' Q :
+  fun_typing P t P' ->
+  fun_typing (P ** Q) t (fun x => P' x ** Q).
+Proof.
+  repeat intro. red in H0. red in H.
+  pcofix CIH. pstep. constructor. intros. simpl in H3.
+
+Qed.
+
+Lemma typing_perm_load p ptr :
+  typing_perm p (trigger (Load (Ptr ptr))).
+Proof.
+  pcofix CIH. pstep. constructor. intros. inversion H0; auto_inj_pair2; subst.
+  - split; intuition.
+    eexists. split; [| split]; eauto; intuition.
+    left. eapply paco2_mon_bot; eauto. apply typing_perm_ret.
+  -
+Abort.
+
+Lemma typing_load ptr P :
+  typing P (trigger (Load (Ptr ptr))).
+Proof.
+  repeat intro. (* apply typing_perm_load. *)
+Abort.
+
+(* Load an addr from ptr, and store val into it *)
+Definition load_store ptr val : itree E _ :=
+  vis (Load (Ptr ptr)) (fun ptr' => vis (Store ptr' val) (fun _ => Ret tt)).
+
 Lemma typing_perm_store ptr v1 v2 :
   typing_perm (write_perm ptr v1) (vis (Store (Ptr ptr) v2) (fun _ => Ret tt)).
 Proof.
   pstep. constructor. intros. inversion H0; auto_inj_pair2; subst. split.
-  - split; intros; simpl.
+  - split; [| split]; intros; simpl.
     + eapply write_success_other_ptr; eauto.
     + eapply write_success_allocation; eauto.
+    + admit.
   - exists (write_perm ptr v2); split; [| split].
     + left. apply typing_perm_ret.
     + repeat intro. destruct H1. constructor; auto.
     + simpl. eapply write_success_ptr; eauto.
-Qed.
+  - simpl in H. admit.
+Admitted.
 
 Lemma typing_perm_load_store ptr ptr' v v' :
   typing_perm (read_perm ptr (Ptr ptr') * write_perm ptr' v) (load_store ptr v').

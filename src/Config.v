@@ -257,17 +257,28 @@ Proof.
     rewrite H. reflexivity.
 Qed.
 
-(* TODO clean up these proofs (ssreflect?) *)
-(* Lemma write_read : forall c ptr val, *)
-(*     (exists c', write c ptr val = Some c') -> *)
-(*     (* TODO notation not working? *) *)
-(*     bind (write c ptr val) (fun c' => read c' ptr) = Some val. *)
-(* Proof. *)
-(*   intros. destruct H. simpl. rewrite H. unfold write in H. unfold read. destruct ptr. simpl in *. *)
-(*   destruct (m c n); try solve [inversion H]. destruct l0. *)
-(*   destruct (n0 <? size) eqn:?; inversion H. simpl. rewrite Nat.eqb_refl. *)
-(*   rewrite Heqb. rewrite Nat.eqb_refl. reflexivity. *)
-(* Qed. *)
+Lemma write_success_others c c' ptr val :
+  write c ptr val = Some c' ->
+  l c = l c' /\ e c = e c'.
+Proof.
+  destruct ptr as [b o].
+  unfold write. simpl. intros.
+  destruct (m c b); try solve [inversion H].
+  destruct l0. destruct ((o <? size) && is_some (bytes o))%bool; try solve [inversion H].
+  inversion H; subst; simpl. split; auto.
+Qed.
+
+Lemma write_read : forall c c' ptr val,
+    write c ptr val = Some c' ->
+    read c' ptr = Some val.
+Proof.
+  intros. destruct ptr as [b o].
+  unfold write, read in *. simpl in *.
+  destruct (m c b); try solve [inversion H]. destruct l0.
+  destruct (o <? size) eqn:?; try solve [inversion H].
+  destruct (bytes o); try solve [inversion H]. simpl in *. inversion H; simpl.
+  repeat rewrite Nat.eqb_refl. rewrite Heqb0. reflexivity.
+Qed.
 
 (* Lemma read_write : forall c ptr, *)
 (*     (exists val, read c ptr = Some val) -> *)
@@ -568,16 +579,19 @@ Program Definition write_perm (ptr : addr) (v : SByte) : perm :=
   view x y := read x ptr = read y ptr;
   (* only the pointer we have write permission to may change *)
   upd x y := (forall ptr', ptr <> ptr' -> read x ptr' = read y ptr') /\
-             alloc_invariant x y ptr;
+             alloc_invariant x y ptr /\
+             l x = l y /\
+             e x = e y;
   |}.
 Next Obligation.
   constructor; repeat intro; auto. etransitivity; eauto.
 Qed.
 Next Obligation.
   constructor; split; repeat intro; try solve [intuition].
-  - reflexivity.
+  - split; [| split]; reflexivity.
   - destruct H, H0. etransitivity. apply H; auto. auto.
-  - destruct H, H0. etransitivity. apply H1. auto.
+  - destruct H as (? & ? & ? & ?), H0 as (? & ? & ? & ?).
+    split; [| split]; etransitivity; eauto.
 Qed.
 
 Definition read_Perms (ptr : addr) (P : SByte -> Perms) : Perms :=
@@ -589,7 +603,7 @@ Definition write_Perms (ptr : addr) (P : SByte -> Perms) : Perms :=
 Lemma read_lte_write : forall ptr v, read_perm ptr v <= write_perm ptr v.
 Proof.
   constructor; simpl; repeat intro; subst; auto.
-  split; intros; reflexivity.
+  split; [| split; [| split]]; intros; reflexivity.
 Qed.
 
 Lemma read_write_separate_neq_ptr : forall ptr ptr' v v',
