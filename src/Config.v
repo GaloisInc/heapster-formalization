@@ -28,6 +28,12 @@ Module Config <: Permissions.Config.
   Definition t := config.
 End Config.
 
+Definition start_config :=
+  {| l := nil;
+     m := fun _ => None;
+     e := false;
+  |}.
+
 Module Permissions' := Permissions Config.
 Export Config.
 Export Permissions'.
