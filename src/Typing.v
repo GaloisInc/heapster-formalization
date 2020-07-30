@@ -34,6 +34,48 @@ Import ITreeNotations.
 (* Import MonadNotation. *)
 Open Scope monad_scope.
 
+Lemma bind_ret_r' {E R} (t : itree E R) :
+  x <- t;; Ret x = t.
+Proof.
+  apply bisimulation_is_eq. apply bind_ret_r.
+Qed.
+
+Lemma bind_ret_l' {E R1 R2} (r : R1) (k : R1 -> itree E R2) :
+  x <- Ret r;; k x = k r.
+Proof.
+  apply bisimulation_is_eq. apply bind_ret_l.
+Qed.
+
+Lemma bind_tau' {E R1 R2} (t : itree E R1) (k : R1 -> itree E R2) :
+  x <- Tau t;; k x = Tau (x <- t;; k x).
+Proof.
+  apply bisimulation_is_eq. apply bind_tau.
+Qed.
+
+Lemma bind_vis' {E R1 R2 R3} (e : E R1) (k1 : R1 -> itree E R2) (k2 : R2 -> itree E R3) :
+  x <- Vis e k1;; k2 x = Vis e (fun x => x' <- k1 x;; k2 x').
+Proof.
+  apply bisimulation_is_eq. apply bind_vis.
+Qed.
+
+Lemma bind_bind' {E R1 R2 R3} (t : itree E R1) (k1 : R1 -> itree E R2) (k2 : R2 -> itree E R3) :
+  x <- (x <- t;; k1 x);; k2 x = x1 <- t;; x2 <- k1 x1;; k2 x2.
+Proof.
+  apply bisimulation_is_eq. apply bind_bind.
+Qed.
+
+Lemma bind_trigger' {E E' R} `{E' -< E} X (e : E' X) k :
+  x <- trigger e ;; k x = (vis e (fun x => k x) : itree E R).
+Proof.
+  apply bisimulation_is_eq. apply bind_trigger.
+Qed.
+
+Lemma unfold_bind' {E R S} (t : itree E R) (k : R -> itree E S) :
+    x <- t;; k x = ITree._bind k (fun t0 : itree E R => x <- t0;; k x) (observe t).
+Proof.
+  apply bisimulation_is_eq. apply unfold_bind.
+Qed.
+
 Definition sep_step p q : Prop :=
   forall r, p ⊥ r -> q ⊥ r.
 
@@ -162,23 +204,11 @@ Section ts.
       step t1 c1 t2 c2 ->
       step (t1 >>= k) c1 (t2 >>= k) c2.
   Proof.
-    intros. inversion H; subst.
-    - pose proof (bind_tau _ t2 k) as bind_tau.
-      apply bisimulation_is_eq in bind_tau. rewrite bind_tau. constructor.
-    - pose proof (bind_vis _ _ (subevent _ Or) k0 k) as bind_vis.
-      apply bisimulation_is_eq in bind_vis. rewrite bind_vis. constructor.
-    - pose proof (bind_vis _ _ (subevent _ Or) k0 k) as bind_vis.
-      apply bisimulation_is_eq in bind_vis. rewrite bind_vis. constructor.
-    - pose proof (bind_vis _ _ (subevent _ (Load (Ptr p))) k0 k) as bind_vis.
-      apply bisimulation_is_eq in bind_vis. rewrite bind_vis.
+    intros. inversion H; subst; try solve [rewrite bind_vis'; constructor; auto].
+    - rewrite bind_tau'. constructor.
+    - rewrite bind_vis'.
       (* constructor doesn't work here for some reason *)
       apply (step_load (fun v => x <- k0 v;; k x) _ _ _ H0).
-    - pose proof (bind_vis _ _ (subevent _ (Store (Ptr p) v)) k0 k) as bind_vis.
-      apply bisimulation_is_eq in bind_vis. rewrite bind_vis. constructor; auto.
-    - pose proof (bind_vis _ _ (subevent _ (Load (Ptr p))) k0 k) as bind_vis.
-      apply bisimulation_is_eq in bind_vis. rewrite bind_vis. constructor; auto.
-    - pose proof (bind_vis _ _ (subevent _ (Store (Ptr p) v)) k0 k) as bind_vis.
-      apply bisimulation_is_eq in bind_vis. rewrite bind_vis. constructor 7; auto.
   Qed.
 
   Lemma step_ret_bind : forall (t1 t2 : itree E R) (c1 c2 : config) (r : R),
@@ -210,8 +240,7 @@ Section ts.
     apply (step_load (fun x => par t' (k x)) _ _ _ H0).
   Qed.
 
-  (* todo: q : R -> perm *)
-  Variant typing_perm_gen typing (p : perm) (q : perm) : itree E R -> Prop :=
+  Variant typing_perm_gen typing (p : perm) (q : R -> perm) : itree E R -> Prop :=
   | cond : forall t, (exists c t' c', step t c t' c') /\ (* we can step *)
                 (forall c, dom p c -> (* and everything we can step to... *)
                       forall t' c',
@@ -222,7 +251,7 @@ Section ts.
                           (* we step to machines that are well-typed by some other perm that maintains separation *)
                           (exists p', typing p' q t' /\ sep_step p p' /\ dom p' c'))) ->
                 typing_perm_gen typing p q t
-  | ret : forall r, q <= p -> typing_perm_gen typing p q (Ret r).
+  | ret : forall r, q r <= p -> typing_perm_gen typing p q (Ret r).
 
   Definition typing_perm := paco3 typing_perm_gen bot3.
 
@@ -304,6 +333,21 @@ Section ts.
     - constructor 2. etransitivity; eauto.
   Qed.
 
+  Lemma typing_perm_lte' : forall p q q' t,
+      typing_perm p q t ->
+      (forall r, q' r <= q r) ->
+      typing_perm p q' t.
+  Proof.
+    pcofix CIH. intros. pstep. pinversion H0; subst.
+    - constructor. destruct H as ((? & ? & ? & ?) & ?).
+      split; eauto. intros.
+      edestruct H2; eauto. split; eauto.
+      destruct H6 as [p'' [? [? ?]]].
+      exists p''. split; [| split]; auto.
+      pclearbot. right. eapply CIH; eauto.
+    - constructor 2. etransitivity; eauto.
+  Qed.
+
   (* Lemma typing_perm_ret : forall p q r, typing_perm p q (Ret r). *)
   (* Proof. *)
   (*   pstep. constructor 2. intros. inversion H0. *)
@@ -339,34 +383,73 @@ Section ts.
   (*     + admit. *)
   (* Abort. *)
 
-  Lemma typing_perm_bind : forall p q r t1 t2,
-      typing_perm p q t1 ->
-      typing_perm q r t2 ->
-      typing_perm p r (t1 ;; t2).
+  Lemma typing_perm_bind : forall p q r t k,
+      typing_perm p q t ->
+      (forall r', typing_perm (q r') r (k r')) ->
+      typing_perm p r (x <- t;; k x).
   Proof.
     pcofix CIH. intros. pinversion H0; subst.
     - destruct H as ((? & ? & ? & ?) & ?). pstep. constructor. split; auto.
-      + do 3 eexists. apply step_bind; eauto.
-      + intros.
-  Qed.
+      do 3 eexists; apply step_bind; eauto.
+      intros. inversion H4; subst.
+      + assert (exists t', t0 = (Tau t')) by admit. destruct H5; subst.
+        rewrite bind_tau' in H6. inversion H6; subst.
+        destruct (H2 _ H3 _ _ (step_tau _ _)) as (? & p' & ? & ? & ?). pclearbot.
+        split; auto.
+        exists p'. split; [| split]; auto. right. eapply CIH; eauto.
+      + assert (exists k', t0 = Vis (subevent bool Or) k') by admit. destruct H5; subst.
+        rewrite bind_vis' in H6. inversion H6; auto_inj_pair2; subst.
+        destruct (H2 _ H3 _ _ (step_nondet_true _ _)) as (? & p' & ? & ? & ?). pclearbot.
+        split; auto.
+        exists p'. split; [| split]; auto. right. eapply CIH; eauto.
+      + assert (exists k', t0 = Vis (subevent bool Or) k') by admit. destruct H5; subst.
+        rewrite bind_vis' in H6. inversion H6; auto_inj_pair2; subst.
+        destruct (H2 _ H3 _ _ (step_nondet_false _ _)) as (? & p' & ? & ? & ?). pclearbot.
+        split; auto.
+        exists p'. split; [| split]; auto. right. eapply CIH; eauto.
+      + assert (exists k', t0 = Vis (subevent SByte (Load (Ptr p0))) k') by admit. destruct H7; subst.
+        rewrite bind_vis' in H5. inversion H5; auto_inj_pair2; subst.
+        destruct (H2 _ H3 _ _ (step_load _ _ _ _ H6)) as (? & p' & ? & ? & ?). pclearbot.
+        split; auto.
+        exists p'. split; [| split]; auto. right. eapply CIH; eauto.
+      + assert (exists k', t0 = Vis (subevent unit (Store (Ptr p0) v)) k') by admit. destruct H7; subst.
+        rewrite bind_vis' in H5. inversion H5; auto_inj_pair2; subst.
+        destruct (H2 _ H3 _ _ (step_store _ _ _ _ _ H6)) as (? & p' & ? & ? & ?). pclearbot.
+        split; auto.
+        exists p'. split; [| split]; auto. right. eapply CIH; eauto.
+      + assert (exists k', t0 = Vis (subevent SByte (Load (Ptr p0))) k') by admit. destruct H7; subst.
+        rewrite bind_vis' in H5. inversion H5; auto_inj_pair2; subst.
+        destruct (H2 _ H3 _ _ (step_load_fail _ _ _ H6)) as (? & p' & ? & ? & ?). pclearbot.
+        split; auto.
+        exists p'. split; [| split]; auto. right. eapply CIH; eauto.
+      + assert (exists k', t0 = Vis (subevent unit (Store (Ptr p0) v)) k') by admit. destruct H7; subst.
+        rewrite bind_vis' in H5. inversion H5; auto_inj_pair2; subst.
+        destruct (H2 _ H3 _ _ (step_store_fail _ _ _ _ H6)) as (? & p' & ? & ? & ?). pclearbot.
+        split; auto.
+        exists p'. split; [| split]; auto. right. eapply CIH; eauto.
+    - rewrite bind_ret_l'. eapply paco3_mon_bot; eauto. eapply typing_perm_lte; eauto.
+  Admitted.
 
-  Lemma typing_perm_frame : forall p q r t, typing_perm p q t -> typing_perm (p * r) (q * r) t.
+  Lemma typing_perm_frame : forall p q r t,
+      typing_perm p q t ->
+      typing_perm (p * r) (fun r' => q r' * r) t.
   Proof.
     pcofix CIH. intros. pinversion H0; subst.
-    - destruct H as ((? & ? & ? & ?) & ?). pstep. constructor 1. split; [do 3 eexists; eauto |].
+    - destruct H as ((? & ? & ? & ?) & ?). pstep. constructor. split; [do 3 eexists; eauto |].
       intros. edestruct H1; eauto; [apply H2 |]. clear H1.
       split; [constructor; auto |]. destruct H5 as (p' & ? & ? & ?).
-      exists (p' * r0). split; [| split]; auto.
-      + right. apply CIH. pclearbot. auto.
+      pclearbot. exists (p' * r0). split; [| split]; auto.
       + apply sep_step_sep_conj_l; auto. apply H2.
       + split; [| split]; auto.
         * destruct H2 as (? & ? & ?). apply H8 in H4. eapply dom_respects; eauto.
         * apply H5. apply H2.
-    - pstep. constructor 2. apply sep_conj_perm_monotone; intuition.
+    - pstep. constructor 2. intros. apply sep_conj_perm_monotone; intuition.
   Qed.
 
   Lemma parallel_perm : forall p1 p2 q1 q2 t1 t2,
-      typing_perm p1 q1 t1 -> typing_perm p2 q2 t2 -> typing_perm (p1 * p2) (q1 * q2) (par t1 t2).
+      typing_perm p1 q1 t1 ->
+      typing_perm p2 q2 t2 ->
+      typing_perm (p1 * p2) (fun r => q1 r * q2 r) (par t1 t2).
   Proof.
     pcofix CIH. intros p1 p2 q1 q2 t1 t2 Ht1 Ht2.
     pstep. econstructor.
@@ -520,9 +603,9 @@ Section ts.
                    respects. apply Hsep. auto.
                }
           * split; [| split]; auto.
-      - simpl. exists (q1 * p2). split; [| split].
-        + left. replace (q1 * p2) with (p2 * q1). 2: admit.
-           replace (q1 * q2) with (q2 * q1). 2: admit.
+      - simpl. exists (q1 r0 * p2). split; [| split].
+        + left. replace (q1 r0 * p2) with (p2 * q1 r0). 2: admit.
+          replace (fun r1 => q1 r1 * q2 r1) with (fun r1 => q2 r1 * q1 r1). 2: admit.
           eapply paco3_mon_bot; eauto.
           apply typing_perm_frame. auto.
         + apply sep_step_sep_conj_l. auto.
@@ -768,35 +851,6 @@ End ts.
 Definition fun_typing {R1} (P : Perms) (t : itree E R1) (P': R1 -> Perms) : Prop :=
   forall R2 (k : R1 -> itree E R2), (forall (r : R1), typing (P' r) (k r)) -> typing P (bind t k).
 
-Lemma bind_ret_r' {E R} (t : itree E R) :
-  x <- t;; Ret x = t.
-Proof.
-  apply bisimulation_is_eq. apply bind_ret_r.
-Qed.
-
-Lemma bind_ret_l' {E R1 R2} (r : R1) (k : R1 -> itree E R2) :
-  x <- Ret r;; k x = k r.
-Proof.
-  apply bisimulation_is_eq. apply bind_ret_l.
-Qed.
-
-Lemma bind_bind' {E R1 R2 R3} (t : itree E R1) (k1 : R1 -> itree E R2) (k2 : R2 -> itree E R3) :
-  x <- (x <- t;; k1 x);; k2 x = x1 <- t;; x2 <- k1 x1;; k2 x2.
-Proof.
-  apply bisimulation_is_eq. apply bind_bind.
-Qed.
-
-Lemma bind_trigger' {E' R} `{E' -< E} X (e : E' X) k :
-  x <- trigger e ;; k x = (vis e (fun x => k x) : itree E R).
-Proof.
-  apply bisimulation_is_eq. apply bind_trigger.
-Qed.
-
-Lemma unfold_bind' {R S : Type} (t : itree E R) (k : R -> itree E S) :
-    x <- t;; k x = ITree._bind k (fun t0 : itree E R => x <- t0;; k x) (observe t).
-Proof.
-  apply bisimulation_is_eq. apply unfold_bind.
-Qed.
 
 Lemma read_perm_read_succeed p ptr c v v' :
   read_perm ptr v <= p ->
