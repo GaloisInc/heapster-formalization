@@ -144,27 +144,29 @@ Section ts.
   Context {R : Type}.
   (* Definition R := SByte. *)
 
-  Definition par_match
-             (par : itree E R -> itree E R -> itree E R)
-             (t1 t2 : itree E R)
-    : itree E R :=
+  Definition par_match {R1 R2}
+             (par : itree E R1 -> itree E R2 -> itree E (R1 * R2))
+             (t1 : itree E R1)
+             (t2 : itree E R2)
+    : itree E (R1 * R2) :=
     vis Or (fun b : bool =>
               if b then
                 match (observe t1) with
-                | RetF _ => t2
+                | RetF r1 => fmap (fun r2 => (r1, r2)) t2
                 | TauF t => Tau (par t t2)
                 | VisF o k => vis o (fun x => par (k x) t2)
                 end
               else
                 match (observe t2) with
-                | RetF _ => t1
+                | RetF r2 => fmap (fun r1 => (r1, r2)) t1
                 | TauF t => Tau (par t1 t)
                 | VisF o k => vis o (fun x => par t1 (k x))
                 end).
 
-  CoFixpoint par (t1 t2 : itree E R) := par_match par t1 t2.
+  CoFixpoint par {R1 R2} (t1 : itree E R1) (t2 : itree E R2) := par_match par t1 t2.
 
-  Lemma rewrite_par : forall t1 t2, par t1 t2 = par_match par t1 t2.
+  Lemma rewrite_par : forall {R1 R2} (t1 : itree E R1) (t2 : itree E R2),
+      par t1 t2 = par_match par t1 t2.
   Proof.
     intros. apply bisimulation_is_eq. revert t1 t2.
     ginit. gcofix CIH. intros. gstep. unfold par. constructor. red. intros.
@@ -220,25 +222,25 @@ Section ts.
   Qed.
 
   (* to handle the nondeterminism, par needs double the amount of steps *)
-  Lemma par_step_left : forall (t1 t2 t' : itree E R) (c c' : config),
-      step t1 c t2 c' ->
-      exists t'', step (par t1 t') c t'' c /\ step t'' c (par t2 t') c'.
-  Proof.
-    inversion 1; subst;
-      try solve [rewrite rewrite_par; unfold par_match; simpl; repeat eexists; constructor; auto].
-    (* as above, load case needs its constructor manually applied... *)
-    rewrite rewrite_par; unfold par_match; simpl; repeat eexists. constructor.
-    apply (step_load (fun x => par (k x) t') _ _ _ H0).
-  Qed.
-  Lemma par_step_right : forall (t1 t2 t' : itree E R) (c c' : config),
-      step t1 c t2 c' ->
-      exists t'', step (par t' t1) c t'' c /\ step t'' c (par t' t2) c'.
-  Proof.
-    inversion 1; subst;
-      try solve [rewrite rewrite_par; unfold par_match; simpl; repeat eexists; constructor; auto].
-    rewrite rewrite_par; unfold par_match; simpl; repeat eexists. constructor 3.
-    apply (step_load (fun x => par t' (k x)) _ _ _ H0).
-  Qed.
+  (* Lemma par_step_left : forall (t1 t2 t' : itree E R) (c c' : config), *)
+  (*     step t1 c t2 c' -> *)
+  (*     exists t'', step (par t1 t') c t'' c /\ step t'' c (par t2 t') c'. *)
+  (* Proof. *)
+  (*   inversion 1; subst; *)
+  (*     try solve [rewrite rewrite_par; unfold par_match; simpl; repeat eexists; constructor; auto]. *)
+  (*   (* as above, load case needs its constructor manually applied... *) *)
+  (*   rewrite rewrite_par; unfold par_match; simpl; repeat eexists. constructor. *)
+  (*   apply (step_load (fun x => par (k x) t') _ _ _ H0). *)
+  (* Qed. *)
+  (* Lemma par_step_right : forall (t1 t2 t' : itree E R) (c c' : config), *)
+  (*     step t1 c t2 c' -> *)
+  (*     exists t'', step (par t' t1) c t'' c /\ step t'' c (par t' t2) c'. *)
+  (* Proof. *)
+  (*   inversion 1; subst; *)
+  (*     try solve [rewrite rewrite_par; unfold par_match; simpl; repeat eexists; constructor; auto]. *)
+  (*   rewrite rewrite_par; unfold par_match; simpl; repeat eexists. constructor 3. *)
+  (*   apply (step_load (fun x => par t' (k x)) _ _ _ H0). *)
+  (* Qed. *)
 
   Variant typing_perm_gen typing (p : perm) (q : R -> perm) : itree E R -> Prop :=
   | cond : forall t, (exists c t' c', step t c t' c') /\ (* we can step *)
@@ -446,18 +448,79 @@ Section ts.
     - pstep. constructor 2. intros. apply sep_conj_perm_monotone; intuition.
   Qed.
 
-  Lemma parallel_perm : forall p1 p2 q1 q2 t1 t2,
+End ts.
+
+Hint Resolve typing_perm_gen_mon : paco.
+
+Lemma step_fmap {R1 R2} : forall (t t' : itree E R1) c c' (f : R1 -> R2),
+                      step t c t' c' ->
+                      step (fmap f t) c (fmap f t') c'.
+Proof.
+  intros. inversion H; subst; simpl; unfold ITree.map;
+            try solve [rewrite bind_vis'; constructor; auto].
+  - rewrite bind_tau'. constructor; auto.
+  - rewrite bind_vis'.
+    (* again have to specify k manually? *)
+    apply (step_load (fun x => x' <- k x;; Ret (f x'))); auto.
+Qed.
+
+Lemma step_fmap_inv {R1 R2} : forall (t : itree E R2) (t' : itree E (R1 * R2)) c c' (r1 : R1),
+    step (fmap (fun r2 : R2 => (r1, r2)) t) c t' c' ->
+    step t c (fmap (fun '(_, r2) => r2) t') c'.
+Proof.
+  simpl. intros. inversion H; subst.
+Admitted.
+
+Lemma step_fmap_inv' {R1 R2} : forall (t : itree E R1) (t' : itree E (R1 * R2)) c c' (r2 : R2),
+    step (fmap (fun r1 : R1 => (r1, r2)) t) c t' c' ->
+    step t c (fmap (fun '(r1, _) => r1) t') c'.
+Proof.
+  simpl. intros. inversion H; subst.
+Admitted.
+
+Lemma typing_perm_frame' {R1 R2 : Type} : forall p q o (r2 : R2) (t : itree E R1),
+    typing_perm p q t ->
+    typing_perm (p * o r2) (fun '(r1, r2) => q r1 * o r2) (fmap (fun r1 => (r1, r2)) t).
+Proof.
+  pcofix CIH. intros. pinversion H0; subst.
+  - destruct H as ((? & ? & ? & ?) & ?). pstep. constructor.
+    split. {
+      simpl. do 3 eexists. eapply step_fmap; eauto.
+    }
+    intros. pose proof (step_fmap_inv' _ _ _ _ _ H3).
+    edestruct H1; eauto. apply H2.
+    split; [constructor; auto |]. destruct H6 as (p' & ? & ? & ?).
+    pclearbot. exists (p' * o r2). split; [| split]; auto.
+    + right. specialize (CIH _ _ o r2 _ H6).
+      assert (t' = (fmap (fun r1 : R1 => (r1, r2)) (fmap (fun '(r1, _) => r1) t'))). (* not true? *)
+      {
+        simpl. pose proof @map_map. eapply bisimulation_is_eq in H9.
+        rewrite H9. admit.
+      }
+      rewrite H9. apply CIH.
+    + apply sep_step_sep_conj_l; auto. apply H2.
+    + split; [| split]; auto.
+      * destruct H2 as (? & ? & ?).
+        eapply dom_respects; eauto. apply H10; auto.
+      * apply H7. apply H2.
+  - simpl. pstep. unfold ITree.map. rewrite bind_ret_l'.
+    constructor 2. apply sep_conj_perm_monotone; intuition.
+Qed.
+Admitted.
+
+  Lemma parallel_perm : forall {R1 R2} p1 p2 q1 q2 (t1 : itree E R1) (t2 : itree E R2),
       typing_perm p1 q1 t1 ->
       typing_perm p2 q2 t2 ->
-      typing_perm (p1 * p2) (fun r => q1 r * q2 r) (par t1 t2).
+      typing_perm (p1 * p2) (fun '(r1, r2) => q1 r1 * q2 r2) (par t1 t2).
   Proof.
+    intros R1 R2.
     pcofix CIH. intros p1 p2 q1 q2 t1 t2 Ht1 Ht2.
     pstep. econstructor.
     rewrite rewrite_par. unfold par_match. split.
     simpl. exists start_config. eexists. exists start_config. constructor.
     intros c (Hdom1 & Hdom2 & Hsep) t' c' Hstep.
     inversion Hstep; auto_inj_pair2; subst; clear Hstep; split; try reflexivity.
-    { pinversion Ht1; subst.
+    { pinversion Ht1; subst. 3: { apply typing_perm_gen_mon. } (* TODO: look into this monotone hint db issue *)
       - destruct H as ((? & ? & ? & ?) & ?).
         inversion H; subst; clear H.
         + (* tau *) clear x1. simpl.
@@ -604,10 +667,11 @@ Section ts.
                }
           * split; [| split]; auto.
       - simpl. exists (q1 r0 * p2). split; [| split].
-        + left. replace (q1 r0 * p2) with (p2 * q1 r0). 2: admit.
-          replace (fun r1 => q1 r1 * q2 r1) with (fun r1 => q2 r1 * q1 r1). 2: admit.
+        + left.
+          (* replace (q1 r0 * p2) with (p2 * q1 r0). 2: admit. *)
+          (* replace (fun r1 => q1 r1 * q2 r1) with (fun r1 => q2 r1 * q1 r1). 2: admit. *)
           eapply paco3_mon_bot; eauto.
-          apply typing_perm_frame. auto.
+          apply typing_perm_frame'; auto.
         + apply sep_step_sep_conj_l. auto.
           apply sep_step_lte'; auto.
         + split; [| split]; auto.
@@ -765,10 +829,10 @@ Section ts.
                    symmetry. apply H3; auto.
                }
           * split; [| split]; auto.
-      - simpl. exists (p1 * q2). split; [| split].
+      - simpl. exists (p1 * q2 r0). split; [| split].
         + left.
           eapply paco3_mon_bot; eauto.
-          apply typing_perm_frame. auto.
+          apply typing_perm_frame'. auto.
         + apply sep_step_sep_conj_r. symmetry; auto.
           apply sep_step_lte'; auto.
         + split; [| split]; auto.
