@@ -29,10 +29,17 @@ Module Config <: Permissions.Config.
 End Config.
 
 Definition start_config :=
-  {| l := nil;
-     m := fun _ => None;
-     e := false;
+  {|
+  l := nil;
+  m := fun _ => None;
+  e := false;
   |}.
+
+(* Definition config_mem l v := *)
+(*   {| *)
+(*   l := nil; *)
+(*   e := false; *)
+(*   |}. *)
 
 Module Permissions' := Permissions Config.
 Export Config.

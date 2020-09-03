@@ -512,24 +512,60 @@ Proof.
   - constructor; auto.
 Qed.
 
-Lemma step_fmap_inv {R1 R2} : forall (t : itree E R2) (t' : itree E (R1 * R2)) c c' (r1 : R1),
+Lemma step_fmap_fst {R1 R2} : forall (t : itree E R2) (t' : itree E (R1 * R2)) c c' (r1 : R1),
     step (fmap (fun r2 : R2 => (r1, r2)) t) c t' c' ->
     step t c (fmap snd t') c'.
 Proof.
-  simpl. intros. inversion H; subst.
-  - unfold ITree.map in *. edestruct @eqitree_inv_bind_tau.
-    + rewrite H1. reflexivity.
-    + destruct H0 as (? & ? & ?). apply bisimulation_is_eq in H0. apply bisimulation_is_eq in H2.
-      rewrite H0. rewrite <- H2. rewrite unfold_bind'. cbn.
-      rewrite (itree_eta_ x) in *.
-      destruct (observe x) eqn:Hx.
-      * cbn. constructor.
-      * cbn. rewrite bind_bind'. rewritebisim @bind_snd.
-        constructor.
-      * cbn.
-Abort.
+  simpl. intros. unfold ITree.map in *. inversion H; subst.
+  - edestruct @eqitree_inv_bind_tau as [(? & ? & ?) | (? & ? & ?)];
+      [rewrite H1; reflexivity | |].
+    + apply bisimulation_is_eq in H0. apply bisimulation_is_eq in H2.
+      rewrite H0. rewrite <- H2. rewritebisim @bind_bind. rewritebisim @bind_snd. constructor.
+    + apply bisimulation_is_eq in H0. rewrite H0 in H1.
+      rewritebisim_in @bind_ret_l H1. inversion H1.
+  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
+      [rewrite H1; reflexivity | |].
+    + specialize (H2 true). apply bisimulation_is_eq in H0. apply bisimulation_is_eq in H2.
+      rewrite H0. rewrite <- H2. rewritebisim @bind_bind. rewritebisim @bind_snd. constructor.
+    + apply bisimulation_is_eq in H0. rewrite H0 in H1.
+      rewritebisim_in @bind_ret_l H1. inversion H1.
+  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
+      [rewrite H1; reflexivity | |].
+    + specialize (H2 false). apply bisimulation_is_eq in H0. apply bisimulation_is_eq in H2.
+      rewrite H0. rewrite <- H2. rewritebisim @bind_bind. rewritebisim @bind_snd. constructor.
+    + apply bisimulation_is_eq in H0. rewrite H0 in H1.
+      rewritebisim_in @bind_ret_l H1. inversion H1.
+  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
+      [rewrite H0; reflexivity | |].
+    + specialize (H3 v). apply bisimulation_is_eq in H2. apply bisimulation_is_eq in H3.
+      rewrite H2. rewrite <- H3.
+      rewritebisim @bind_bind. rewritebisim @bind_snd. constructor; auto.
+    + apply bisimulation_is_eq in H2. rewrite H2 in H0.
+      rewritebisim_in @bind_ret_l H0. inversion H0.
+  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
+      [rewrite H0; reflexivity | |].
+    + specialize (H3 tt). apply bisimulation_is_eq in H2. apply bisimulation_is_eq in H3.
+      rewrite H2. rewrite <- H3.
+      rewritebisim @bind_bind. rewritebisim @bind_snd. constructor; auto.
+    + apply bisimulation_is_eq in H2. rewrite H2 in H0.
+      rewritebisim_in @bind_ret_l H0. inversion H0.
+  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
+      [rewrite H0; reflexivity | |].
+    + specialize (H3 (Byte 0)). apply bisimulation_is_eq in H2. apply bisimulation_is_eq in H3.
+      rewrite H2. rewrite <- H3.
+      rewritebisim @bind_bind. rewritebisim @bind_snd. constructor; auto.
+    + apply bisimulation_is_eq in H2. rewrite H2 in H0.
+      rewritebisim_in @bind_ret_l H0. inversion H0.
+  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
+      [rewrite H0; reflexivity | |].
+    + specialize (H3 tt). apply bisimulation_is_eq in H2. apply bisimulation_is_eq in H3.
+      rewrite H2. rewrite <- H3.
+      rewritebisim @bind_bind. rewritebisim @bind_snd. constructor 7; auto.
+    + apply bisimulation_is_eq in H2. rewrite H2 in H0.
+      rewritebisim_in @bind_ret_l H0. inversion H0.
+Qed.
 
-Lemma step_fmap_inv' {R1 R2} : forall (t : itree E R1) (t' : itree E (R1 * R2)) c c' (r2 : R2),
+Lemma step_fmap_snd {R1 R2} : forall (t : itree E R1) (t' : itree E (R1 * R2)) c c' (r2 : R2),
     step (fmap (fun r1 : R1 => (r1, r2)) t) c t' c' ->
     step t c (fmap fst t') c'.
 Proof.
@@ -582,7 +618,7 @@ Proof.
       rewritebisim_in @bind_ret_l H0. inversion H0.
 Qed.
 
-Lemma step_fmap_inv'' {R1 R2 : Type} (f : R1 -> R2) (t : itree E R1) (t' : itree E R2) c c' :
+Lemma step_fmap_inv {R1 R2 : Type} (f : R1 -> R2) (t : itree E R1) (t' : itree E R2) c c' :
   step (fmap f t) c t' c' ->
   exists t'', t' = fmap f t''.
 Proof.
@@ -624,13 +660,14 @@ Proof.
       rewritebisim_in @bind_ret_l H0. inversion H0.
 Qed.
 
-Lemma foo' {R1 R2 : Type} (t' : itree E R1) (t : itree E (R1 * R2)) (r2 : R2) :
-  t = x <- t';; Ret (x, r2) -> (* TODO: this is defn of fmap *)
-  t = fmap (fun r1 : R1 => (r1, r2)) (fmap (fun '(r1, _) => r1) t).
+(* TODO Generalize these lemmas *)
+Lemma fmap_fst {R1 R2 : Type} (t' : itree E R1) (t : itree E (R1 * R2)) (r2 : R2) :
+  t = fmap (fun x => (x, r2)) t' ->
+  t = fmap (fun x => (x, r2)) (fmap fst t).
 Proof.
   intros. apply bisimulation_is_eq. generalize dependent H. revert t' t r2.
   pcofix CIH. intros.
-  pstep. unfold eqit_. simpl.
+  pstep. unfold eqit_. simpl in *. unfold ITree.map in H0.
   destruct (observe t0) eqn:?.
   - symmetry in Heqi. pose proof (simpobs Heqi). apply bisimulation_is_eq in H. rewrite H.
     rewritebisim @map_map.
@@ -654,10 +691,62 @@ Proof.
     + apply bisimulation_is_eq in H2. inversion H2.
 Qed.
 
+Lemma fmap_snd {R1 R2 : Type} (t' : itree E R2) (t : itree E (R1 * R2)) (r1 : R1) :
+  t = fmap (fun x => (r1, x)) t' ->
+  t = fmap (fun x => (r1, x)) (fmap snd t).
+Proof.
+  intros. apply bisimulation_is_eq. generalize dependent H. revert t' t r1.
+  pcofix CIH. intros.
+  pstep. unfold eqit_. simpl in *. unfold ITree.map in H0.
+  destruct (observe t0) eqn:?.
+  - symmetry in Heqi. pose proof (simpobs Heqi). apply bisimulation_is_eq in H. rewrite H.
+    rewritebisim @map_map.
+    rewritebisim @map_ret.
+    constructor.
+    edestruct @eqitree_inv_bind_ret as (? & ? & ?);
+      [rewrite H in H0; rewrite H0; reflexivity |].
+    destruct r0 as [r1' r2]. apply bisimulation_is_eq in H2. inversion H2. reflexivity.
+  - symmetry in Heqi. pose proof (simpobs Heqi). apply bisimulation_is_eq in H. rewrite H.
+    do 2 rewritebisim @map_tau.
+    edestruct @eqitree_inv_bind_tau as [(? & ? & ?) | (? & ? & ?)];
+      [rewrite H in H0; rewrite H0; reflexivity | |].
+    + constructor. right. eapply CIH; eauto. apply bisimulation_is_eq. symmetry. apply H2.
+    + apply bisimulation_is_eq in H1. subst. rewrite bind_ret_l' in H. inversion H.
+  - symmetry in Heqi. pose proof (simpobs Heqi). apply bisimulation_is_eq in H. rewrite H.
+    unfold ITree.map. rewrite bind_vis'. rewrite bind_vis'.
+    edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
+      [rewrite H in H0; rewrite H0; reflexivity | |].
+    + constructor. intros. right. subst. eapply CIH.
+      specialize (H2 v). apply bisimulation_is_eq in H2. symmetry. apply H2.
+    + apply bisimulation_is_eq in H2. inversion H2.
+Qed.
+
 Lemma typing_perm_frame {R1 R2 : Type} : forall p q o (r1 : R1) (t : itree E R2),
     typing_perm p q t ->
     typing_perm (o r1 * p) (fun '(r1, r2) => o r1 * q r2) (fmap (fun r2 => (r1, r2)) t).
-Admitted.
+Proof.
+  pcofix CIH. intros. pinversion H0; subst.
+  - destruct H as ((? & ? & ? & ?) & ?). pstep. constructor.
+    split. {
+      simpl. do 3 eexists. eapply step_fmap; eauto.
+    }
+    intros. pose proof (step_fmap_fst _ _ _ _ _ H3).
+    edestruct H1; eauto. apply H2.
+    split; [constructor; auto |]. destruct H6 as (p' & ? & ? & ?).
+    pclearbot. exists (o r1 * p'). split; [| split]; auto.
+    + right.
+      simpl in H3. unfold ITree.map in H3.
+      pose proof @step_fmap_inv. simpl in H9. unfold ITree.map in H9.
+      specialize (H9 _ _ _ _ _ _ _ H3). destruct H9.
+      erewrite fmap_snd; eauto.
+    + apply sep_step_sep_conj_r; auto. symmetry. apply H2.
+    + split; [| split]; auto.
+      * destruct H2 as (? & ? & ?).
+        eapply dom_respects; eauto. apply H10; auto.
+      * symmetry. apply H7. symmetry. apply H2.
+  - simpl. pstep. unfold ITree.map. rewrite bind_ret_l'.
+    constructor 2. apply sep_conj_perm_monotone; intuition.
+Qed.
 
 Lemma typing_perm_frame' {R1 R2 : Type} : forall p q o (r2 : R2) (t : itree E R1),
     typing_perm p q t ->
@@ -668,15 +757,15 @@ Proof.
     split. {
       simpl. do 3 eexists. eapply step_fmap; eauto.
     }
-    intros. pose proof (step_fmap_inv' _ _ _ _ _ H3).
+    intros. pose proof (step_fmap_snd _ _ _ _ _ H3).
     edestruct H1; eauto. apply H2.
     split; [constructor; auto |]. destruct H6 as (p' & ? & ? & ?).
     pclearbot. exists (p' * o r2). split; [| split]; auto.
     + right.
       simpl in H3. unfold ITree.map in H3.
-      pose proof @step_fmap_inv''. simpl in H9. unfold ITree.map in H9.
+      pose proof @step_fmap_inv. simpl in H9. unfold ITree.map in H9.
       specialize (H9 _ _ _ _ _ _ _ H3). destruct H9.
-      erewrite foo'; eauto.
+      erewrite fmap_fst; eauto.
     + apply sep_step_sep_conj_l; auto. apply H2.
     + split; [| split]; auto.
       * destruct H2 as (? & ? & ?).
@@ -757,7 +846,7 @@ Proof.
       + (* load *) clear H1 x1. simpl. rename p into l.
         exists (p1 * p2). split; [| split]; auto; intuition.
         * left. pstep. constructor. split.
-          -- admit.
+          -- do 3 eexists. constructor. admit.
           -- intros. destruct H as (Hdom1' & Hdom2' & Hsep').
              inversion H1; auto_inj_pair2; subst.
              {
@@ -779,7 +868,7 @@ Proof.
       + (* store *) clear H1 x1 x. simpl. rename p into l.
         exists (p1 * p2). split; [| split]; auto; intuition.
         * left. pstep. constructor. split.
-          -- admit.
+          -- do 3 eexists. constructor. admit.
           -- intros. destruct H as (Hdom1' & Hdom2' & Hsep').
              inversion H1; auto_inj_pair2; subst.
              {
