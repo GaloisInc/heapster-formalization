@@ -335,6 +335,19 @@ Section ts.
     - constructor 2. etransitivity; eauto.
   Qed.
 
+  Inductive Returns (r : R) : itree E R -> Prop :=
+  | ReturnsRet: Returns r (Ret r)
+  | ReturnsTau: forall t, Returns r t -> Returns r (Tau t)
+  | ReturnsVis: forall {X} (e : E X) (x : X) k, Returns r (k x) -> Returns r (Vis e k)
+  .
+
+  Lemma step_returns t t' c c' r : Returns r t -> step t c t' c' -> Returns r t'.
+  Proof.
+    intros. inversion H0; subst.
+    - inversion H; auto.
+    - inversion H; auto_inj_pair2; subst.
+  Abort.
+
   Lemma typing_perm_lte' : forall p q q' t,
       typing_perm p q t ->
       (forall r, q' r <= q r) ->
@@ -846,7 +859,7 @@ Proof.
       + (* load *) clear H1 x1. simpl. rename p into l.
         exists (p1 * p2). split; [| split]; auto; intuition.
         * left. pstep. constructor. split.
-          -- do 3 eexists. constructor. admit.
+          -- do 3 eexists. unshelve constructor; auto. apply read_config_mem.
           -- intros. destruct H as (Hdom1' & Hdom2' & Hsep').
              inversion H1; auto_inj_pair2; subst.
              {
@@ -868,7 +881,7 @@ Proof.
       + (* store *) clear H1 x1 x. simpl. rename p into l.
         exists (p1 * p2). split; [| split]; auto; intuition.
         * left. pstep. constructor. split.
-          -- do 3 eexists. constructor. admit.
+          -- do 3 eexists. constructor. unshelve apply write_config_mem; auto.
           -- intros. destruct H as (Hdom1' & Hdom2' & Hsep').
              inversion H1; auto_inj_pair2; subst.
              {
@@ -891,7 +904,7 @@ Proof.
       + (* load *) clear H1 x. simpl. rename p into l.
         exists (p1 * p2). split; [| split]; auto; intuition.
         * left. pstep. constructor. split.
-          -- admit.
+          -- do 3 eexists. unshelve constructor. apply (Byte 0). apply read_config_mem.
           -- intros. destruct H as (Hdom1' & Hdom2' & Hsep').
              inversion H1; auto_inj_pair2; subst.
              {
@@ -913,7 +926,7 @@ Proof.
       + (* store *) clear H1 x. simpl. rename p into l.
         exists (p1 * p2). split; [| split]; auto; intuition.
         * left. pstep. constructor. split.
-          -- admit.
+          -- do 3 eexists. constructor. unshelve apply write_config_mem; auto.
           -- intros. destruct H as (Hdom1' & Hdom2' & Hsep').
              inversion H1; auto_inj_pair2; subst.
              {
@@ -935,8 +948,6 @@ Proof.
         * split; [| split]; auto.
     - simpl. exists (q1 r0 * p2). split; [| split].
       + left.
-        (* replace (q1 r0 * p2) with (p2 * q1 r0). 2: admit. *)
-        (* replace (fun r1 => q1 r1 * q2 r1) with (fun r1 => q2 r1 * q1 r1). 2: admit. *)
         eapply paco3_mon_bot; eauto.
         apply typing_perm_frame; auto.
       + apply sep_step_sep_conj_l. auto.
@@ -1003,7 +1014,7 @@ Proof.
       + (* load *) clear H1 x1. simpl. rename p into l.
         exists (p1 * p2). split; [| split]; auto; intuition.
         * left. pstep. constructor. split.
-          -- admit.
+          -- do 3 eexists. unshelve constructor; auto. apply read_config_mem.
           -- intros. destruct H as (Hdom1' & Hdom2' & Hsep'). symmetry in Hsep'.
              inversion H1; auto_inj_pair2; subst.
              {
@@ -1026,7 +1037,7 @@ Proof.
       + (* store *) clear H1 x1 x. simpl. rename p into l.
         exists (p1 * p2). split; [| split]; auto; intuition.
         * left. pstep. constructor. split.
-          -- admit.
+          -- do 3 eexists. constructor. unshelve apply write_config_mem; auto.
           -- intros. destruct H as (Hdom1' & Hdom2' & Hsep'). symmetry in Hsep'.
              inversion H1; auto_inj_pair2; subst.
              {
@@ -1051,7 +1062,7 @@ Proof.
       + (* load *) clear H1 x. simpl. rename p into l.
         exists (p1 * p2). split; [| split]; auto; intuition.
         * left. pstep. constructor. split.
-          -- admit.
+          -- do 3 eexists. unshelve constructor. apply (Byte 0). apply read_config_mem.
           -- intros. destruct H as (Hdom1' & Hdom2' & Hsep'). symmetry in Hsep'.
              inversion H1; auto_inj_pair2; subst.
              {
@@ -1074,7 +1085,7 @@ Proof.
       + (* store *) clear H1 x. simpl. rename p into l.
         exists (p1 * p2). split; [| split]; auto; intuition.
         * left. pstep. constructor. split.
-          -- admit.
+          -- do 3 eexists. constructor. unshelve apply write_config_mem; auto.
           -- intros. destruct H as (Hdom1' & Hdom2' & Hsep'). symmetry in Hsep'.
              inversion H1; auto_inj_pair2; subst.
              {
@@ -1105,73 +1116,77 @@ Proof.
       + split; [| split]; auto.
         respects; intuition. eapply separate_antimonotone; eauto.
   }
-Abort.
+Qed.
 
 Section ts.
 
-    Context {R : Type}.
+  Context {R : Type}.
 
-    Definition typing (P : Perms) (Q : R -> Perms) (t : itree E R) :=
-      forall p, p ∈ P -> exists q, (forall r, q r ∈ Q r) /\ typing_perm p q t.
+  Definition typing (P : Perms) (Q : R -> Perms) (t : itree E R) :=
+    forall p, p ∈ P -> exists q, (forall r, Returns r t -> q r ∈ Q r) /\ typing_perm p q t.
 
-    Lemma typing_soundness : forall P Q (t : itree E R),
-        (* (exists q, q ∈ Q) /\ (* change to something involving top_Perms? *) *)
-        typing P Q t -> forall p c, p ∈ (P ** singleton_Perms no_error_perm) ->
-                              dom p c ->
-                              forall t' c', multistep t c t' c' ->
-                                       no_error c'.
-    Proof.
-      intros. simpl in *.
-      destruct H0 as (? & ? & ? & ? & ?).
-      destruct (H _ H0) as (? & ? & ?). (* as ((? & ?) & ?). *)
-      eapply typing_perm_soundness; eauto.
-      split; [| split]; auto.
-      - apply H4; auto.
-      - apply H3; apply H4; auto.
-      - eapply separate_antimonotone; eauto. destruct H4 as [? _ _]. apply (dom_inc0 _ H1).
-    Qed.
+  Lemma typing_soundness : forall P Q (t : itree E R),
+      (* (exists q, q ∈ Q) /\ (* change to something involving top_Perms? *) *)
+      typing P Q t -> forall p c, p ∈ (P ** singleton_Perms no_error_perm) ->
+                            dom p c ->
+                            forall t' c', multistep t c t' c' ->
+                                     no_error c'.
+  Proof.
+    intros. simpl in *.
+    destruct H0 as (? & ? & ? & ? & ?).
+    destruct (H _ H0) as (? & ? & ?). (* as ((? & ?) & ?). *)
+    eapply typing_perm_soundness; eauto.
+    split; [| split]; auto.
+    - apply H4; auto.
+    - apply H3; apply H4; auto.
+    - eapply separate_antimonotone; eauto. destruct H4 as [? _ _]. apply (dom_inc0 _ H1).
+  Qed.
 
-    Lemma typing_lte : forall P P' Q t, typing P Q t -> P ⊑ P' -> typing P' Q t.
-    Proof.
-      repeat intro; auto.
-    Qed.
-    Lemma typing_ret : forall P Q r, Q r ⊑ P -> typing P Q (Ret r).
-    Proof.
-      repeat intro. specialize (H _ H0). exists (fun _ => p). split; intros; auto.
-      pstep. constructor 2. reflexivity.
-    Qed.
-    Lemma typing_spin : forall P Q, Q ⊑ P -> typing P Q ITree.spin.
-    Proof.
-      repeat intro. specialize (H _ H0). exists p. split; auto.
-      apply typing_perm_spin.
-    Qed.
-    Lemma typing_top : forall P t, typing top_Perms P t.
-    Proof.
-      repeat intro. inversion H.
-    Qed.
-    Lemma typing_tau : forall P Q t, typing P Q t -> typing P Q (Tau t).
-    Proof.
-      repeat intro. specialize (H _ H0). destruct H as (? & ? & ?). pinversion H1; subst.
-      - exists x. split; auto. pstep. constructor.
-        split; [exists start_config; eexists; exists start_config; constructor |].
-        intros. inversion H4; subst. split; intuition. eexists; split; [| split]; eauto; intuition.
-      - exists x. split; auto. pstep. constructor.
-        split; [exists start_config; eexists; exists start_config; constructor |].
-        intros. inversion H4; subst. split; intuition. eexists; split; [| split]; eauto; intuition.
-    Qed.
-    Lemma typing_frame : forall P Q R t, typing P Q t -> typing (P ** R) (Q ** R) t.
-    Proof.
-      repeat intro. rename p into p'. destruct H0 as (p & r & ? & ? & ?).
-      destruct (H _ H0) as (q & ? & ?).
-      exists (q * r). split.
-      - exists q, r. split; [| split]; intuition.
-      - eapply typing_perm_lte; eauto. apply typing_perm_frame; auto.
-    Qed.
-    (* (* todo get proper instance working *) *)
-    (* Lemma frame' : forall P1 P2 t, typing P2 t -> typing (P1 ** P2) t. *)
-    (* Proof. *)
-    (*   intros. eapply type_lte; eauto. apply lte_r_sep_conj_Perms. *)
-    (* Qed. *)
+  Lemma typing_lte : forall P P' Q t, typing P Q t -> P ⊑ P' -> typing P' Q t.
+  Proof.
+    repeat intro; auto.
+  Qed.
+  Lemma typing_ret : forall P Q r, Q r ⊑ P -> typing P Q (Ret r).
+  Proof.
+    repeat intro. specialize (H _ H0). exists (fun _ => p). split; intros; auto. inversion H1; subst; auto.
+    pstep. constructor 2. reflexivity.
+  Qed.
+  Lemma typing_spin : forall P Q r, Q r ⊑ P -> typing P Q ITree.spin.
+  Proof.
+    repeat intro. specialize (H _ H0). exists (fun _ => p). split; auto.
+    2: apply typing_perm_spin.
+    intros. admit.
+  Abort.
+
+  Lemma typing_top : forall P t, typing top_Perms P t.
+  Proof.
+    repeat intro. inversion H.
+  Qed.
+
+  Lemma typing_tau : forall P Q t, typing P Q t -> typing P Q (Tau t).
+  Proof.
+    repeat intro. specialize (H _ H0). destruct H as (? & ? & ?). pinversion H1; subst.
+    - exists x. split; auto. admit. pstep. constructor.
+      split; [exists start_config; eexists; exists start_config; constructor |].
+      intros. inversion H4; subst. split; intuition. eexists; split; [| split]; eauto; intuition.
+    - exists x. split; auto. admit. pstep. constructor.
+      split; [exists start_config; eexists; exists start_config; constructor |].
+      intros. inversion H4; subst. split; intuition. eexists; split; [| split]; eauto; intuition.
+  Abort.
+
+  Lemma typing_frame : forall P Q R t, typing P Q t -> typing (P ** R) (Q ** R) t.
+  Proof.
+    repeat intro. rename p into p'. destruct H0 as (p & r & ? & ? & ?).
+    destruct (H _ H0) as (q & ? & ?).
+    exists (q * r). split.
+    - exists q, r. split; [| split]; intuition.
+    - eapply typing_perm_lte; eauto. apply typing_perm_frame; auto.
+  Qed.
+  (* (* todo get proper instance working *) *)
+  (* Lemma frame' : forall P1 P2 t, typing P2 t -> typing (P1 ** P2) t. *)
+  (* Proof. *)
+  (*   intros. eapply type_lte; eauto. apply lte_r_sep_conj_Perms. *)
+  (* Qed. *)
 
     Lemma typing_parallel : forall P1 P2 Q1 Q2 t1 t2,
         typing P1 Q1 t1 -> typing P2 Q2 t2 -> typing (P1 ** P2) (Q1 ** Q2) (par t1 t2).

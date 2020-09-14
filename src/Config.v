@@ -35,12 +35,6 @@ Definition start_config :=
   e := false;
   |}.
 
-(* Definition config_mem l v := *)
-(*   {| *)
-(*   l := nil; *)
-(*   e := false; *)
-(*   |}. *)
-
 Module Permissions' := Permissions Config.
 Export Config.
 Export Permissions'.
@@ -179,6 +173,25 @@ Definition read (c : config) (ptr : addr)
   | _ => None
   end.
 
+(* TODO clean up *)
+Definition config_mem (ptr : addr) (v : SByte) :=
+  {|
+  l := nil;
+  m := fun b => if b =? (fst ptr)
+             then Some (LBlock (snd ptr + 1) (fun o => if o =? (snd ptr)
+                                                    then Some v
+                                                    else None))
+             else None;
+  e := false;
+  |}.
+Lemma read_config_mem l v : read (config_mem l v) l = Some v.
+Proof.
+  destruct l as [b o]. unfold read, config_mem. simpl. repeat rewrite Nat.eqb_refl.
+  assert (o < o + 1). rewrite Nat.add_1_r. apply Nat.lt_succ_diag_r.
+  pose proof Nat.ltb_spec0.
+  eapply Bool.reflect_iff in H0. rewrite H0 in H. rewrite H. reflexivity.
+Qed.
+
 Definition is_some {A} (o : option A) : bool :=
   match o with
   | Some _ => true
@@ -226,6 +239,17 @@ Definition write (c : config) (ptr : addr) (val : SByte)
     else None
   | _ => None
   end.
+
+Lemma write_config_mem l v v' : write (config_mem l v) l v' = Some (config_mem l v').
+Proof.
+  destruct l as [b o]. unfold write, config_mem. simpl. repeat rewrite Nat.eqb_refl.
+  assert (o < o + 1). rewrite Nat.add_1_r. apply Nat.lt_succ_diag_r.
+  pose proof Nat.ltb_spec0.
+  eapply Bool.reflect_iff in H0. rewrite H0 in H. rewrite H. simpl.
+  do 2 f_equal. apply functional_extensionality. intros.
+  destruct (x =? b); auto. do 2 f_equal. apply functional_extensionality. intros.
+  destruct (x0 =? o); auto.
+Qed.
 
 Lemma write_success_allocation c c' ptr val :
   write c ptr val = Some c' ->
