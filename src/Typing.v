@@ -341,12 +341,11 @@ Section ts.
   | ReturnsVis: forall {X} (e : E X) (x : X) k, Returns r (k x) -> Returns r (Vis e k)
   .
 
-  Lemma step_returns t t' c c' r : Returns r t -> step t c t' c' -> Returns r t'.
-  Proof.
-    intros. inversion H0; subst.
-    - inversion H; auto.
-    - inversion H; auto_inj_pair2; subst.
-  Abort.
+  (* Inductive Returns {E} {A: Type} (a: A) : itree E A -> Prop := *)
+  (* | ReturnsRet: forall t, t ≈ Ret a -> Returns a t *)
+  (* | ReturnsTau: forall t u, t ≈ Tau u -> Returns a u -> Returns a t *)
+  (* | ReturnsVis: forall {X} (e: E X) (x: X) t k, t ≈ Vis e k -> Returns a (k x) -> Returns a t *)
+  (* . *)
 
   Lemma typing_perm_lte' : forall p q q' t,
       typing_perm p q t ->
@@ -479,6 +478,20 @@ Section ts.
 End ts.
 
 Hint Resolve typing_perm_gen_mon : paco.
+
+Lemma return_par {R1 R2} (t1 : itree E R1) (t2 : itree E R2) r1 r2 :
+  Returns (r1, r2) (par t1 t2) ->
+  Returns r1 t1.
+Proof.
+  intros.
+  remember (par _ _) in H.
+  generalize dependent t1.
+  generalize dependent t2.
+  induction H; intros.
+  - admit.
+  - admit.
+  - rewrite rewrite_par in Heqi. unfold par_match in Heqi.
+Qed.
 
 
 Ltac rewritebisim lem := pose proof lem as bisim;
@@ -1146,17 +1159,27 @@ Section ts.
   Proof.
     repeat intro; auto.
   Qed.
+  Lemma typing_lte' : forall P Q Q' t,
+      typing P Q t -> (forall r, Returns r t -> Q' r ⊑ Q r) -> typing P Q' t.
+  Proof.
+    repeat intro.
+    specialize (H _ H1). destruct H as (? & ? & ?).
+    exists x. split; auto. intros. apply H0; auto.
+  Qed.
+
   Lemma typing_ret : forall P Q r, Q r ⊑ P -> typing P Q (Ret r).
   Proof.
-    repeat intro. specialize (H _ H0). exists (fun _ => p). split; intros; auto. inversion H1; subst; auto.
+    repeat intro. specialize (H _ H0). exists (fun _ => p).
+    split; intros; auto. inversion H1; subst; auto.
     pstep. constructor 2. reflexivity.
   Qed.
-  Lemma typing_spin : forall P Q r, Q r ⊑ P -> typing P Q ITree.spin.
+  Lemma typing_spin : forall P Q, typing P Q ITree.spin.
   Proof.
-    repeat intro. specialize (H _ H0). exists (fun _ => p). split; auto.
+    repeat intro. exists (fun _ => p). split.
     2: apply typing_perm_spin.
-    intros. admit.
-  Abort.
+    intros. exfalso. rewrite rewrite_spin in H0. dependent induction H0.
+    apply IHReturns; auto. apply rewrite_spin.
+  Qed.
 
   Lemma typing_top : forall P t, typing top_Perms P t.
   Proof.
@@ -1166,38 +1189,100 @@ Section ts.
   Lemma typing_tau : forall P Q t, typing P Q t -> typing P Q (Tau t).
   Proof.
     repeat intro. specialize (H _ H0). destruct H as (? & ? & ?). pinversion H1; subst.
-    - exists x. split; auto. admit. pstep. constructor.
+    - exists x. split; auto. intros. apply H. inversion H3; auto. pstep. constructor.
       split; [exists start_config; eexists; exists start_config; constructor |].
       intros. inversion H4; subst. split; intuition. eexists; split; [| split]; eauto; intuition.
-    - exists x. split; auto. admit. pstep. constructor.
+    - exists x. split; auto. intros. apply H. inversion H3; auto. pstep. constructor.
       split; [exists start_config; eexists; exists start_config; constructor |].
       intros. inversion H4; subst. split; intuition. eexists; split; [| split]; eauto; intuition.
-  Abort.
-
-  Lemma typing_frame : forall P Q R t, typing P Q t -> typing (P ** R) (Q ** R) t.
-  Proof.
-    repeat intro. rename p into p'. destruct H0 as (p & r & ? & ? & ?).
-    destruct (H _ H0) as (q & ? & ?).
-    exists (q * r). split.
-    - exists q, r. split; [| split]; intuition.
-    - eapply typing_perm_lte; eauto. apply typing_perm_frame; auto.
   Qed.
+
+  (* Lemma typing_frame : forall P Q R t, typing P Q t -> typing (P ** R) (Q ** R) t. *)
+  (* Proof. *)
+  (*   repeat intro. rename p into p'. destruct H0 as (p & r & ? & ? & ?). *)
+  (*   destruct (H _ H0) as (q & ? & ?). *)
+  (*   exists (q * r). split. *)
+  (*   - exists q, r. split; [| split]; intuition. *)
+  (*   - eapply typing_perm_lte; eauto. apply typing_perm_frame; auto. *)
+  (* Qed. *)
+
   (* (* todo get proper instance working *) *)
   (* Lemma frame' : forall P1 P2 t, typing P2 t -> typing (P1 ** P2) t. *)
   (* Proof. *)
   (*   intros. eapply type_lte; eauto. apply lte_r_sep_conj_Perms. *)
   (* Qed. *)
 
-    Lemma typing_parallel : forall P1 P2 Q1 Q2 t1 t2,
-        typing P1 Q1 t1 -> typing P2 Q2 t2 -> typing (P1 ** P2) (Q1 ** Q2) (par t1 t2).
-    Proof.
-      intros P1 P2 Q1 Q2 t1 t2 Ht1 Ht2 p [p1 [p2 [? [? ?]]]].
-      destruct (Ht1 _ H) as (q1 & ? & ?). specialize (Ht2 _ H0) as (q2 & ? & ?).
-      exists (q1 * q2). split.
-      - exists q1, q2. split; [| split]; intuition.
-      - eapply typing_perm_lte; eauto. eapply parallel_perm; eauto.
-    Qed.
 End ts.
+
+Lemma return_par {R1 R2} (t1 : itree E R1) (t2 : itree E R2) r1 r2 :
+  Returns (r1, r2) (par t1 t2) ->
+  Returns r1 t1.
+Proof.
+  intros. (* rewrite rewrite_par in H. unfold par_match in H. *)
+  dependent induction H.
+  admit.
+  admit.
+  rewrite rewrite_par in x. unfold par_match in x.
+  inversion x; subst; auto_inj_pair2; subst; clear x.
+  destruct x0.
+  {
+
+  destruct x.
+  { destruct (observe t1) eqn:?.
+    admit.
+    admit.
+    (* eapply IHReturns; eauto. *)
+    destruct e.
+    - inversion H; subst; auto_inj_pair2; subst.
+      rewrite itree_eta_. rewrite Heqi. econstructor.
+      eapply IHReturns; eauto.
+
+  remember (Vis _ _) in H.
+  inversion H. admit. admit.
+  rewrite rewrite_par in H0. unfold par_match in H0.
+  inversion H0; subst; auto_inj_pair2; subst; clear H0. destruct x.
+  - destruct (observe t1) eqn:?.
+    + admit.
+    + inversion H1; subst. dependent induction H2. admit. admit.
+
+  dependent induction H. admit. admit. rewrite rewrite_par in x. unfold par_match in x.
+  inversion x; subst; auto_inj_pair2; subst; clear x.
+  destruct x0.
+  - destruct (observe t1) eqn:?.
+    + admit.
+    + inversion H; subst; auto.
+
+  generalize dependent t1.
+  generalize dependent t2.
+  induction H; intros.
+  - inversion Heqi.
+  - inversion Heqi.
+  - inversion Heqi; subst; auto_inj_pair2; subst. clear Heqi.
+
+    (* dependent induction H; auto_inj_pair2; subst. *)
+    destruct x. {
+      destruct (observe t1) eqn:?.
+      - admit.
+      -
+  - destruct (observe t1) eqn:?.
+    + rewrite (itree_eta_ t1). rewrite Heqi.
+      admit.
+    + inversion H; subst. eapply IHReturns; eauto.
+Qed.
+Abort.
+
+Lemma typing_parallel {R1 R2} : forall P1 P2 Q1 Q2 (t1 : itree E R1) (t2 : itree E R2),
+    typing P1 Q1 t1 ->
+    typing P2 Q2 t2 ->
+    typing (P1 ** P2) (fun '(r1, r2) => Q1 r1 ** Q2 r2) (par t1 t2).
+Proof.
+  intros P1 P2 Q1 Q2 t1 t2 Ht1 Ht2 p [p1 [p2 [? [? ?]]]].
+  destruct (Ht1 _ H) as (q1 & ? & ?). specialize (Ht2 _ H0) as (q2 & ? & ?).
+  exists (fun '(r1, r2) => q1 r1 * q2 r2). split.
+  - intros. destruct r as [r1 r2]. exists (q1 r1), (q2 r2). split; [| split]; intuition.
+    apply H2. admit. admit.
+  - eapply typing_perm_lte; eauto. eapply parallel_perm; eauto.
+Abort.
 
 Definition fun_typing {R1} (P : Perms) (t : itree E R1) (P': R1 -> Perms) : Prop :=
   forall R2 (k : R1 -> itree E R2), (forall (r : R1), typing (P' r) (k r)) -> typing P (bind t k).

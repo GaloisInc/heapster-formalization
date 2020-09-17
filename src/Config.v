@@ -216,10 +216,27 @@ Lemma alloc_invariant_read c1 c2 ptr :
   read c2 ptr = None ->
   read c1 ptr = None.
 Proof.
-  unfold alloc_invariant. unfold allocated. unfold read. intros.
-  destruct (m c1 (fst ptr)), (m c2 (fst ptr)); try solve [inversion H0].
+  destruct ptr as [b o].
+  unfold alloc_invariant. unfold allocated. unfold read. simpl in *. intros.
+  destruct (m c1 b), (m c2 b); try solve [inversion H0]; auto.
   - destruct l0, l1.
-Admitted.
+    destruct (bytes o), (bytes0 o).
+    + destruct (o <? size) eqn:?; auto.
+      rewrite <- (Bool.reflect_iff _ _ (Nat.ltb_spec0 _ _)) in Heqb0.
+      rewrite H in Heqb0.
+      rewrite (Bool.reflect_iff _ _ (Nat.ltb_spec0 _ _)) in Heqb0.
+      rewrite Heqb0 in H0. inversion H0.
+    + destruct (o <? size) eqn:?; auto.
+      rewrite <- (Bool.reflect_iff _ _ (Nat.ltb_spec0 _ _)) in Heqb0.
+      rewrite H in Heqb0. inversion Heqb0.
+    + destruct (o <? size); auto.
+    + destruct (o <? size); auto.
+  - destruct l0. destruct (bytes o).
+    + destruct (o <? size) eqn:?; auto.
+      rewrite <- (Bool.reflect_iff _ _ (Nat.ltb_spec0 _ _)) in Heqb0.
+      rewrite H in Heqb0. inversion Heqb0.
+    + destruct (o <? size); auto.
+Qed.
 
 (* write val to c at memory location ptr. ptr must be a valid location and allocated. *)
 Definition write (c : config) (ptr : addr) (val : SByte)
@@ -270,7 +287,9 @@ Lemma write_success_ptr c c' ptr val :
 Proof.
   intros. destruct ptr as [b o]. unfold read, write in *. simpl in *.
   destruct (m c b); try solve [inversion H]. destruct l0.
-Admitted.
+  destruct (o <? size) eqn:?, (is_some (bytes o)) eqn:?; simpl in *; inversion H; simpl in *.
+  repeat rewrite Nat.eqb_refl. rewrite Heqb0. auto.
+Qed.
 
 Lemma write_success_other_ptr c c' ptr val :
   write c ptr val = Some c' ->
@@ -647,10 +666,25 @@ Lemma read_write_separate_neq_ptr : forall ptr ptr' v v',
     read_perm ptr v ⊥ write_perm ptr' v' <-> ptr <> ptr'.
 Proof.
   split; repeat intro.
-  - destruct H. simpl in *. subst. admit. (* contradiction from sep_l0 *)
+  - destruct H as [? _]. simpl in *. subst.
+    specialize (sep_l0 (config_mem ptr' (Byte 0)) (config_mem ptr' (Byte 1))).
+    do 2 rewrite read_config_mem in sep_l0.
+    assert (Some (Byte 0) = Some (Byte 1) -> False) by inversion 1.
+    apply H. clear H. apply sep_l0. split; [| split; [| split]]; auto.
+    + intros. unfold read, config_mem. simpl.
+      destruct ptr', ptr'0. destruct (addr_neq_cases _ _ _ _ H); simpl in *.
+      * rewrite (Bool.reflect_iff _ _ (Nat.eqb_spec _ _)) in H0.
+        apply Bool.not_true_is_false in H0. rewrite Nat.eqb_sym in H0.
+        rewrite H0. auto.
+      * destruct (n1 =? n); auto. destruct (n2 <? n0 + 1); auto.
+        rewrite (Bool.reflect_iff _ _ (Nat.eqb_spec _ _)) in H0.
+        apply Bool.not_true_is_false in H0. rewrite Nat.eqb_sym in H0.
+        rewrite H0. auto.
+    + unfold alloc_invariant, allocated, config_mem. simpl.
+      repeat rewrite Nat.eqb_refl. auto.
   - constructor; intros; simpl in *; subst; auto.
     destruct H0. auto.
-Admitted.
+Qed.
 
 Lemma write_write_separate_neq_ptr : forall ptr ptr' v v',
     write_perm ptr v ⊥ write_perm ptr' v' <-> ptr <> ptr'.
