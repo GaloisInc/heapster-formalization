@@ -695,7 +695,7 @@ Proof.
   - constructor; intros; simpl in *; destruct H0; auto.
 Qed.
 
-(* Lemma read_separate : forall ptr ptr', read_p ptr ⊥ read_p ptr'. *)
-(* Proof. *)
-(*   constructor; intros; simpl in *; subst; reflexivity. *)
-(* Qed. *)
+Lemma read_separate : forall ptr ptr' v v', read_perm ptr v ⊥ read_perm ptr' v'.
+Proof.
+  constructor; intros; simpl in *; subst; reflexivity.
+Qed.

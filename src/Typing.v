@@ -202,25 +202,6 @@ Section ts.
       multistep t c t' c' -> step t' c' t'' c'' -> multistep t c t'' c''
   .
 
-  Lemma step_bind : forall (t1 t2 : itree E R) (c1 c2 : config) (k : R -> itree E R),
-      step t1 c1 t2 c2 ->
-      step (t1 >>= k) c1 (t2 >>= k) c2.
-  Proof.
-    intros. inversion H; subst; try solve [rewrite bind_vis'; constructor; auto].
-    - rewrite bind_tau'. constructor.
-    - rewrite bind_vis'.
-      (* constructor doesn't work here for some reason *)
-      apply (step_load (fun v => x <- k0 v;; k x) _ _ _ H0).
-  Qed.
-
-  Lemma step_ret_bind : forall (t1 t2 : itree E R) (c1 c2 : config) (r : R),
-      step t1 c1 t2 c2 ->
-      step (Ret r;; t1) c1 t2 c2.
-  Proof.
-    intros. pose proof (bind_ret_l r (fun _ => t1)) as bind_ret.
-    apply bisimulation_is_eq in bind_ret. rewrite bind_ret. assumption.
-  Qed.
-
   (* to handle the nondeterminism, par needs double the amount of steps *)
   (* Lemma par_step_left : forall (t1 t2 t' : itree E R) (c c' : config), *)
   (*     step t1 c t2 c' -> *)
@@ -397,67 +378,6 @@ Section ts.
   (*     + admit. *)
   (* Abort. *)
 
-  Lemma typing_perm_bind : forall p q r t k,
-      typing_perm p q t ->
-      (forall r', typing_perm (q r') r (k r')) ->
-      typing_perm p r (x <- t;; k x).
-  Proof.
-    pcofix CIH. intros. pinversion H0; subst.
-    - destruct H as ((? & ? & ? & ?) & ?). pstep. constructor. split; auto.
-      do 3 eexists; apply step_bind; eauto.
-      intros. inversion H4; subst.
-      + pose proof @eqitree_inv_bind_tau.
-        edestruct H5 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H6; reflexivity | |];
-          apply bisimulation_is_eq in H7; apply bisimulation_is_eq in H8; subst;
-            [| inversion H].
-        destruct (H2 _ H3 _ _ (step_tau _ _)) as (? & p' & ? & ? & ?). pclearbot.
-        split; auto.
-        exists p'. split; [| split]; auto. right. eapply CIH; eauto.
-      + pose proof @eqitree_inv_bind_vis.
-        edestruct H5 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H6; reflexivity | |];
-          apply bisimulation_is_eq in H7; subst; [| inversion H].
-        rewrite bind_vis' in H6. inversion H6; auto_inj_pair2; subst.
-        destruct (H2 _ H3 _ _ (step_nondet_true _ _)) as (? & p' & ? & ? & ?). pclearbot.
-        split; auto.
-        exists p'. split; [| split]; auto. right. eapply CIH; eauto.
-      + pose proof @eqitree_inv_bind_vis.
-        edestruct H5 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H6; reflexivity | |];
-          apply bisimulation_is_eq in H7; subst; [| inversion H].
-        rewrite bind_vis' in H6. inversion H6; auto_inj_pair2; subst.
-        destruct (H2 _ H3 _ _ (step_nondet_false _ _)) as (? & p' & ? & ? & ?). pclearbot.
-        split; auto.
-        exists p'. split; [| split]; auto. right. eapply CIH; eauto.
-      + pose proof @eqitree_inv_bind_vis.
-        edestruct H7 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H5; reflexivity | |];
-          apply bisimulation_is_eq in H8; subst; [| inversion H].
-        rewrite bind_vis' in H5. inversion H5; auto_inj_pair2; subst.
-        destruct (H2 _ H3 _ _ (step_load _ _ _ _ H6)) as (? & p' & ? & ? & ?). pclearbot.
-        split; auto.
-        exists p'. split; [| split]; auto. right. eapply CIH; eauto.
-      + pose proof @eqitree_inv_bind_vis.
-        edestruct H7 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H5; reflexivity | |];
-          apply bisimulation_is_eq in H8; subst; [| inversion H].
-        rewrite bind_vis' in H5. inversion H5; auto_inj_pair2; subst.
-        destruct (H2 _ H3 _ _ (step_store _ _ _ _ _ H6)) as (? & p' & ? & ? & ?). pclearbot.
-        split; auto.
-        exists p'. split; [| split]; auto. right. eapply CIH; eauto.
-      + pose proof @eqitree_inv_bind_vis.
-        edestruct H7 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H5; reflexivity | |];
-          apply bisimulation_is_eq in H8; subst; [| inversion H].
-        rewrite bind_vis' in H5. inversion H5; auto_inj_pair2; subst.
-        destruct (H2 _ H3 _ _ (step_load_fail _ _ _ H6)) as (? & p' & ? & ? & ?). pclearbot.
-        split; auto.
-        exists p'. split; [| split]; auto. right. eapply CIH; eauto.
-      + pose proof @eqitree_inv_bind_vis.
-        edestruct H7 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H5; reflexivity | |];
-          apply bisimulation_is_eq in H8; subst; [| inversion H].
-        rewrite bind_vis' in H5. inversion H5; auto_inj_pair2; subst.
-        destruct (H2 _ H3 _ _ (step_store_fail _ _ _ _ H6)) as (? & p' & ? & ? & ?). pclearbot.
-        split; auto.
-        exists p'. split; [| split]; auto. right. eapply CIH; eauto.
-    - rewrite bind_ret_l'. eapply paco3_mon_bot; eauto. eapply typing_perm_lte; eauto.
-  Qed.
-
   (* too weak *)
   Lemma typing_perm_frame_todo : forall p q r t,
       typing_perm p q t ->
@@ -479,19 +399,113 @@ End ts.
 
 Hint Resolve typing_perm_gen_mon : paco.
 
-Lemma return_par {R1 R2} (t1 : itree E R1) (t2 : itree E R2) r1 r2 :
-  Returns (r1, r2) (par t1 t2) ->
+Lemma step_bind {R1 R2} : forall (t1 t2 : itree E R1) (c1 c2 : config) (k : R1 -> itree E R2),
+    step t1 c1 t2 c2 ->
+    step (t1 >>= k) c1 (t2 >>= k) c2.
+Proof.
+  intros. inversion H; subst; try solve [rewrite bind_vis'; constructor; auto].
+  - rewrite bind_tau'. constructor.
+  - rewrite bind_vis'.
+    (* constructor doesn't work here for some reason *)
+    apply (step_load (fun v => x <- k0 v;; k x) _ _ _ H0).
+Qed.
+
+Lemma step_ret_bind {R1 R2} : forall (t1 t2 : itree E R1) (c1 c2 : config) (r : R2),
+    step t1 c1 t2 c2 ->
+    step (Ret r;; t1) c1 t2 c2.
+Proof.
+  intros. pose proof (bind_ret_l r (fun _ => t1)) as bind_ret.
+  apply bisimulation_is_eq in bind_ret. rewrite bind_ret. assumption.
+Qed.
+
+Lemma typing_perm_bind {R1 R2} : forall p q r (t : itree E R1) (k : R1 -> itree E R2),
+    typing_perm p q t ->
+    (forall r', typing_perm (q r') r (k r')) ->
+    typing_perm p r (x <- t;; k x).
+Proof.
+  pcofix CIH. intros. pinversion H0; subst.
+  - destruct H as ((? & ? & ? & ?) & ?). pstep. constructor. split; auto.
+    do 3 eexists; apply step_bind; eauto.
+    intros. inversion H4; subst.
+    + pose proof @eqitree_inv_bind_tau.
+      edestruct H5 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H6; reflexivity | |];
+        apply bisimulation_is_eq in H7; apply bisimulation_is_eq in H8; subst;
+          [| inversion H].
+      destruct (H2 _ H3 _ _ (step_tau _ _)) as (? & p' & ? & ? & ?). pclearbot.
+      split; auto.
+      exists p'. split; [| split]; auto. right. eapply CIH; eauto.
+    + pose proof @eqitree_inv_bind_vis.
+      edestruct H5 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H6; reflexivity | |];
+        apply bisimulation_is_eq in H7; subst; [| inversion H].
+      rewrite bind_vis' in H6. inversion H6; auto_inj_pair2; subst.
+      destruct (H2 _ H3 _ _ (step_nondet_true _ _)) as (? & p' & ? & ? & ?). pclearbot.
+      split; auto.
+      exists p'. split; [| split]; auto. right. eapply CIH; eauto.
+    + pose proof @eqitree_inv_bind_vis.
+      edestruct H5 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H6; reflexivity | |];
+        apply bisimulation_is_eq in H7; subst; [| inversion H].
+      rewrite bind_vis' in H6. inversion H6; auto_inj_pair2; subst.
+      destruct (H2 _ H3 _ _ (step_nondet_false _ _)) as (? & p' & ? & ? & ?). pclearbot.
+      split; auto.
+      exists p'. split; [| split]; auto. right. eapply CIH; eauto.
+    + pose proof @eqitree_inv_bind_vis.
+      edestruct H7 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H5; reflexivity | |];
+        apply bisimulation_is_eq in H8; subst; [| inversion H].
+      rewrite bind_vis' in H5. inversion H5; auto_inj_pair2; subst.
+      destruct (H2 _ H3 _ _ (step_load _ _ _ _ H6)) as (? & p' & ? & ? & ?). pclearbot.
+      split; auto.
+      exists p'. split; [| split]; auto. right. eapply CIH; eauto.
+    + pose proof @eqitree_inv_bind_vis.
+      edestruct H7 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H5; reflexivity | |];
+        apply bisimulation_is_eq in H8; subst; [| inversion H].
+      rewrite bind_vis' in H5. inversion H5; auto_inj_pair2; subst.
+      destruct (H2 _ H3 _ _ (step_store _ _ _ _ _ H6)) as (? & p' & ? & ? & ?). pclearbot.
+      split; auto.
+      exists p'. split; [| split]; auto. right. eapply CIH; eauto.
+    + pose proof @eqitree_inv_bind_vis.
+      edestruct H7 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H5; reflexivity | |];
+        apply bisimulation_is_eq in H8; subst; [| inversion H].
+      rewrite bind_vis' in H5. inversion H5; auto_inj_pair2; subst.
+      destruct (H2 _ H3 _ _ (step_load_fail _ _ _ H6)) as (? & p' & ? & ? & ?). pclearbot.
+      split; auto.
+      exists p'. split; [| split]; auto. right. eapply CIH; eauto.
+    + pose proof @eqitree_inv_bind_vis.
+      edestruct H7 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H5; reflexivity | |];
+        apply bisimulation_is_eq in H8; subst; [| inversion H].
+      rewrite bind_vis' in H5. inversion H5; auto_inj_pair2; subst.
+      destruct (H2 _ H3 _ _ (step_store_fail _ _ _ _ H6)) as (? & p' & ? & ? & ?). pclearbot.
+      split; auto.
+      exists p'. split; [| split]; auto. right. eapply CIH; eauto.
+  - rewrite bind_ret_l'. eapply paco3_mon_bot; eauto. eapply typing_perm_lte; eauto.
+Qed.
+
+Lemma return_par {R1 R2} (t1 : itree E R1) (t2 : itree E R2) r1 r2 t :
+  Returns (r1, r2) t ->
+  (t = (par t1 t2) \/ t = Ret (r1, r2)) ->
   Returns r1 t1.
 Proof.
   intros.
-  remember (par _ _) in H.
-  generalize dependent t1.
-  generalize dependent t2.
+  revert H0. generalize dependent t1.
   induction H; intros.
   - admit.
   - admit.
-  - rewrite rewrite_par in Heqi. unfold par_match in Heqi.
-Qed.
+  -
+
+(*   remember (par _ _) in H. *)
+(*   generalize dependent t1. *)
+(*   generalize dependent t2. *)
+(*   induction H; intros. *)
+(*   - admit. *)
+(*   - admit. *)
+(*   - rewrite rewrite_par in Heqi. unfold par_match in Heqi. *)
+(*     inversion Heqi. subst; auto_inj_pair2; subst; clear Heqi. *)
+(*     destruct x. *)
+(*     { destruct (observe t1) eqn:?. *)
+(*       - admit. *)
+(*       - admit. *)
+(*       - *)
+    (* Qed. *)
+    Abort.
 
 
 Ltac rewritebisim lem := pose proof lem as bisim;
@@ -1138,6 +1152,11 @@ Section ts.
   Definition typing (P : Perms) (Q : R -> Perms) (t : itree E R) :=
     forall p, p ∈ P -> exists q, (forall r, Returns r t -> q r ∈ Q r) /\ typing_perm p q t.
 
+  (* Definition typing (P : Perms) (Q : R -> Perms) (t : itree E R) := *)
+  (*   forall p, p ∈ P -> (forall r, Returns r t -> exists q, q r ∈ Q r /\ typing_perm p q t) /\ *)
+  (*                typing_perm p perm_bot t. *)
+
+
   Lemma typing_soundness : forall P Q (t : itree E R),
       (* (exists q, q ∈ Q) /\ (* change to something involving top_Perms? *) *)
       typing P Q t -> forall p c, p ∈ (P ** singleton_Perms no_error_perm) ->
@@ -1214,63 +1233,6 @@ Section ts.
 
 End ts.
 
-Lemma return_par {R1 R2} (t1 : itree E R1) (t2 : itree E R2) r1 r2 :
-  Returns (r1, r2) (par t1 t2) ->
-  Returns r1 t1.
-Proof.
-  intros. (* rewrite rewrite_par in H. unfold par_match in H. *)
-  dependent induction H.
-  admit.
-  admit.
-  rewrite rewrite_par in x. unfold par_match in x.
-  inversion x; subst; auto_inj_pair2; subst; clear x.
-  destruct x0.
-  {
-
-  destruct x.
-  { destruct (observe t1) eqn:?.
-    admit.
-    admit.
-    (* eapply IHReturns; eauto. *)
-    destruct e.
-    - inversion H; subst; auto_inj_pair2; subst.
-      rewrite itree_eta_. rewrite Heqi. econstructor.
-      eapply IHReturns; eauto.
-
-  remember (Vis _ _) in H.
-  inversion H. admit. admit.
-  rewrite rewrite_par in H0. unfold par_match in H0.
-  inversion H0; subst; auto_inj_pair2; subst; clear H0. destruct x.
-  - destruct (observe t1) eqn:?.
-    + admit.
-    + inversion H1; subst. dependent induction H2. admit. admit.
-
-  dependent induction H. admit. admit. rewrite rewrite_par in x. unfold par_match in x.
-  inversion x; subst; auto_inj_pair2; subst; clear x.
-  destruct x0.
-  - destruct (observe t1) eqn:?.
-    + admit.
-    + inversion H; subst; auto.
-
-  generalize dependent t1.
-  generalize dependent t2.
-  induction H; intros.
-  - inversion Heqi.
-  - inversion Heqi.
-  - inversion Heqi; subst; auto_inj_pair2; subst. clear Heqi.
-
-    (* dependent induction H; auto_inj_pair2; subst. *)
-    destruct x. {
-      destruct (observe t1) eqn:?.
-      - admit.
-      -
-  - destruct (observe t1) eqn:?.
-    + rewrite (itree_eta_ t1). rewrite Heqi.
-      admit.
-    + inversion H; subst. eapply IHReturns; eauto.
-Qed.
-Abort.
-
 Lemma typing_parallel {R1 R2} : forall P1 P2 Q1 Q2 (t1 : itree E R1) (t2 : itree E R2),
     typing P1 Q1 t1 ->
     typing P2 Q2 t2 ->
@@ -1284,8 +1246,8 @@ Proof.
   - eapply typing_perm_lte; eauto. eapply parallel_perm; eauto.
 Abort.
 
-Definition fun_typing {R1} (P : Perms) (t : itree E R1) (P': R1 -> Perms) : Prop :=
-  forall R2 (k : R1 -> itree E R2), (forall (r : R1), typing (P' r) (k r)) -> typing P (bind t k).
+(* Definition fun_typing {R1} (P : Perms) (t : itree E R1) (P': R1 -> Perms) : Prop := *)
+(*   forall R2 (k : R1 -> itree E R2), (forall (r : R1), typing (P' r) (k r)) -> typing P (bind t k). *)
 
 
 Lemma read_perm_read_succeed p ptr c v v' :
@@ -1317,27 +1279,46 @@ Proof.
     try solve [inversion H1]; try solve [inversion H0].
 Qed.
 
-Lemma fun_typing_consequence {R} P (t : itree E R) P' Q Q' :
-  fun_typing P t P' ->
-  P ⊑ Q ->
-  (forall r, Q' r ⊑ P' r) ->
-  fun_typing Q t Q'.
-Proof.
-  red. intros. eapply type_lte; eauto. apply H. intros. eapply type_lte; eauto.
-Qed.
+(** ok *)
+(* Lemma fun_typing_consequence {R} P (t : itree E R) P' Q Q' : *)
+(*   fun_typing P t P' -> *)
+(*   P ⊑ Q -> *)
+(*   (forall r, Q' r ⊑ P' r) -> *)
+(*   fun_typing Q t Q'. *)
+(* Proof. *)
+(*   red. intros. eapply type_lte; eauto. apply H. intros. eapply type_lte; eauto. *)
+(* Qed. *)
 
-Lemma fun_typing_ret {R} (r : R) P : fun_typing (P r) (Ret r) P.
-Proof.
-  repeat intro. simpl. rewrite bind_ret_l'. apply H; auto.
-Qed.
+(** ok *)
+(* Lemma fun_typing_ret {R} (r : R) P : fun_typing (P r) (Ret r) P. *)
+(* Proof. *)
+(*   repeat intro. simpl. rewrite bind_ret_l'. apply H; auto. *)
+(* Qed. *)
 
-Lemma fun_typing_ret_invert {R} (r : R) P P' :
-  fun_typing P (Ret r) P' -> forall p p', p ∈ P -> p' ∈ P' r ->
-                                    sep_step p p'.
+(* Lemma fun_typing_ret_invert {R} (r : R) P P' : *)
+(*   fun_typing P (Ret r) P' -> forall p p', p ∈ P -> p' ∈ P' r -> *)
+(*                                     sep_step p p'. *)
+(* Proof. *)
+(*   repeat intro. unfold fun_typing in H. simpl in H. *)
+(*   setoid_rewrite bind_ret_l' in H. *)
+(* Admitted. *)
+
+Lemma typing_bind {R1 R2} : forall P Q R (t : itree E R1) (k : R1 -> itree E R2) r1,
+    Returns r1 t ->
+    typing P Q t ->
+    (forall r1, (* Returns r1 t ->  *)typing (Q r1) R (k r1)) ->
+    typing P R (x <- t;; k x).
 Proof.
-  repeat intro. unfold fun_typing in H. simpl in H.
-  setoid_rewrite bind_ret_l' in H.
-Admitted.
+  repeat intro. unfold typing in *.
+
+  destruct (H0 _ H2) as (q & ? & ?).
+  specialize (H1 r1). specialize (H3 _ H).
+  destruct (H1 _ H3) as (r & ? & ?).
+
+  exists r. split.
+  - intros. apply H5. admit.
+  - eapply typing_perm_bind; eauto.
+Qed.
 
 Lemma fun_typing_bind {R1 R2} (P1 : Perms) (t1 : itree E R1) (P2 : R1 -> Perms) (k : R1 -> itree E R2) (P3 : R2 -> Perms) :
   fun_typing P1 t1 P2 ->
