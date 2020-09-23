@@ -420,7 +420,7 @@ Qed.
 
 Lemma typing_perm_bind {R1 R2} : forall p q r (t : itree E R1) (k : R1 -> itree E R2),
     typing_perm p q t ->
-    (forall r', typing_perm (q r') r (k r')) ->
+    (forall r', Returns r' t -> typing_perm (q r') r (k r')) ->
     typing_perm p r (x <- t;; k x).
 Proof.
   pcofix CIH. intros. pinversion H0; subst.
@@ -434,6 +434,7 @@ Proof.
       destruct (H2 _ H3 _ _ (step_tau _ _)) as (? & p' & ? & ? & ?). pclearbot.
       split; auto.
       exists p'. split; [| split]; auto. right. eapply CIH; eauto.
+      intros. apply H1. econstructor; eauto.
     + pose proof @eqitree_inv_bind_vis.
       edestruct H5 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H6; reflexivity | |];
         apply bisimulation_is_eq in H7; subst; [| inversion H].
@@ -441,6 +442,7 @@ Proof.
       destruct (H2 _ H3 _ _ (step_nondet_true _ _)) as (? & p' & ? & ? & ?). pclearbot.
       split; auto.
       exists p'. split; [| split]; auto. right. eapply CIH; eauto.
+      intros. apply H1. econstructor; eauto.
     + pose proof @eqitree_inv_bind_vis.
       edestruct H5 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H6; reflexivity | |];
         apply bisimulation_is_eq in H7; subst; [| inversion H].
@@ -448,6 +450,7 @@ Proof.
       destruct (H2 _ H3 _ _ (step_nondet_false _ _)) as (? & p' & ? & ? & ?). pclearbot.
       split; auto.
       exists p'. split; [| split]; auto. right. eapply CIH; eauto.
+      intros. apply H1. econstructor; eauto.
     + pose proof @eqitree_inv_bind_vis.
       edestruct H7 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H5; reflexivity | |];
         apply bisimulation_is_eq in H8; subst; [| inversion H].
@@ -455,6 +458,7 @@ Proof.
       destruct (H2 _ H3 _ _ (step_load _ _ _ _ H6)) as (? & p' & ? & ? & ?). pclearbot.
       split; auto.
       exists p'. split; [| split]; auto. right. eapply CIH; eauto.
+      intros. apply H1. econstructor; eauto.
     + pose proof @eqitree_inv_bind_vis.
       edestruct H7 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H5; reflexivity | |];
         apply bisimulation_is_eq in H8; subst; [| inversion H].
@@ -462,6 +466,7 @@ Proof.
       destruct (H2 _ H3 _ _ (step_store _ _ _ _ _ H6)) as (? & p' & ? & ? & ?). pclearbot.
       split; auto.
       exists p'. split; [| split]; auto. right. eapply CIH; eauto.
+      intros. apply H1. econstructor; eauto.
     + pose proof @eqitree_inv_bind_vis.
       edestruct H7 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H5; reflexivity | |];
         apply bisimulation_is_eq in H8; subst; [| inversion H].
@@ -469,6 +474,7 @@ Proof.
       destruct (H2 _ H3 _ _ (step_load_fail _ _ _ H6)) as (? & p' & ? & ? & ?). pclearbot.
       split; auto.
       exists p'. split; [| split]; auto. right. eapply CIH; eauto.
+      intros. apply H1. econstructor; eauto.
     + pose proof @eqitree_inv_bind_vis.
       edestruct H7 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H5; reflexivity | |];
         apply bisimulation_is_eq in H8; subst; [| inversion H].
@@ -476,7 +482,9 @@ Proof.
       destruct (H2 _ H3 _ _ (step_store_fail _ _ _ _ H6)) as (? & p' & ? & ? & ?). pclearbot.
       split; auto.
       exists p'. split; [| split]; auto. right. eapply CIH; eauto.
+      intros. apply H1. econstructor; eauto.
   - rewrite bind_ret_l'. eapply paco3_mon_bot; eauto. eapply typing_perm_lte; eauto.
+    apply H1. constructor.
 Qed.
 
 Lemma return_par {R1 R2} (t1 : itree E R1) (t2 : itree E R2) r1 r2 t :
@@ -1303,22 +1311,30 @@ Qed.
 (*   setoid_rewrite bind_ret_l' in H. *)
 (* Admitted. *)
 
-Lemma typing_bind {R1 R2} : forall P Q R (t : itree E R1) (k : R1 -> itree E R2) r1,
-    Returns r1 t ->
+Lemma typing_bind {R1 R2} : forall P Q R (t : itree E R1) (k : R1 -> itree E R2),
     typing P Q t ->
-    (forall r1, (* Returns r1 t ->  *)typing (Q r1) R (k r1)) ->
+    (forall r1, Returns r1 t -> typing (Q r1) R (k r1)) ->
     typing P R (x <- t;; k x).
 Proof.
   repeat intro. unfold typing in *.
-
-  destruct (H0 _ H2) as (q & ? & ?).
-  specialize (H1 r1). specialize (H3 _ H).
-  destruct (H1 _ H3) as (r & ? & ?).
-
-  exists r. split.
-  - intros. apply H5. admit.
-  - eapply typing_perm_bind; eauto.
-Qed.
+  assert ((exists r, Returns r t0) \/ (forall r, ~ Returns r t0)) by admit.
+  destruct H2 as [(r1 & ?) | ?].
+  {
+    pose proof (@typing_perm_bind R1 R2 p).
+    destruct (H _ H1) as (q & ? & ?).
+    pose proof H0 as Hk. pose proof H3 as Hq.
+    specialize (H0 r1). specialize (H3 _ H2).
+    destruct (H0 H2 _ H3) as (r2 & ? & ?).
+    exists r2. split.
+    - intros. apply H5. admit.
+    - eapply typing_perm_bind; eauto. intros. specialize (Hk r' H7 _ (Hq _ H7)).
+      destruct Hk as (r2' & ? & ?). (* hmmm.... *) admit.
+  }
+  {
+    (* intuitively any q should work, since t0 diverges. *)
+    admit.
+  }
+Abort.
 
 Lemma fun_typing_bind {R1 R2} (P1 : Perms) (t1 : itree E R1) (P2 : R1 -> Perms) (k : R1 -> itree E R2) (P3 : R2 -> Perms) :
   fun_typing P1 t1 P2 ->
