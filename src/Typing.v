@@ -1339,8 +1339,8 @@ Proof.
   }
   {
     eapply typing_perm_lte. 2: apply H1.
-    setoid_rewrite <- (sep_conj_perm_bottom bottom_perm).
-    replace (fun (_ : R1 * R2) => bottom_perm) with (fun '(r1, r2) => ((fun r1 : R1 => bottom_perm) r1 * (fun r2 : R2 => bottom_perm) r2)). 2: {
+    (* setoid_rewrite <- (sep_conj_perm_bottom bottom_perm). *)
+    replace (fun (_ : R1 * R2) => bottom_perm) with (fun '(r1, r2) => ((fun r1 : R1 => bottom_perm) r1 * (fun r2 : R2 => bottom_perm) r2)). 2: { admit. }
     eapply @parallel_perm; eauto.
   }
 Abort.
@@ -1412,15 +1412,15 @@ Proof.
   assert ((exists r, Returns r t0) \/ (forall r, ~ Returns r t0)) by admit.
   destruct H as [(r1 & ?) | ?].
   {
-    (* specialize (Ht _ H) as (q & ? & ?). *)
-    (* specialize (H0 _ H _ H2) as (Hk & Hk'). *)
+    specialize (Ht _ H) as (q & ? & ?). (* q depends on r1 *)
+    specialize (H0 _ H _ H2) as (Hk & Hk').
     split.
     {
       intros.
       admit.
     }
     {
-      eapply typing_perm_bind. ; eauto. intros. simpl.
+      eapply typing_perm_bind. eauto. intros. simpl. (* q depends on r1, but now we have to show it works for any r' *)
     pose proof (@typing_perm_bind R1 R2 p).
     destruct (H _ H1) as (q & ? & ?).
     pose proof H0 as Hk. pose proof H3 as Hq.
