@@ -487,35 +487,6 @@ Proof.
     apply H1. constructor.
 Qed.
 
-Lemma return_par {R1 R2} (t1 : itree E R1) (t2 : itree E R2) r1 r2 t :
-  Returns (r1, r2) t ->
-  (t = (par t1 t2) \/ t = Ret (r1, r2)) ->
-  Returns r1 t1.
-Proof.
-  intros.
-  revert H0. generalize dependent t1.
-  induction H; intros.
-  - admit.
-  - admit.
-  -
-
-(*   remember (par _ _) in H. *)
-(*   generalize dependent t1. *)
-(*   generalize dependent t2. *)
-(*   induction H; intros. *)
-(*   - admit. *)
-(*   - admit. *)
-(*   - rewrite rewrite_par in Heqi. unfold par_match in Heqi. *)
-(*     inversion Heqi. subst; auto_inj_pair2; subst; clear Heqi. *)
-(*     destruct x. *)
-(*     { destruct (observe t1) eqn:?. *)
-(*       - admit. *)
-(*       - admit. *)
-(*       - *)
-    (* Qed. *)
-    Abort.
-
-
 Ltac rewritebisim lem := pose proof lem as bisim;
                          eapply bisimulation_is_eq in bisim;
                          rewrite bisim;
@@ -525,6 +496,108 @@ Ltac rewritebisim_in lem H := pose proof lem as bisim;
                               eapply bisimulation_is_eq in bisim;
                               rewrite bisim in H;
                               clear bisim.
+
+
+Lemma return_map1 {R1 R2} : forall (t1 : itree E R1) (r1 : R1) (r2 r2' : R2),
+    Returns (r1, r2) (ITree.map (fun r1 : R1 => (r1, r2')) t1) ->
+    Returns r1 t1 /\ r2 = r2'.
+Proof.
+  intros. remember (r1, r2). remember (ITree.map _ _).
+  generalize dependent t1. unfold ITree.map.
+  induction H; intros; subst.
+  - edestruct @eqitree_inv_bind_ret as (? & ? & ?); [rewrite Heqi; reflexivity |].
+    apply bisimulation_is_eq in H0. inversion H0.
+    rewritebisim H. subst.
+    split; [constructor |]; auto.
+  - edestruct @eqitree_inv_bind_tau as [(? & ? & ?) | (? & ? & ?)];
+      [rewrite Heqi; reflexivity | |].
+    + rewritebisim H0. apply bisimulation_is_eq in H1.
+      split; [constructor |]; eapply IHReturns; eauto.
+    + apply bisimulation_is_eq in H1. inversion H1.
+  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
+      [rewrite Heqi; reflexivity | |].
+    + rewritebisim H0. split; [econstructor; eapply IHReturns; eauto; rewritebisim H1; eauto |].
+      specialize (H1 x). apply bisimulation_is_eq in H1. eapply IHReturns; eauto.
+    + apply bisimulation_is_eq in H1. inversion H1.
+Qed.
+
+Lemma return_map2 {R1 R2} : forall (t2 : itree E R2) (r1 r1' : R1) (r2 : R2),
+    Returns (r1, r2) (ITree.map (fun r2 : R2 => (r1', r2)) t2) ->
+    Returns r2 t2 /\ r1 = r1'.
+Proof.
+  intros. remember (r1, r2). remember (ITree.map _ _).
+  generalize dependent t2. unfold ITree.map.
+  induction H; intros; subst.
+  - edestruct @eqitree_inv_bind_ret as (? & ? & ?); [rewrite Heqi; reflexivity |].
+    apply bisimulation_is_eq in H0. inversion H0.
+    rewritebisim H. subst.
+    split; [constructor |]; auto.
+  - edestruct @eqitree_inv_bind_tau as [(? & ? & ?) | (? & ? & ?)];
+      [rewrite Heqi; reflexivity | |].
+    + rewritebisim H0. apply bisimulation_is_eq in H1.
+      split; [constructor |]; eapply IHReturns; eauto.
+    + apply bisimulation_is_eq in H1. inversion H1.
+  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
+      [rewrite Heqi; reflexivity | |].
+    + rewritebisim H0. split; [econstructor; eapply IHReturns; eauto; rewritebisim H1; eauto |].
+      specialize (H1 x). apply bisimulation_is_eq in H1. eapply IHReturns; eauto.
+    + apply bisimulation_is_eq in H1. inversion H1.
+Qed.
+
+Lemma return_par_helper {R1 R2} (t1 : itree E R1) (t2 : itree E R2) r1 r2 t :
+  Returns (r1, r2) t ->
+  (t = (par t1 t2) \/
+   t = Tau (par t1 t2) \/
+   (exists X (e : E X) k, t1 = Vis e k /\ t = Vis (subevent X e) (fun x => par (k x) t2)) \/
+   (exists X (e : E X) k, t2 = Vis e k /\ t = Vis (subevent X e) (fun x => par t1 (k x)))) ->
+  Returns r1 t1 /\ Returns r2 t2.
+Proof.
+  intros.
+  revert H0. generalize dependent t1. generalize dependent t2.
+  induction H; intros.
+  - destruct H0 as [? | [? | [? | ?]]].
+    + rewrite rewrite_par in H. unfold par_match in H. inversion H.
+    + inversion H.
+    + destruct H as (? & ? & ? & ? & ?). inversion H0.
+    + destruct H as (? & ? & ? & ? & ?). inversion H0.
+  - destruct H0 as [? | [? | [? | ?]]].
+    + rewrite rewrite_par in H0. unfold par_match in H0. inversion H0.
+    + inversion H0. eapply IHReturns; eauto.
+    + destruct H0 as (? & ? & ? & ? & ?). inversion H1.
+    + destruct H0 as (? & ? & ? & ? & ?). inversion H1.
+  - destruct H0 as [? | [? | [? | ?]]].
+    + rewrite rewrite_par in H0. unfold par_match in H0.
+      inversion H0; subst; auto_inj_pair2; subst; clear H0.
+      destruct x.
+      {
+        destruct (observe t1) eqn:?.
+        - apply return_map2 in H. destruct H. split; auto.
+          rewrite itree_eta_. rewrite Heqi. subst. constructor.
+        - rewrite (itree_eta_ t1). rewrite Heqi. split; [constructor |]; eapply IHReturns; eauto.
+        - rewrite (itree_eta_ t1). rewrite Heqi. eapply IHReturns.
+          right. right. left. do 3 eexists. split; reflexivity.
+      }
+      {
+        destruct (observe t2) eqn:?.
+        - apply return_map1 in H. destruct H. split; auto.
+          rewrite itree_eta_. rewrite Heqi. subst. constructor.
+        - rewrite (itree_eta_ t2). rewrite Heqi. split; [| constructor]; eapply IHReturns; eauto.
+        - rewrite (itree_eta_ t2). rewrite Heqi. eapply IHReturns.
+          right. right. right. do 3 eexists. split; reflexivity.
+      }
+    + inversion H0.
+    + destruct H0 as (? & ? & ? & ? & ?). inversion H1; subst; auto_inj_pair2; subst; clear H1.
+      split; [econstructor |]; eapply IHReturns; left; eauto.
+    + destruct H0 as (? & ? & ? & ? & ?). inversion H1; subst; auto_inj_pair2; subst; clear H1.
+      split; [| econstructor]; eapply IHReturns; left; eauto.
+Qed.
+
+Lemma return_par {R1 R2} (t1 : itree E R1) (t2 : itree E R2) r1 r2 :
+  Returns (r1, r2) (par t1 t2) ->
+  Returns r1 t1 /\ Returns r2 t2.
+Proof.
+  intros. eapply return_par_helper; eauto.
+Qed.
 
 Lemma step_fmap {R1 R2} : forall (t t' : itree E R1) c c' (f : R1 -> R2),
     step t c t' c' ->
@@ -1157,12 +1230,12 @@ Section ts.
 
   Context {R : Type}.
 
-  Definition typing (P : Perms) (Q : R -> Perms) (t : itree E R) :=
-    forall p, p ∈ P -> exists q, (forall r, Returns r t -> q r ∈ Q r) /\ typing_perm p q t.
-
   (* Definition typing (P : Perms) (Q : R -> Perms) (t : itree E R) := *)
-  (*   forall p, p ∈ P -> (forall r, Returns r t -> exists q, q r ∈ Q r /\ typing_perm p q t) /\ *)
-  (*                typing_perm p perm_bot t. *)
+  (*   forall p, p ∈ P -> exists q, (forall r, Returns r t -> q r ∈ Q r) /\ typing_perm p q t. *)
+
+  Definition typing (P : Perms) (Q : R -> Perms) (t : itree E R) :=
+    forall p, p ∈ P -> (forall r, Returns r t -> exists q, q r ∈ Q r /\ typing_perm p q t) /\ (* the case where t can return *)
+                 typing_perm p (fun _ => bottom_perm) t. (* where t diverges *)
 
 
   Lemma typing_soundness : forall P Q (t : itree E R),
@@ -1174,7 +1247,7 @@ Section ts.
   Proof.
     intros. simpl in *.
     destruct H0 as (? & ? & ? & ? & ?).
-    destruct (H _ H0) as (? & ? & ?). (* as ((? & ?) & ?). *)
+    destruct (H _ H0).
     eapply typing_perm_soundness; eauto.
     split; [| split]; auto.
     - apply H4; auto.
@@ -1190,20 +1263,25 @@ Section ts.
       typing P Q t -> (forall r, Returns r t -> Q' r ⊑ Q r) -> typing P Q' t.
   Proof.
     repeat intro.
-    specialize (H _ H1). destruct H as (? & ? & ?).
-    exists x. split; auto. intros. apply H0; auto.
+    specialize (H _ H1). destruct H. split; auto.
+    intros. specialize (H _ H3). destruct H as (? & ? & ?).
+    exists x. split; auto. apply H0; auto.
   Qed.
 
   Lemma typing_ret : forall P Q r, Q r ⊑ P -> typing P Q (Ret r).
   Proof.
-    repeat intro. specialize (H _ H0). exists (fun _ => p).
-    split; intros; auto. inversion H1; subst; auto.
-    pstep. constructor 2. reflexivity.
+    repeat intro. specialize (H _ H0). split.
+    {
+      intros. inversion H1; subst. exists (fun _ => p).
+      split; intros; auto. pstep. constructor 2. reflexivity.
+    }
+    {
+      pstep. constructor 2. apply bottom_perm_is_bottom.
+    }
   Qed.
   Lemma typing_spin : forall P Q, typing P Q ITree.spin.
   Proof.
-    repeat intro. exists (fun _ => p). split.
-    2: apply typing_perm_spin.
+    repeat intro. split. 2: apply typing_perm_spin.
     intros. exfalso. rewrite rewrite_spin in H0. dependent induction H0.
     apply IHReturns; auto. apply rewrite_spin.
   Qed.
@@ -1215,14 +1293,15 @@ Section ts.
 
   Lemma typing_tau : forall P Q t, typing P Q t -> typing P Q (Tau t).
   Proof.
-    repeat intro. specialize (H _ H0). destruct H as (? & ? & ?). pinversion H1; subst.
-    - exists x. split; auto. intros. apply H. inversion H3; auto. pstep. constructor.
-      split; [exists start_config; eexists; exists start_config; constructor |].
-      intros. inversion H4; subst. split; intuition. eexists; split; [| split]; eauto; intuition.
-    - exists x. split; auto. intros. apply H. inversion H3; auto. pstep. constructor.
-      split; [exists start_config; eexists; exists start_config; constructor |].
-      intros. inversion H4; subst. split; intuition. eexists; split; [| split]; eauto; intuition.
-  Qed.
+    repeat intro. specialize (H _ H0). destruct H. pinversion H1; subst.
+  (*   - exists x. split; auto. intros. apply H. inversion H3; auto. pstep. constructor. *)
+  (*     split; [exists start_config; eexists; exists start_config; constructor |]. *)
+  (*     intros. inversion H4; subst. split; intuition. eexists; split; [| split]; eauto; intuition. *)
+  (*   - exists x. split; auto. intros. apply H. inversion H3; auto. pstep. constructor. *)
+  (*     split; [exists start_config; eexists; exists start_config; constructor |]. *)
+  (*     intros. inversion H4; subst. split; intuition. eexists; split; [| split]; eauto; intuition. *)
+  (* Qed. *)
+  Abort.
 
   (* Lemma typing_frame : forall P Q R t, typing P Q t -> typing (P ** R) (Q ** R) t. *)
   (* Proof. *)
@@ -1241,17 +1320,29 @@ Section ts.
 
 End ts.
 
+(* Instance Proper_eq_perm_typing_perm {R1 R2 : Type} : *)
+(*   Proper (pointwise_relation (R1 * R2) _ eq_perm ==> ?r ==> flip impl)Proper (eq_perm ==> *)
+
 Lemma typing_parallel {R1 R2} : forall P1 P2 Q1 Q2 (t1 : itree E R1) (t2 : itree E R2),
     typing P1 Q1 t1 ->
     typing P2 Q2 t2 ->
     typing (P1 ** P2) (fun '(r1, r2) => Q1 r1 ** Q2 r2) (par t1 t2).
 Proof.
   intros P1 P2 Q1 Q2 t1 t2 Ht1 Ht2 p [p1 [p2 [? [? ?]]]].
-  destruct (Ht1 _ H) as (q1 & ? & ?). specialize (Ht2 _ H0) as (q2 & ? & ?).
-  exists (fun '(r1, r2) => q1 r1 * q2 r2). split.
-  - intros. destruct r as [r1 r2]. exists (q1 r1), (q2 r2). split; [| split]; intuition.
-    apply H2. admit. admit.
-  - eapply typing_perm_lte; eauto. eapply parallel_perm; eauto.
+  specialize (Ht1 _ H) as [Ht1 Ht1']. specialize (Ht2 _ H0) as [Ht2 Ht2']. split.
+  {
+    intros [r1 r2] ?. apply return_par in H2. destruct H2.
+    specialize (Ht1 _ H2) as (q1 & ? & ?). specialize (Ht2 _ H3) as (q2 & ? & ?).
+    exists (fun '(r1, r2) => q1 r1 * q2 r2). split.
+    - exists (q1 r1), (q2 r2). split; [| split]; intuition.
+    - eapply typing_perm_lte; eauto. eapply parallel_perm; eauto.
+  }
+  {
+    eapply typing_perm_lte. 2: apply H1.
+    setoid_rewrite <- (sep_conj_perm_bottom bottom_perm).
+    replace (fun (_ : R1 * R2) => bottom_perm) with (fun '(r1, r2) => ((fun r1 : R1 => bottom_perm) r1 * (fun r2 : R2 => bottom_perm) r2)). 2: {
+    eapply @parallel_perm; eauto.
+  }
 Abort.
 
 (* Definition fun_typing {R1} (P : Perms) (t : itree E R1) (P': R1 -> Perms) : Prop := *)
@@ -1317,9 +1408,19 @@ Lemma typing_bind {R1 R2} : forall P Q R (t : itree E R1) (k : R1 -> itree E R2)
     typing P R (x <- t;; k x).
 Proof.
   repeat intro. unfold typing in *.
+  specialize (H _ H1) as (Ht & Ht').
   assert ((exists r, Returns r t0) \/ (forall r, ~ Returns r t0)) by admit.
-  destruct H2 as [(r1 & ?) | ?].
+  destruct H as [(r1 & ?) | ?].
   {
+    (* specialize (Ht _ H) as (q & ? & ?). *)
+    (* specialize (H0 _ H _ H2) as (Hk & Hk'). *)
+    split.
+    {
+      intros.
+      admit.
+    }
+    {
+      eapply typing_perm_bind. ; eauto. intros. simpl.
     pose proof (@typing_perm_bind R1 R2 p).
     destruct (H _ H1) as (q & ? & ?).
     pose proof H0 as Hk. pose proof H3 as Hq.
