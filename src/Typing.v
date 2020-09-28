@@ -1,6 +1,7 @@
 From Heapster Require Import
      Permissions
-     Config.
+     Config
+     Step.
 
 From Coq Require Import
      Structures.Equalities
@@ -34,47 +35,47 @@ Import ITreeNotations.
 (* Import MonadNotation. *)
 Open Scope monad_scope.
 
-Lemma bind_ret_r' {E R} (t : itree E R) :
-  x <- t;; Ret x = t.
-Proof.
-  apply bisimulation_is_eq. apply bind_ret_r.
-Qed.
+(* Lemma bind_ret_r' {E R} (t : itree E R) : *)
+(*   x <- t;; Ret x = t. *)
+(* Proof. *)
+(*   apply bisimulation_is_eq. apply bind_ret_r. *)
+(* Qed. *)
 
-Lemma bind_ret_l' {E R1 R2} (r : R1) (k : R1 -> itree E R2) :
-  x <- Ret r;; k x = k r.
-Proof.
-  apply bisimulation_is_eq. apply bind_ret_l.
-Qed.
+(* Lemma bind_ret_l' {E R1 R2} (r : R1) (k : R1 -> itree E R2) : *)
+(*   x <- Ret r;; k x = k r. *)
+(* Proof. *)
+(*   apply bisimulation_is_eq. apply bind_ret_l. *)
+(* Qed. *)
 
-Lemma bind_tau' {E R1 R2} (t : itree E R1) (k : R1 -> itree E R2) :
-  x <- Tau t;; k x = Tau (x <- t;; k x).
-Proof.
-  apply bisimulation_is_eq. apply bind_tau.
-Qed.
+(* Lemma bind_tau' {E R1 R2} (t : itree E R1) (k : R1 -> itree E R2) : *)
+(*   x <- Tau t;; k x = Tau (x <- t;; k x). *)
+(* Proof. *)
+(*   apply bisimulation_is_eq. apply bind_tau. *)
+(* Qed. *)
 
-Lemma bind_vis' {E R1 R2 R3} (e : E R1) (k1 : R1 -> itree E R2) (k2 : R2 -> itree E R3) :
-  x <- Vis e k1;; k2 x = Vis e (fun x => x' <- k1 x;; k2 x').
-Proof.
-  apply bisimulation_is_eq. apply bind_vis.
-Qed.
+(* Lemma bind_vis' {E R1 R2 R3} (e : E R1) (k1 : R1 -> itree E R2) (k2 : R2 -> itree E R3) : *)
+(*   x <- Vis e k1;; k2 x = Vis e (fun x => x' <- k1 x;; k2 x'). *)
+(* Proof. *)
+(*   apply bisimulation_is_eq. apply bind_vis. *)
+(* Qed. *)
 
-Lemma bind_bind' {E R1 R2 R3} (t : itree E R1) (k1 : R1 -> itree E R2) (k2 : R2 -> itree E R3) :
-  x <- (x <- t;; k1 x);; k2 x = x1 <- t;; x2 <- k1 x1;; k2 x2.
-Proof.
-  apply bisimulation_is_eq. apply bind_bind.
-Qed.
+(* Lemma bind_bind' {E R1 R2 R3} (t : itree E R1) (k1 : R1 -> itree E R2) (k2 : R2 -> itree E R3) : *)
+(*   x <- (x <- t;; k1 x);; k2 x = x1 <- t;; x2 <- k1 x1;; k2 x2. *)
+(* Proof. *)
+(*   apply bisimulation_is_eq. apply bind_bind. *)
+(* Qed. *)
 
-Lemma bind_trigger' {E E' R} `{E' -< E} X (e : E' X) k :
-  x <- trigger e ;; k x = (vis e (fun x => k x) : itree E R).
-Proof.
-  apply bisimulation_is_eq. apply bind_trigger.
-Qed.
+(* Lemma bind_trigger' {E E' R} `{E' -< E} X (e : E' X) k : *)
+(*   x <- trigger e ;; k x = (vis e (fun x => k x) : itree E R). *)
+(* Proof. *)
+(*   apply bisimulation_is_eq. apply bind_trigger. *)
+(* Qed. *)
 
-Lemma unfold_bind' {E R S} (t : itree E R) (k : R -> itree E S) :
-  x <- t;; k x = ITree._bind k (fun t0 : itree E R => x <- t0;; k x) (observe t).
-Proof.
-  apply bisimulation_is_eq. apply unfold_bind.
-Qed.
+(* Lemma unfold_bind' {E R S} (t : itree E R) (k : R -> itree E S) : *)
+(*   x <- t;; k x = ITree._bind k (fun t0 : itree E R => x <- t0;; k x) (observe t). *)
+(* Proof. *)
+(*   apply bisimulation_is_eq. apply unfold_bind. *)
+(* Qed. *)
 
 Definition sep_step p q : Prop :=
   forall r, p ⊥ r -> q ⊥ r.
@@ -138,11 +139,7 @@ Section ts.
   | Store : forall (p v : SByte) , MemoryE unit
   .
 
-  (* Definition E := (stateE config +' nondetE). *)
-  Definition E := (MemoryE +' nondetE).
-
   Context {R : Type}.
-  (* Definition R := SByte. *)
 
   Definition par_match {R1 R2}
              (par : itree E R1 -> itree E R2 -> itree E (R1 * R2))
@@ -180,28 +177,6 @@ Section ts.
     apply Reflexive_eqit_gen_eq.
   Qed.
 
-  Variant step : itree E R -> config -> itree E R -> config -> Prop :=
-  | step_tau : forall t c, step (Tau t) c t c
-  | step_nondet_true : forall k c, step (vis Or k) c (k true) c
-  | step_nondet_false : forall k c, step (vis Or k) c (k false) c
-  | step_load : forall k c p v, read c p = Some v ->
-                                step (vis (Load (Ptr p)) k) c (k v) c
-  | step_store : forall k c c' p v, write c p v = Some c' ->
-                                    step (vis (Store (Ptr p) v) k) c (k tt) c'
-  | step_load_fail : forall k c p, read c p = None ->
-                                   step (vis (Load (Ptr p)) k) c (k (Byte 0)) (error_config c)
-  | step_store_fail : forall k c p v, write c p v = None ->
-                                      step (vis (Store (Ptr p) v) k) c (k tt) (error_config c)
-  (* | step_get : forall k c, step (vis (Get _) k) c (k c) c *)
-  (* | step_put : forall k c c', step (vis (Put _ c') k) c (k tt) c' *)
-  .
-
-  Inductive multistep : itree E R -> config -> itree E R -> config -> Prop :=
-  | multistep_refl : forall t c, multistep t c t c
-  | multistep_step : forall t c t' c' t'' c'',
-      multistep t c t' c' -> step t' c' t'' c'' -> multistep t c t'' c''
-  .
-
   (* to handle the nondeterminism, par needs double the amount of steps *)
   (* Lemma par_step_left : forall (t1 t2 t' : itree E R) (c c' : config), *)
   (*     step t1 c t2 c' -> *)
@@ -223,31 +198,106 @@ Section ts.
   (*   apply (step_load (fun x => par t' (k x)) _ _ _ H0). *)
   (* Qed. *)
 
-  Variant typing_perm_gen typing (p : perm) (q : R -> perm) : itree E R -> Prop :=
+  (* Variant typing_perm_gen typing (p : perm) (q : R -> perm) : itree E R -> Prop := *)
+  (* | cond : forall t, (exists c t' c', step t c t' c') /\ (* we can step *) *)
+  (*               (forall c, dom p c -> (* and everything we can step to... *) *)
+  (*                     forall t' c', *)
+  (*                       step t c t' c' -> *)
+  (*                       ( *)
+  (*                         (* we step to configs that satisfy the perm *) *)
+  (*                         (upd p c c') /\ *)
+  (*                         (* we step to machines that are well-typed by some other perm that maintains separation *) *)
+  (*                         (exists p', typing p' q t' /\ sep_step p p' /\ dom p' c'))) -> *)
+  (*               typing_perm_gen typing p q t *)
+  (* | ret : forall r, q r <= p -> typing_perm_gen typing p q (Ret r). *)
+
+  Variant typing_gen typing (P : Perms) (Q : R -> Perms) : itree E R -> Prop :=
   | cond : forall t, (exists c t' c', step t c t' c') /\ (* we can step *)
-                     (forall c, dom p c -> (* and everything we can step to... *)
-                                forall t' c',
-                                  step t c t' c' ->
-                                  (
-                                    (* we step to configs that satisfy the perm *)
-                                    (upd p c c') /\
-                                    (* we step to machines that are well-typed by some other perm that maintains separation *)
-                                    (exists p', typing p' q t' /\ sep_step p p' /\ dom p' c'))) ->
-                     typing_perm_gen typing p q t
-  | ret : forall r, q r <= p -> typing_perm_gen typing p q (Ret r).
+                (forall p c, p ∈ P ->
+                        dom p c ->
+                        forall t' c',
+                          step t c t' c' -> (* and everything we can step to... *)
+                          (
+                            (* we step to configs that satisfy the perm *)
+                            (upd p c c') /\
+                            (* we step to machines that are well-typed by some other perm that maintains separation *)
+                            (exists P', typing P' Q t' /\ exists p', p' ∈ P' /\ sep_step p p' /\ dom p' c'))) ->
+                typing_gen typing P Q t
+  | ret : forall r, Q r ⊑ P -> typing_gen typing P Q (Ret r).
 
-  Definition typing_perm := paco3 typing_perm_gen bot3.
+  (* Definition typing_perm := paco3 typing_perm_gen bot3. *)
+  Definition typing := paco3 typing_gen bot3.
 
-  Lemma typing_perm_gen_mon : monotone3 typing_perm_gen.
+  Lemma typing_gen_mon : monotone3 typing_gen.
   Proof.
     repeat intro.
     inversion IN; subst.
     - econstructor. destruct H. split; auto.
       intros. edestruct H0; eauto. split; eauto.
-      destruct H4 as [? [? [? ?]]]. eexists. split; [| split]; eauto.
+      destruct H5 as (? & ? & (? & ? & ? & ?)). eexists. split; eauto.
     - constructor 2; auto.
   Qed.
-  Hint Resolve typing_perm_gen_mon : paco.
+  Hint Resolve typing_gen_mon : paco.
+
+  Lemma typing_lte : forall P P' Q Q' t, typing P Q t ->
+                                    P ⊑ P' ->
+                                    (forall r, Q' r ⊑ Q r) ->
+                                    typing P' Q' t.
+  Proof.
+    pcofix CIH. intros. pstep. pinversion H0; subst.
+    - constructor 1. destruct H. split; auto. intros.
+      edestruct H3; eauto. split; auto.
+      destruct H8 as (? & ? & (? & ? & ? & ?)). pclearbot.
+      eexists; split.
+      + right. eapply CIH; eauto. reflexivity.
+      + eexists. split; [| split]; eauto.
+    - constructor 2. etransitivity; eauto. etransitivity; eauto.
+  Qed.
+
+  Lemma typing_ret : forall P Q r, Q r ⊑ P -> typing P Q (Ret r).
+  Proof.
+    intros. pstep. constructor 2. auto.
+  Qed.
+
+  Lemma typing_spin : forall P Q, typing P Q ITree.spin.
+  Proof.
+    pcofix CIH. intros. pstep. constructor 1. split.
+    - exists start_config. eexists. exists start_config. rewrite rewrite_spin. constructor.
+    - intros. rewrite rewrite_spin in H1. inversion H1; subst; split; intuition.
+      exists P. split.
+      + right. auto.
+      + exists p; split; [| split]; intuition.
+  Qed.
+
+  Lemma typing_top : forall P Q t, typing P Q t -> typing top_Perms Q t.
+  Proof.
+    intros. pstep. pinversion H; subst.
+    - constructor 1. destruct H0. split; auto. intros. inversion H2.
+    - constructor 2; auto. apply top_Perms_is_top.
+  Qed.
+
+  Lemma typing_bottom : forall P Q t, typing P Q t -> typing P (fun _ => bottom_Perms) t.
+  Proof.
+    pcofix CIH. intros. pstep. pinversion H0; subst.
+    - destruct H. constructor 1. split; auto. intros.
+      edestruct H1; eauto. split; auto. destruct H6 as (? & ? & (? & ? & ? & ?)).
+      pclearbot. eexists. split; eauto.
+    - constructor 2. apply bottom_Perms_is_bottom.
+  Qed.
+
+  Lemma typing_tau : forall P Q t, typing P Q t -> typing P Q (Tau t).
+    intros. pstep. pinversion H; subst.
+    - constructor 1. destruct H0 as ((? & ? & ? & ?) & ?). split.
+      + exists start_config. eexists. exists start_config. constructor.
+      + intros. inversion H4; subst.
+        split; intuition.
+        exists P. split; auto. exists p. split; [| split]; intuition.
+    - constructor 1. split.
+      + exists start_config. eexists. exists start_config. constructor.
+      + intros. inversion H3; subst.
+        split; intuition.
+        exists P. split; auto. exists p. split; [| split]; intuition.
+  Qed.
 
   Definition no_error (c : config) :=
     e c = false.
@@ -263,523 +313,298 @@ Section ts.
     constructor; auto.
   Qed.
 
-  Lemma typing_perm_multistep : forall p q t,
-      typing_perm p q t ->
-      forall c, dom p c ->
-                forall t' c', multistep t c t' c' ->
-                              exists p', dom p' c' /\ sep_step p p' /\ typing_perm p' q t'.
-  Proof.
-    intros. induction H1.
-    - eexists; split; [| split]; eauto; reflexivity.
-    - destruct IHmultistep as (? & ? & ? & ?); eauto. pinversion H5; subst.
-      + edestruct H6 as (? & ? & ? & ? & ? & ?); eauto. pclearbot.
-        exists x0; split; [| split]; eauto. etransitivity; eauto.
-      + inversion H2.
-  Qed.
-
-  Lemma typing_perm_soundness_step : forall p q t,
-      typing_perm p q t ->
-      forall c, dom (p * no_error_perm) c ->
-                forall t' c', step t c t' c' -> no_error c'.
-  Proof.
-    intros. destruct H0 as (? & ? & ?).
-    pinversion H; subst.
-    - destruct H4. specialize (H5 _ H0 _ _ H1). decompose [ex and] H5; clear H4.
-      eapply H3; eauto.
-    - inversion H1.
-  Qed.
-
-  Lemma typing_perm_soundness : forall p q t,
-      typing_perm p q t ->
-      forall c, dom (p * no_error_perm) c ->
-                forall t' c', multistep t c t' c' -> no_error c'.
-  Proof.
-    intros. destruct H0 as (? & ? & ?).
-    generalize dependent p. induction H1; intros; auto.
-    destruct (typing_perm_multistep _ _ _ H0 _ H3 _ _ H1) as (? & ? & ? & ?).
-    specialize (IHmultistep H2 _ H0 H3 H4).
-    apply H6 in H4.
-    eapply typing_perm_soundness_step; eauto. split; [| split]; auto.
-  Qed.
-
-  Lemma typing_perm_lte : forall p q p' t, typing_perm p q t -> p <= p' -> typing_perm p' q t.
-  Proof.
-    intros. pcofix CIH. pstep.
-    pinversion H; subst.
-    - constructor 1. destruct H1 as ((? & ? & ? & ?) & ?).
-      split; eauto. intros.
-      edestruct H2; eauto. split; eauto.
-      destruct H6 as [p'' [? [? ?]]].
-      exists p''. split; [| split]; auto.
-      + pclearbot. left. eapply paco3_mon_bot; eauto.
-      + eapply sep_step_lte; eauto.
-    - constructor 2. etransitivity; eauto.
-  Qed.
-
-  Inductive Returns (r : R) : itree E R -> Prop :=
-  | ReturnsRet: Returns r (Ret r)
-  | ReturnsTau: forall t, Returns r t -> Returns r (Tau t)
-  | ReturnsVis: forall {X} (e : E X) (x : X) k, Returns r (k x) -> Returns r (Vis e k)
-  .
-
-  (* Inductive Returns {E} {A: Type} (a: A) : itree E A -> Prop := *)
-  (* | ReturnsRet: forall t, t ≈ Ret a -> Returns a t *)
-  (* | ReturnsTau: forall t u, t ≈ Tau u -> Returns a u -> Returns a t *)
-  (* | ReturnsVis: forall {X} (e: E X) (x: X) t k, t ≈ Vis e k -> Returns a (k x) -> Returns a t *)
-  (* . *)
-
-  Lemma typing_perm_lte' : forall p q q' t,
-      typing_perm p q t ->
-      (forall r, q' r <= q r) ->
-      typing_perm p q' t.
-  Proof.
-    pcofix CIH. intros. pstep. pinversion H0; subst.
-    - constructor. destruct H as ((? & ? & ? & ?) & ?).
-      split; eauto. intros.
-      edestruct H2; eauto. split; eauto.
-      destruct H6 as [p'' [? [? ?]]].
-      exists p''. split; [| split]; auto.
-      pclearbot. right. eapply CIH; eauto.
-    - constructor 2. etransitivity; eauto.
-  Qed.
-
-  (* Lemma typing_perm_ret : forall p q r, typing_perm p q (Ret r). *)
+  (* Lemma typing_perm_multistep : forall p q t, *)
+  (*     typing_perm p q t -> *)
+  (*     forall c, dom p c -> *)
+  (*               forall t' c', multistep t c t' c' -> *)
+  (*                             exists p', dom p' c' /\ sep_step p p' /\ typing_perm p' q t'. *)
   (* Proof. *)
-  (*   pstep. constructor 2. intros. inversion H0. *)
+  (*   intros. induction H1. *)
+  (*   - eexists; split; [| split]; eauto; reflexivity. *)
+  (*   - destruct IHmultistep as (? & ? & ? & ?); eauto. pinversion H5; subst. *)
+  (*     + edestruct H6 as (? & ? & ? & ? & ? & ?); eauto. pclearbot. *)
+  (*       exists x0; split; [| split]; eauto. etransitivity; eauto. *)
+  (*     + inversion H2. *)
   (* Qed. *)
 
-  Lemma typing_perm_spin : forall p q, typing_perm p q ITree.spin.
-  Proof.
-    pcofix CIH. pstep. constructor 1. split.
-    - exists start_config. eexists. exists start_config. rewrite rewrite_spin. constructor.
-    - intros. rewrite rewrite_spin in H0.
-      inversion H0; subst; split; try reflexivity.
-      exists p. split; eauto; intuition.
-  Qed.
-
-  (* Lemma typing_perm_load' ptr val : *)
-  (*   typing_perm (read_perm_p ptr val) (trigger (Load (Ptr ptr))). *)
+  (* Lemma typing_perm_soundness_step : forall p q t, *)
+  (*     typing_perm p q t -> *)
+  (*     forall c, dom (p * no_error_perm) c -> *)
+  (*               forall t' c', step t c t' c' -> no_error c'. *)
   (* Proof. *)
-  (*   pcofix CIH. pstep. constructor. intros. inversion H0; auto_inj_pair2; subst. *)
-  (*   split; intuition. *)
-  (*   eexists. split; [| split]; eauto; intuition. *)
-  (*   left. eapply paco2_mon_bot; eauto. apply typing_perm_ret. *)
+  (*   intros. destruct H0 as (? & ? & ?). *)
+  (*   pinversion H; subst. *)
+  (*   - destruct H4. specialize (H5 _ H0 _ _ H1). decompose [ex and] H5; clear H4. *)
+  (*     eapply H3; eauto. *)
+  (*   - inversion H1. *)
   (* Qed. *)
 
-  (* Lemma typing_perm_store ptr val : *)
-  (*   typing_perm (write_p ptr) (trigger (Store (Ptr ptr) val)). *)
+  (* Lemma typing_perm_soundness : forall p q t, *)
+  (*     typing_perm p q t -> *)
+  (*     forall c, dom (p * no_error_perm) c -> *)
+  (*               forall t' c', multistep t c t' c' -> no_error c'. *)
   (* Proof. *)
-  (*   pcofix CIH. pstep. constructor. intros. inversion H0; auto_inj_pair2; subst. *)
-  (*   split; simpl; auto. *)
-  (*   - intros. admit. *)
-  (*   - exists (write_p ptr). split; [| split]. *)
-  (*     + left. eapply paco2_mon_bot; eauto. apply typing_perm_ret. *)
-  (*     + reflexivity. *)
-  (*     + admit. *)
-  (* Abort. *)
+  (*   intros. destruct H0 as (? & ? & ?). *)
+  (*   generalize dependent p. induction H1; intros; auto. *)
+  (*   destruct (typing_perm_multistep _ _ _ H0 _ H3 _ _ H1) as (? & ? & ? & ?). *)
+  (*   specialize (IHmultistep H2 _ H0 H3 H4). *)
+  (*   apply H6 in H4. *)
+  (*   eapply typing_perm_soundness_step; eauto. split; [| split]; auto. *)
+  (* Qed. *)
 
-  (* too weak *)
-  Lemma typing_perm_frame_todo : forall p q r t,
-      typing_perm p q t ->
-      typing_perm (p * r) (fun r' => q r' * r) t.
-  Proof.
-    pcofix CIH. intros. pinversion H0; subst.
-    - destruct H as ((? & ? & ? & ?) & ?). pstep. constructor. split; [do 3 eexists; eauto |].
-      intros. edestruct H1; eauto; [apply H2 |]. clear H1.
-      split; [constructor; auto |]. destruct H5 as (p' & ? & ? & ?).
-      pclearbot. exists (p' * r0). split; [| split]; auto.
-      + apply sep_step_sep_conj_l; auto. apply H2.
-      + split; [| split]; auto.
-        * destruct H2 as (? & ? & ?). apply H8 in H4. eapply dom_respects; eauto.
-        * apply H5. apply H2.
-    - pstep. constructor 2. intros. apply sep_conj_perm_monotone; intuition.
-  Qed.
+(*   Lemma typing_perm_lte : forall p q p' t, typing_perm p q t -> p <= p' -> typing_perm p' q t. *)
+(*   Proof. *)
+(*     intros. pcofix CIH. pstep. *)
+(*     pinversion H; subst. *)
+(*     - constructor 1. destruct H1 as ((? & ? & ? & ?) & ?). *)
+(*       split; eauto. intros. *)
+(*       edestruct H2; eauto. split; eauto. *)
+(*       destruct H6 as [p'' [? [? ?]]]. *)
+(*       exists p''. split; [| split]; auto. *)
+(*       + pclearbot. left. eapply paco3_mon_bot; eauto. *)
+(*       + eapply sep_step_lte; eauto. *)
+(*     - constructor 2. etransitivity; eauto. *)
+(*   Qed. *)
+
+(*   Inductive Returns (r : R) : itree E R -> Prop := *)
+(*   | ReturnsRet: Returns r (Ret r) *)
+(*   | ReturnsTau: forall t, Returns r t -> Returns r (Tau t) *)
+(*   | ReturnsVis: forall {X} (e : E X) (x : X) k, Returns r (k x) -> Returns r (Vis e k) *)
+(*   . *)
+
+(*   (* Inductive Returns {E} {A: Type} (a: A) : itree E A -> Prop := *) *)
+(*   (* | ReturnsRet: forall t, t ≈ Ret a -> Returns a t *) *)
+(*   (* | ReturnsTau: forall t u, t ≈ Tau u -> Returns a u -> Returns a t *) *)
+(*   (* | ReturnsVis: forall {X} (e: E X) (x: X) t k, t ≈ Vis e k -> Returns a (k x) -> Returns a t *) *)
+(*   (* . *) *)
+
+(*   Lemma typing_perm_lte' : forall p q q' t, *)
+(*       typing_perm p q t -> *)
+(*       (forall r, q' r <= q r) -> *)
+(*       typing_perm p q' t. *)
+(*   Proof. *)
+(*     pcofix CIH. intros. pstep. pinversion H0; subst. *)
+(*     - constructor. destruct H as ((? & ? & ? & ?) & ?). *)
+(*       split; eauto. intros. *)
+(*       edestruct H2; eauto. split; eauto. *)
+(*       destruct H6 as [p'' [? [? ?]]]. *)
+(*       exists p''. split; [| split]; auto. *)
+(*       pclearbot. right. eapply CIH; eauto. *)
+(*     - constructor 2. etransitivity; eauto. *)
+(*   Qed. *)
+
+(*   (* Lemma typing_perm_ret : forall p q r, typing_perm p q (Ret r). *) *)
+(*   (* Proof. *) *)
+(*   (*   pstep. constructor 2. intros. inversion H0. *) *)
+(*   (* Qed. *) *)
+
+(*   Lemma typing_perm_spin : forall p q, typing_perm p q ITree.spin. *)
+(*   Proof. *)
+(*     pcofix CIH. pstep. constructor 1. split. *)
+(*     - exists start_config. eexists. exists start_config. rewrite rewrite_spin. constructor. *)
+(*     - intros. rewrite rewrite_spin in H0. *)
+(*       inversion H0; subst; split; try reflexivity. *)
+(*       exists p. split; eauto; intuition. *)
+(*   Qed. *)
+
+(*   (* Lemma typing_perm_load' ptr val : *) *)
+(*   (*   typing_perm (read_perm_p ptr val) (trigger (Load (Ptr ptr))). *) *)
+(*   (* Proof. *) *)
+(*   (*   pcofix CIH. pstep. constructor. intros. inversion H0; auto_inj_pair2; subst. *) *)
+(*   (*   split; intuition. *) *)
+(*   (*   eexists. split; [| split]; eauto; intuition. *) *)
+(*   (*   left. eapply paco2_mon_bot; eauto. apply typing_perm_ret. *) *)
+(*   (* Qed. *) *)
+
+(*   (* Lemma typing_perm_store ptr val : *) *)
+(*   (*   typing_perm (write_p ptr) (trigger (Store (Ptr ptr) val)). *) *)
+(*   (* Proof. *) *)
+(*   (*   pcofix CIH. pstep. constructor. intros. inversion H0; auto_inj_pair2; subst. *) *)
+(*   (*   split; simpl; auto. *) *)
+(*   (*   - intros. admit. *) *)
+(*   (*   - exists (write_p ptr). split; [| split]. *) *)
+(*   (*     + left. eapply paco2_mon_bot; eauto. apply typing_perm_ret. *) *)
+(*   (*     + reflexivity. *) *)
+(*   (*     + admit. *) *)
+(*   (* Abort. *) *)
+
+(*   (* too weak *) *)
+(*   Lemma typing_perm_frame_todo : forall p q r t, *)
+(*       typing_perm p q t -> *)
+(*       typing_perm (p * r) (fun r' => q r' * r) t. *)
+(*   Proof. *)
+(*     pcofix CIH. intros. pinversion H0; subst. *)
+(*     - destruct H as ((? & ? & ? & ?) & ?). pstep. constructor. split; [do 3 eexists; eauto |]. *)
+(*       intros. edestruct H1; eauto; [apply H2 |]. clear H1. *)
+(*       split; [constructor; auto |]. destruct H5 as (p' & ? & ? & ?). *)
+(*       pclearbot. exists (p' * r0). split; [| split]; auto. *)
+(*       + apply sep_step_sep_conj_l; auto. apply H2. *)
+(*       + split; [| split]; auto. *)
+(*         * destruct H2 as (? & ? & ?). apply H8 in H4. eapply dom_respects; eauto. *)
+(*         * apply H5. apply H2. *)
+(*     - pstep. constructor 2. intros. apply sep_conj_perm_monotone; intuition. *)
+(*   Qed. *)
 
 End ts.
 
-Hint Resolve typing_perm_gen_mon : paco.
+Hint Resolve typing_gen_mon : paco.
 
-Lemma step_bind {R1 R2} : forall (t1 t2 : itree E R1) (c1 c2 : config) (k : R1 -> itree E R2),
-    step t1 c1 t2 c2 ->
-    step (t1 >>= k) c1 (t2 >>= k) c2.
-Proof.
-  intros. inversion H; subst; try solve [rewrite bind_vis'; constructor; auto].
-  - rewrite bind_tau'. constructor.
-  - rewrite bind_vis'.
-    (* constructor doesn't work here for some reason *)
-    apply (step_load (fun v => x <- k0 v;; k x) _ _ _ H0).
-Qed.
-
-Lemma step_ret_bind {R1 R2} : forall (t1 t2 : itree E R1) (c1 c2 : config) (r : R2),
-    step t1 c1 t2 c2 ->
-    step (Ret r;; t1) c1 t2 c2.
-Proof.
-  intros. pose proof (bind_ret_l r (fun _ => t1)) as bind_ret.
-  apply bisimulation_is_eq in bind_ret. rewrite bind_ret. assumption.
-Qed.
-
-Lemma typing_perm_bind {R1 R2} : forall p q r (t : itree E R1) (k : R1 -> itree E R2),
-    typing_perm p q t ->
-    (forall r', Returns r' t -> typing_perm (q r') r (k r')) ->
-    typing_perm p r (x <- t;; k x).
+Lemma typing_bind {R1 R2} : forall P Q R (t : itree E R1) (k : R1 -> itree E R2),
+    typing P Q t ->
+    (forall r1, typing (Q r1) R (k r1)) ->
+    typing P R (x <- t;; k x).
 Proof.
   pcofix CIH. intros. pinversion H0; subst.
   - destruct H as ((? & ? & ? & ?) & ?). pstep. constructor. split; auto.
-    do 3 eexists; apply step_bind; eauto.
-    intros. inversion H4; subst.
+    do 3 eexists. apply step_bind; eauto.
+    intros. inversion H5; subst.
     + pose proof @eqitree_inv_bind_tau.
-      edestruct H5 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H6; reflexivity | |];
-        apply bisimulation_is_eq in H7; apply bisimulation_is_eq in H8; subst;
+      edestruct H6 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H7; reflexivity | |];
+        apply bisimulation_is_eq in H8; apply bisimulation_is_eq in H9; subst;
           [| inversion H].
-      destruct (H2 _ H3 _ _ (step_tau _ _)) as (? & p' & ? & ? & ?). pclearbot.
-      split; auto.
-      exists p'. split; [| split]; auto. right. eapply CIH; eauto.
-      intros. apply H1. econstructor; eauto.
+      destruct (H2 _ _ H3 H4 _ _ (step_tau _ _)) as (? & P' & ? & (p' & ? & ? & ?)).
+      pclearbot. split; auto. exists P'. split; eauto.
     + pose proof @eqitree_inv_bind_vis.
-      edestruct H5 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H6; reflexivity | |];
-        apply bisimulation_is_eq in H7; subst; [| inversion H].
-      rewrite bind_vis' in H6. inversion H6; auto_inj_pair2; subst.
-      destruct (H2 _ H3 _ _ (step_nondet_true _ _)) as (? & p' & ? & ? & ?). pclearbot.
-      split; auto.
-      exists p'. split; [| split]; auto. right. eapply CIH; eauto.
-      intros. apply H1. econstructor; eauto.
-    + pose proof @eqitree_inv_bind_vis.
-      edestruct H5 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H6; reflexivity | |];
-        apply bisimulation_is_eq in H7; subst; [| inversion H].
-      rewrite bind_vis' in H6. inversion H6; auto_inj_pair2; subst.
-      destruct (H2 _ H3 _ _ (step_nondet_false _ _)) as (? & p' & ? & ? & ?). pclearbot.
-      split; auto.
-      exists p'. split; [| split]; auto. right. eapply CIH; eauto.
-      intros. apply H1. econstructor; eauto.
-    + pose proof @eqitree_inv_bind_vis.
-      edestruct H7 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H5; reflexivity | |];
+      edestruct H6 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H7; reflexivity | |];
         apply bisimulation_is_eq in H8; subst; [| inversion H].
-      rewrite bind_vis' in H5. inversion H5; auto_inj_pair2; subst.
-      destruct (H2 _ H3 _ _ (step_load _ _ _ _ H6)) as (? & p' & ? & ? & ?). pclearbot.
-      split; auto.
-      exists p'. split; [| split]; auto. right. eapply CIH; eauto.
-      intros. apply H1. econstructor; eauto.
+      rewritebisim_in @bind_vis H7. inversion H7; auto_inj_pair2; subst.
+      destruct (H2 _ _ H3 H4 _ _ (step_nondet_true _ _)) as (? & P' & ? & (p' & ? & ? & ?)).
+      pclearbot. split; auto. exists P'. split; eauto.
     + pose proof @eqitree_inv_bind_vis.
-      edestruct H7 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H5; reflexivity | |];
+      edestruct H6 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H7; reflexivity | |];
         apply bisimulation_is_eq in H8; subst; [| inversion H].
-      rewrite bind_vis' in H5. inversion H5; auto_inj_pair2; subst.
-      destruct (H2 _ H3 _ _ (step_store _ _ _ _ _ H6)) as (? & p' & ? & ? & ?). pclearbot.
-      split; auto.
-      exists p'. split; [| split]; auto. right. eapply CIH; eauto.
-      intros. apply H1. econstructor; eauto.
+      rewritebisim_in @bind_vis H7. inversion H7; auto_inj_pair2; subst.
+      destruct (H2 _ _ H3 H4 _ _ (step_nondet_false _ _)) as (? & P' & ? & (p' & ? & ? & ?)).
+      pclearbot. split; auto. exists P'. split; eauto.
     + pose proof @eqitree_inv_bind_vis.
-      edestruct H7 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H5; reflexivity | |];
-        apply bisimulation_is_eq in H8; subst; [| inversion H].
-      rewrite bind_vis' in H5. inversion H5; auto_inj_pair2; subst.
-      destruct (H2 _ H3 _ _ (step_load_fail _ _ _ H6)) as (? & p' & ? & ? & ?). pclearbot.
-      split; auto.
-      exists p'. split; [| split]; auto. right. eapply CIH; eauto.
-      intros. apply H1. econstructor; eauto.
+      edestruct H8 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H6; reflexivity | |];
+        apply bisimulation_is_eq in H9; subst; [| inversion H].
+      rewritebisim_in @bind_vis H6. inversion H6; auto_inj_pair2; subst.
+      destruct (H2 _ _ H3 H4 _ _ (step_load _ _ _ _ H7)) as (? & P' & ? & (p' & ? & ? & ?)).
+      pclearbot. split; auto. exists P'. split; eauto.
     + pose proof @eqitree_inv_bind_vis.
-      edestruct H7 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H5; reflexivity | |];
-        apply bisimulation_is_eq in H8; subst; [| inversion H].
-      rewrite bind_vis' in H5. inversion H5; auto_inj_pair2; subst.
-      destruct (H2 _ H3 _ _ (step_store_fail _ _ _ _ H6)) as (? & p' & ? & ? & ?). pclearbot.
-      split; auto.
-      exists p'. split; [| split]; auto. right. eapply CIH; eauto.
-      intros. apply H1. econstructor; eauto.
-  - rewrite bind_ret_l'. eapply paco3_mon_bot; eauto. eapply typing_perm_lte; eauto.
-    apply H1. constructor.
+      edestruct H8 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H6; reflexivity | |];
+        apply bisimulation_is_eq in H9; subst; [| inversion H].
+      rewritebisim_in @bind_vis H6. inversion H6; auto_inj_pair2; subst.
+      destruct (H2 _ _ H3 H4 _ _ (step_store _ _ _ _ _ H7)) as (? & P' & ? & (p' & ? & ? & ?)).
+      pclearbot. split; auto. exists P'. split; eauto.
+    + pose proof @eqitree_inv_bind_vis.
+      edestruct H8 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H6; reflexivity | |];
+        apply bisimulation_is_eq in H9; subst; [| inversion H].
+      rewritebisim_in @bind_vis H6. inversion H6; auto_inj_pair2; subst.
+      destruct (H2 _ _ H3 H4 _ _ (step_load_fail _ _ _ H7)) as (? & P' & ? & (p' & ? & ? & ?)).
+      pclearbot. split; auto. exists P'. split; eauto.
+    + pose proof @eqitree_inv_bind_vis.
+      edestruct H8 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H6; reflexivity | |];
+        apply bisimulation_is_eq in H9; subst; [| inversion H].
+      rewritebisim_in @bind_vis H6. inversion H6; auto_inj_pair2; subst.
+      destruct (H2 _ _ H3 H4 _ _ (step_store_fail _ _ _ _ H7)) as (? & P' & ? & (p' & ? & ? & ?)).
+      pclearbot. split; auto. exists P'. split; eauto.
+  - rewritebisim @bind_ret_l. eapply paco3_mon_bot; eauto. eapply typing_lte; eauto.
+    reflexivity.
 Qed.
 
-Ltac rewritebisim lem := pose proof lem as bisim;
-                         eapply bisimulation_is_eq in bisim;
-                         rewrite bisim;
-                         clear bisim.
+(* Lemma return_map1 {R1 R2} : forall (t1 : itree E R1) (r1 : R1) (r2 r2' : R2), *)
+(*     Returns (r1, r2) (ITree.map (fun r1 : R1 => (r1, r2')) t1) -> *)
+(*     Returns r1 t1 /\ r2 = r2'. *)
+(* Proof. *)
+(*   intros. remember (r1, r2). remember (ITree.map _ _). *)
+(*   generalize dependent t1. unfold ITree.map. *)
+(*   induction H; intros; subst. *)
+(*   - edestruct @eqitree_inv_bind_ret as (? & ? & ?); [rewrite Heqi; reflexivity |]. *)
+(*     apply bisimulation_is_eq in H0. inversion H0. *)
+(*     rewritebisim H. subst. *)
+(*     split; [constructor |]; auto. *)
+(*   - edestruct @eqitree_inv_bind_tau as [(? & ? & ?) | (? & ? & ?)]; *)
+(*       [rewrite Heqi; reflexivity | |]. *)
+(*     + rewritebisim H0. apply bisimulation_is_eq in H1. *)
+(*       split; [constructor |]; eapply IHReturns; eauto. *)
+(*     + apply bisimulation_is_eq in H1. inversion H1. *)
+(*   - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)]; *)
+(*       [rewrite Heqi; reflexivity | |]. *)
+(*     + rewritebisim H0. split; [econstructor; eapply IHReturns; eauto; rewritebisim H1; eauto |]. *)
+(*       specialize (H1 x). apply bisimulation_is_eq in H1. eapply IHReturns; eauto. *)
+(*     + apply bisimulation_is_eq in H1. inversion H1. *)
+(* Qed. *)
 
-Ltac rewritebisim_in lem H := pose proof lem as bisim;
-                              eapply bisimulation_is_eq in bisim;
-                              rewrite bisim in H;
-                              clear bisim.
+(* Lemma return_map2 {R1 R2} : forall (t2 : itree E R2) (r1 r1' : R1) (r2 : R2), *)
+(*     Returns (r1, r2) (ITree.map (fun r2 : R2 => (r1', r2)) t2) -> *)
+(*     Returns r2 t2 /\ r1 = r1'. *)
+(* Proof. *)
+(*   intros. remember (r1, r2). remember (ITree.map _ _). *)
+(*   generalize dependent t2. unfold ITree.map. *)
+(*   induction H; intros; subst. *)
+(*   - edestruct @eqitree_inv_bind_ret as (? & ? & ?); [rewrite Heqi; reflexivity |]. *)
+(*     apply bisimulation_is_eq in H0. inversion H0. *)
+(*     rewritebisim H. subst. *)
+(*     split; [constructor |]; auto. *)
+(*   - edestruct @eqitree_inv_bind_tau as [(? & ? & ?) | (? & ? & ?)]; *)
+(*       [rewrite Heqi; reflexivity | |]. *)
+(*     + rewritebisim H0. apply bisimulation_is_eq in H1. *)
+(*       split; [constructor |]; eapply IHReturns; eauto. *)
+(*     + apply bisimulation_is_eq in H1. inversion H1. *)
+(*   - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)]; *)
+(*       [rewrite Heqi; reflexivity | |]. *)
+(*     + rewritebisim H0. split; [econstructor; eapply IHReturns; eauto; rewritebisim H1; eauto |]. *)
+(*       specialize (H1 x). apply bisimulation_is_eq in H1. eapply IHReturns; eauto. *)
+(*     + apply bisimulation_is_eq in H1. inversion H1. *)
+(* Qed. *)
 
+(* Lemma return_par_helper {R1 R2} (t1 : itree E R1) (t2 : itree E R2) r1 r2 t : *)
+(*   Returns (r1, r2) t -> *)
+(*   (t = (par t1 t2) \/ *)
+(*    t = Tau (par t1 t2) \/ *)
+(*    (exists X (e : E X) k, t1 = Vis e k /\ t = Vis (subevent X e) (fun x => par (k x) t2)) \/ *)
+(*    (exists X (e : E X) k, t2 = Vis e k /\ t = Vis (subevent X e) (fun x => par t1 (k x)))) -> *)
+(*   Returns r1 t1 /\ Returns r2 t2. *)
+(* Proof. *)
+(*   intros. *)
+(*   revert H0. generalize dependent t1. generalize dependent t2. *)
+(*   induction H; intros. *)
+(*   - destruct H0 as [? | [? | [? | ?]]]. *)
+(*     + rewrite rewrite_par in H. unfold par_match in H. inversion H. *)
+(*     + inversion H. *)
+(*     + destruct H as (? & ? & ? & ? & ?). inversion H0. *)
+(*     + destruct H as (? & ? & ? & ? & ?). inversion H0. *)
+(*   - destruct H0 as [? | [? | [? | ?]]]. *)
+(*     + rewrite rewrite_par in H0. unfold par_match in H0. inversion H0. *)
+(*     + inversion H0. eapply IHReturns; eauto. *)
+(*     + destruct H0 as (? & ? & ? & ? & ?). inversion H1. *)
+(*     + destruct H0 as (? & ? & ? & ? & ?). inversion H1. *)
+(*   - destruct H0 as [? | [? | [? | ?]]]. *)
+(*     + rewrite rewrite_par in H0. unfold par_match in H0. *)
+(*       inversion H0; subst; auto_inj_pair2; subst; clear H0. *)
+(*       destruct x. *)
+(*       { *)
+(*         destruct (observe t1) eqn:?. *)
+(*         - apply return_map2 in H. destruct H. split; auto. *)
+(*           rewrite itree_eta_. rewrite Heqi. subst. constructor. *)
+(*         - rewrite (itree_eta_ t1). rewrite Heqi. split; [constructor |]; eapply IHReturns; eauto. *)
+(*         - rewrite (itree_eta_ t1). rewrite Heqi. eapply IHReturns. *)
+(*           right. right. left. do 3 eexists. split; reflexivity. *)
+(*       } *)
+(*       { *)
+(*         destruct (observe t2) eqn:?. *)
+(*         - apply return_map1 in H. destruct H. split; auto. *)
+(*           rewrite itree_eta_. rewrite Heqi. subst. constructor. *)
+(*         - rewrite (itree_eta_ t2). rewrite Heqi. split; [| constructor]; eapply IHReturns; eauto. *)
+(*         - rewrite (itree_eta_ t2). rewrite Heqi. eapply IHReturns. *)
+(*           right. right. right. do 3 eexists. split; reflexivity. *)
+(*       } *)
+(*     + inversion H0. *)
+(*     + destruct H0 as (? & ? & ? & ? & ?). inversion H1; subst; auto_inj_pair2; subst; clear H1. *)
+(*       split; [econstructor |]; eapply IHReturns; left; eauto. *)
+(*     + destruct H0 as (? & ? & ? & ? & ?). inversion H1; subst; auto_inj_pair2; subst; clear H1. *)
+(*       split; [| econstructor]; eapply IHReturns; left; eauto. *)
+(* Qed. *)
 
-Lemma return_map1 {R1 R2} : forall (t1 : itree E R1) (r1 : R1) (r2 r2' : R2),
-    Returns (r1, r2) (ITree.map (fun r1 : R1 => (r1, r2')) t1) ->
-    Returns r1 t1 /\ r2 = r2'.
-Proof.
-  intros. remember (r1, r2). remember (ITree.map _ _).
-  generalize dependent t1. unfold ITree.map.
-  induction H; intros; subst.
-  - edestruct @eqitree_inv_bind_ret as (? & ? & ?); [rewrite Heqi; reflexivity |].
-    apply bisimulation_is_eq in H0. inversion H0.
-    rewritebisim H. subst.
-    split; [constructor |]; auto.
-  - edestruct @eqitree_inv_bind_tau as [(? & ? & ?) | (? & ? & ?)];
-      [rewrite Heqi; reflexivity | |].
-    + rewritebisim H0. apply bisimulation_is_eq in H1.
-      split; [constructor |]; eapply IHReturns; eauto.
-    + apply bisimulation_is_eq in H1. inversion H1.
-  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
-      [rewrite Heqi; reflexivity | |].
-    + rewritebisim H0. split; [econstructor; eapply IHReturns; eauto; rewritebisim H1; eauto |].
-      specialize (H1 x). apply bisimulation_is_eq in H1. eapply IHReturns; eauto.
-    + apply bisimulation_is_eq in H1. inversion H1.
-Qed.
+(* Lemma return_par {R1 R2} (t1 : itree E R1) (t2 : itree E R2) r1 r2 : *)
+(*   Returns (r1, r2) (par t1 t2) -> *)
+(*   Returns r1 t1 /\ Returns r2 t2. *)
+(* Proof. *)
+(*   intros. eapply return_par_helper; eauto. *)
+(* Qed. *)
 
-Lemma return_map2 {R1 R2} : forall (t2 : itree E R2) (r1 r1' : R1) (r2 : R2),
-    Returns (r1, r2) (ITree.map (fun r2 : R2 => (r1', r2)) t2) ->
-    Returns r2 t2 /\ r1 = r1'.
-Proof.
-  intros. remember (r1, r2). remember (ITree.map _ _).
-  generalize dependent t2. unfold ITree.map.
-  induction H; intros; subst.
-  - edestruct @eqitree_inv_bind_ret as (? & ? & ?); [rewrite Heqi; reflexivity |].
-    apply bisimulation_is_eq in H0. inversion H0.
-    rewritebisim H. subst.
-    split; [constructor |]; auto.
-  - edestruct @eqitree_inv_bind_tau as [(? & ? & ?) | (? & ? & ?)];
-      [rewrite Heqi; reflexivity | |].
-    + rewritebisim H0. apply bisimulation_is_eq in H1.
-      split; [constructor |]; eapply IHReturns; eauto.
-    + apply bisimulation_is_eq in H1. inversion H1.
-  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
-      [rewrite Heqi; reflexivity | |].
-    + rewritebisim H0. split; [econstructor; eapply IHReturns; eauto; rewritebisim H1; eauto |].
-      specialize (H1 x). apply bisimulation_is_eq in H1. eapply IHReturns; eauto.
-    + apply bisimulation_is_eq in H1. inversion H1.
-Qed.
-
-Lemma return_par_helper {R1 R2} (t1 : itree E R1) (t2 : itree E R2) r1 r2 t :
-  Returns (r1, r2) t ->
-  (t = (par t1 t2) \/
-   t = Tau (par t1 t2) \/
-   (exists X (e : E X) k, t1 = Vis e k /\ t = Vis (subevent X e) (fun x => par (k x) t2)) \/
-   (exists X (e : E X) k, t2 = Vis e k /\ t = Vis (subevent X e) (fun x => par t1 (k x)))) ->
-  Returns r1 t1 /\ Returns r2 t2.
-Proof.
-  intros.
-  revert H0. generalize dependent t1. generalize dependent t2.
-  induction H; intros.
-  - destruct H0 as [? | [? | [? | ?]]].
-    + rewrite rewrite_par in H. unfold par_match in H. inversion H.
-    + inversion H.
-    + destruct H as (? & ? & ? & ? & ?). inversion H0.
-    + destruct H as (? & ? & ? & ? & ?). inversion H0.
-  - destruct H0 as [? | [? | [? | ?]]].
-    + rewrite rewrite_par in H0. unfold par_match in H0. inversion H0.
-    + inversion H0. eapply IHReturns; eauto.
-    + destruct H0 as (? & ? & ? & ? & ?). inversion H1.
-    + destruct H0 as (? & ? & ? & ? & ?). inversion H1.
-  - destruct H0 as [? | [? | [? | ?]]].
-    + rewrite rewrite_par in H0. unfold par_match in H0.
-      inversion H0; subst; auto_inj_pair2; subst; clear H0.
-      destruct x.
-      {
-        destruct (observe t1) eqn:?.
-        - apply return_map2 in H. destruct H. split; auto.
-          rewrite itree_eta_. rewrite Heqi. subst. constructor.
-        - rewrite (itree_eta_ t1). rewrite Heqi. split; [constructor |]; eapply IHReturns; eauto.
-        - rewrite (itree_eta_ t1). rewrite Heqi. eapply IHReturns.
-          right. right. left. do 3 eexists. split; reflexivity.
-      }
-      {
-        destruct (observe t2) eqn:?.
-        - apply return_map1 in H. destruct H. split; auto.
-          rewrite itree_eta_. rewrite Heqi. subst. constructor.
-        - rewrite (itree_eta_ t2). rewrite Heqi. split; [| constructor]; eapply IHReturns; eauto.
-        - rewrite (itree_eta_ t2). rewrite Heqi. eapply IHReturns.
-          right. right. right. do 3 eexists. split; reflexivity.
-      }
-    + inversion H0.
-    + destruct H0 as (? & ? & ? & ? & ?). inversion H1; subst; auto_inj_pair2; subst; clear H1.
-      split; [econstructor |]; eapply IHReturns; left; eauto.
-    + destruct H0 as (? & ? & ? & ? & ?). inversion H1; subst; auto_inj_pair2; subst; clear H1.
-      split; [| econstructor]; eapply IHReturns; left; eauto.
-Qed.
-
-Lemma return_par {R1 R2} (t1 : itree E R1) (t2 : itree E R2) r1 r2 :
-  Returns (r1, r2) (par t1 t2) ->
-  Returns r1 t1 /\ Returns r2 t2.
-Proof.
-  intros. eapply return_par_helper; eauto.
-Qed.
-
-Lemma step_fmap {R1 R2} : forall (t t' : itree E R1) c c' (f : R1 -> R2),
-    step t c t' c' ->
-    step (fmap f t) c (fmap f t') c'.
-Proof.
-  intros. inversion H; subst; simpl; unfold ITree.map;
-            try solve [rewrite bind_vis'; constructor; auto].
-  - rewrite bind_tau'. constructor; auto.
-  - rewrite bind_vis'.
-    (* again have to specify k manually? *)
-    apply (step_load (fun x => x' <- k x;; Ret (f x'))); auto.
-Qed.
-
-Lemma bind_fst {R1 R2} (t : itree E R1) (r2 : R2) :
-  x1 <- t;; x <- Ret (x1, r2);; Ret (fst x) ≅ t.
-Proof.
-  revert t r2. pcofix CIH. intros.
-  rewrite unfold_bind'. pstep.
-  rewrite (itree_eta_ t0). destruct (observe t0); simpl.
-  - rewrite unfold_bind'. constructor; auto.
-  - constructor; auto.
-  - constructor; auto.
-Qed.
-
-Lemma bind_snd {R1 R2} (t : itree E R2) (r1 : R1) :
-  x2 <- t;; x <- Ret (r1, x2);; Ret (snd x) ≅ t.
-Proof.
-  revert t r1. pcofix CIH. intros.
-  rewrite unfold_bind'. pstep.
-  rewrite (itree_eta_ t0). destruct (observe t0); simpl.
-  - rewrite unfold_bind'. constructor; auto.
-  - constructor; auto.
-  - constructor; auto.
-Qed.
-
-Lemma step_fmap_fst {R1 R2} : forall (t : itree E R2) (t' : itree E (R1 * R2)) c c' (r1 : R1),
-    step (fmap (fun r2 : R2 => (r1, r2)) t) c t' c' ->
-    step t c (fmap snd t') c'.
-Proof.
-  simpl. intros. unfold ITree.map in *. inversion H; subst.
-  - edestruct @eqitree_inv_bind_tau as [(? & ? & ?) | (? & ? & ?)];
-      [rewrite H1; reflexivity | |].
-    + apply bisimulation_is_eq in H0. apply bisimulation_is_eq in H2.
-      rewrite H0. rewrite <- H2. rewritebisim @bind_bind. rewritebisim @bind_snd. constructor.
-    + apply bisimulation_is_eq in H0. rewrite H0 in H1.
-      rewritebisim_in @bind_ret_l H1. inversion H1.
-  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
-      [rewrite H1; reflexivity | |].
-    + specialize (H2 true). apply bisimulation_is_eq in H0. apply bisimulation_is_eq in H2.
-      rewrite H0. rewrite <- H2. rewritebisim @bind_bind. rewritebisim @bind_snd. constructor.
-    + apply bisimulation_is_eq in H0. rewrite H0 in H1.
-      rewritebisim_in @bind_ret_l H1. inversion H1.
-  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
-      [rewrite H1; reflexivity | |].
-    + specialize (H2 false). apply bisimulation_is_eq in H0. apply bisimulation_is_eq in H2.
-      rewrite H0. rewrite <- H2. rewritebisim @bind_bind. rewritebisim @bind_snd. constructor.
-    + apply bisimulation_is_eq in H0. rewrite H0 in H1.
-      rewritebisim_in @bind_ret_l H1. inversion H1.
-  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
-      [rewrite H0; reflexivity | |].
-    + specialize (H3 v). apply bisimulation_is_eq in H2. apply bisimulation_is_eq in H3.
-      rewrite H2. rewrite <- H3.
-      rewritebisim @bind_bind. rewritebisim @bind_snd. constructor; auto.
-    + apply bisimulation_is_eq in H2. rewrite H2 in H0.
-      rewritebisim_in @bind_ret_l H0. inversion H0.
-  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
-      [rewrite H0; reflexivity | |].
-    + specialize (H3 tt). apply bisimulation_is_eq in H2. apply bisimulation_is_eq in H3.
-      rewrite H2. rewrite <- H3.
-      rewritebisim @bind_bind. rewritebisim @bind_snd. constructor; auto.
-    + apply bisimulation_is_eq in H2. rewrite H2 in H0.
-      rewritebisim_in @bind_ret_l H0. inversion H0.
-  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
-      [rewrite H0; reflexivity | |].
-    + specialize (H3 (Byte 0)). apply bisimulation_is_eq in H2. apply bisimulation_is_eq in H3.
-      rewrite H2. rewrite <- H3.
-      rewritebisim @bind_bind. rewritebisim @bind_snd. constructor; auto.
-    + apply bisimulation_is_eq in H2. rewrite H2 in H0.
-      rewritebisim_in @bind_ret_l H0. inversion H0.
-  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
-      [rewrite H0; reflexivity | |].
-    + specialize (H3 tt). apply bisimulation_is_eq in H2. apply bisimulation_is_eq in H3.
-      rewrite H2. rewrite <- H3.
-      rewritebisim @bind_bind. rewritebisim @bind_snd. constructor 7; auto.
-    + apply bisimulation_is_eq in H2. rewrite H2 in H0.
-      rewritebisim_in @bind_ret_l H0. inversion H0.
-Qed.
-
-Lemma step_fmap_snd {R1 R2} : forall (t : itree E R1) (t' : itree E (R1 * R2)) c c' (r2 : R2),
-    step (fmap (fun r1 : R1 => (r1, r2)) t) c t' c' ->
-    step t c (fmap fst t') c'.
-Proof.
-  simpl. intros. unfold ITree.map in *. inversion H; subst.
-  - edestruct @eqitree_inv_bind_tau as [(? & ? & ?) | (? & ? & ?)];
-      [rewrite H1; reflexivity | |].
-    + apply bisimulation_is_eq in H0. apply bisimulation_is_eq in H2.
-      rewrite H0. rewrite <- H2. rewritebisim @bind_bind. rewritebisim @bind_fst. constructor.
-    + apply bisimulation_is_eq in H0. rewrite H0 in H1.
-      rewritebisim_in @bind_ret_l H1. inversion H1.
-  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
-      [rewrite H1; reflexivity | |].
-    + specialize (H2 true). apply bisimulation_is_eq in H0. apply bisimulation_is_eq in H2.
-      rewrite H0. rewrite <- H2. rewritebisim @bind_bind. rewritebisim @bind_fst. constructor.
-    + apply bisimulation_is_eq in H0. rewrite H0 in H1.
-      rewritebisim_in @bind_ret_l H1. inversion H1.
-  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
-      [rewrite H1; reflexivity | |].
-    + specialize (H2 false). apply bisimulation_is_eq in H0. apply bisimulation_is_eq in H2.
-      rewrite H0. rewrite <- H2. rewritebisim @bind_bind. rewritebisim @bind_fst. constructor.
-    + apply bisimulation_is_eq in H0. rewrite H0 in H1.
-      rewritebisim_in @bind_ret_l H1. inversion H1.
-  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
-      [rewrite H0; reflexivity | |].
-    + specialize (H3 v). apply bisimulation_is_eq in H2. apply bisimulation_is_eq in H3.
-      rewrite H2. rewrite <- H3.
-      rewritebisim @bind_bind. rewritebisim @bind_fst. constructor; auto.
-    + apply bisimulation_is_eq in H2. rewrite H2 in H0.
-      rewritebisim_in @bind_ret_l H0. inversion H0.
-  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
-      [rewrite H0; reflexivity | |].
-    + specialize (H3 tt). apply bisimulation_is_eq in H2. apply bisimulation_is_eq in H3.
-      rewrite H2. rewrite <- H3.
-      rewritebisim @bind_bind. rewritebisim @bind_fst. constructor; auto.
-    + apply bisimulation_is_eq in H2. rewrite H2 in H0.
-      rewritebisim_in @bind_ret_l H0. inversion H0.
-  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
-      [rewrite H0; reflexivity | |].
-    + specialize (H3 (Byte 0)). apply bisimulation_is_eq in H2. apply bisimulation_is_eq in H3.
-      rewrite H2. rewrite <- H3.
-      rewritebisim @bind_bind. rewritebisim @bind_fst. constructor; auto.
-    + apply bisimulation_is_eq in H2. rewrite H2 in H0.
-      rewritebisim_in @bind_ret_l H0. inversion H0.
-  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
-      [rewrite H0; reflexivity | |].
-    + specialize (H3 tt). apply bisimulation_is_eq in H2. apply bisimulation_is_eq in H3.
-      rewrite H2. rewrite <- H3.
-      rewritebisim @bind_bind. rewritebisim @bind_fst. constructor 7; auto.
-    + apply bisimulation_is_eq in H2. rewrite H2 in H0.
-      rewritebisim_in @bind_ret_l H0. inversion H0.
-Qed.
-
-Lemma step_fmap_inv {R1 R2 : Type} (f : R1 -> R2) (t : itree E R1) (t' : itree E R2) c c' :
-  step (fmap f t) c t' c' ->
-  exists t'', t' = fmap f t''.
-Proof.
-  intros. simpl in *. unfold ITree.map in *. inversion H; subst.
-  - edestruct @eqitree_inv_bind_tau as [(? & ? & ?) | (? & ? & ?)];
-      [rewrite H1; reflexivity | |].
-    + apply bisimulation_is_eq in H2. eexists. symmetry. apply H2.
-    + apply bisimulation_is_eq in H0. rewrite H0 in H1.
-      rewritebisim_in @bind_ret_l H1. inversion H1.
-  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
-      [rewrite H1; reflexivity | |].
-    + specialize (H2 true). apply bisimulation_is_eq in H2. eexists. symmetry. apply H2.
-    + apply bisimulation_is_eq in H0. rewrite H0 in H1.
-      rewritebisim_in @bind_ret_l H1. inversion H1.
-  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
-      [rewrite H1; reflexivity | |].
-    + specialize (H2 false). apply bisimulation_is_eq in H2. eexists. symmetry. apply H2.
-    + apply bisimulation_is_eq in H0. rewrite H0 in H1.
-      rewritebisim_in @bind_ret_l H1. inversion H1.
-  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
-      [rewrite H0; reflexivity | |].
-    + specialize (H3 v). apply bisimulation_is_eq in H3. eexists. symmetry. apply H3.
-    + apply bisimulation_is_eq in H2. rewrite H2 in H0.
-      rewritebisim_in @bind_ret_l H0. inversion H0.
-  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
-      [rewrite H0; reflexivity | |].
-    + specialize (H3 tt). apply bisimulation_is_eq in H3. eexists. symmetry. apply H3.
-    + apply bisimulation_is_eq in H2. rewrite H2 in H0.
-      rewritebisim_in @bind_ret_l H0. inversion H0.
-  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
-      [rewrite H0; reflexivity | |].
-    + specialize (H3 (Byte 0)). apply bisimulation_is_eq in H3. eexists. symmetry. apply H3.
-    + apply bisimulation_is_eq in H2. rewrite H2 in H0.
-      rewritebisim_in @bind_ret_l H0. inversion H0.
-  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
-      [rewrite H0; reflexivity | |].
-    + specialize (H3 tt). apply bisimulation_is_eq in H3. eexists. symmetry. apply H3.
-    + apply bisimulation_is_eq in H2. rewrite H2 in H0.
-      rewritebisim_in @bind_ret_l H0. inversion H0.
-Qed.
 
 (* TODO Generalize these lemmas *)
 Lemma fmap_fst {R1 R2 : Type} (t' : itree E R1) (t : itree E (R1 * R2)) (r2 : R2) :
@@ -802,9 +627,9 @@ Proof.
     edestruct @eqitree_inv_bind_tau as [(? & ? & ?) | (? & ? & ?)];
       [rewrite H in H0; rewrite H0; reflexivity | |].
     + constructor. right. eapply CIH; eauto. apply bisimulation_is_eq. symmetry. apply H2.
-    + apply bisimulation_is_eq in H1. subst. rewrite bind_ret_l' in H. inversion H.
+    + apply bisimulation_is_eq in H1. subst. rewritebisim_in @bind_ret_l H. inversion H.
   - symmetry in Heqi. pose proof (simpobs Heqi). apply bisimulation_is_eq in H. rewrite H.
-    unfold ITree.map. rewrite bind_vis'. rewrite bind_vis'.
+    unfold ITree.map. rewritebisim @bind_vis. rewritebisim @bind_vis.
     edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
       [rewrite H in H0; rewrite H0; reflexivity | |].
     + constructor. intros. right. subst. eapply CIH.
@@ -832,9 +657,9 @@ Proof.
     edestruct @eqitree_inv_bind_tau as [(? & ? & ?) | (? & ? & ?)];
       [rewrite H in H0; rewrite H0; reflexivity | |].
     + constructor. right. eapply CIH; eauto. apply bisimulation_is_eq. symmetry. apply H2.
-    + apply bisimulation_is_eq in H1. subst. rewrite bind_ret_l' in H. inversion H.
+    + apply bisimulation_is_eq in H1. subst. rewritebisim_in @bind_ret_l H. inversion H.
   - symmetry in Heqi. pose proof (simpobs Heqi). apply bisimulation_is_eq in H. rewrite H.
-    unfold ITree.map. rewrite bind_vis'. rewrite bind_vis'.
+    unfold ITree.map. rewritebisim @bind_vis. rewritebisim @bind_vis.
     edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
       [rewrite H in H0; rewrite H0; reflexivity | |].
     + constructor. intros. right. subst. eapply CIH.
@@ -842,389 +667,426 @@ Proof.
     + apply bisimulation_is_eq in H2. inversion H2.
 Qed.
 
-Lemma typing_perm_frame {R1 R2 : Type} : forall p q o (r1 : R1) (t : itree E R2),
-    typing_perm p q t ->
-    typing_perm (o r1 * p) (fun '(r1, r2) => o r1 * q r2) (fmap (fun r2 => (r1, r2)) t).
+Lemma typing_frame1 {R1 R2 : Type} : forall P Q R (r1 : R1) (t : itree E R2),
+    typing P Q t ->
+    typing (R r1 ** P) (fun '(r1, r2) => R r1 ** Q r2) (fmap (fun r2 => (r1, r2)) t).
 Proof.
   pcofix CIH. intros. pinversion H0; subst.
   - destruct H as ((? & ? & ? & ?) & ?). pstep. constructor.
     split. {
       simpl. do 3 eexists. eapply step_fmap; eauto.
     }
-    intros. pose proof (step_fmap_fst _ _ _ _ _ H3).
-    edestruct H1; eauto. apply H2.
-    split; [constructor; auto |]. destruct H6 as (p' & ? & ? & ?).
-    pclearbot. exists (o r1 * p'). split; [| split]; auto.
+    intros. pose proof (step_fmap_fst _ _ _ _ _ H4).
+    rename p into rp.
+    destruct H2 as (r' & p & Hr & Hp & Hle).
+    edestruct H1. eauto. apply Hle; eauto. eauto. split.
+    apply Hle. constructor. auto.
+    destruct H6 as (P' & ? & (p' & ? & ? & ?)). pclearbot.
+    exists (R r1 ** P'). split; [| exists (r' * p'); split; [| split]]; eauto.
     + right.
-      simpl in H3. unfold ITree.map in H3.
-      pose proof @step_fmap_inv. simpl in H9. unfold ITree.map in H9.
-      specialize (H9 _ _ _ _ _ _ _ H3). destruct H9.
+      simpl in H4. unfold ITree.map in H4.
+      pose proof @step_fmap_inv. simpl in H10. unfold ITree.map in H10.
+      specialize (H10 _ _ _ _ _ _ _ H4). destruct H10.
       erewrite fmap_snd; eauto.
-    + apply sep_step_sep_conj_r; auto. symmetry. apply H2.
-    + split; [| split]; auto.
-      * destruct H2 as (? & ? & ?).
-        eapply dom_respects; eauto. apply H10; auto.
-      * symmetry. apply H7. symmetry. apply H2.
-  - simpl. pstep. unfold ITree.map. rewrite bind_ret_l'.
-    constructor 2. apply sep_conj_perm_monotone; intuition.
+    + apply sep_conj_Perms_perm; auto.
+    + eapply sep_step_lte; eauto. apply sep_step_sep_conj_r; auto. symmetry.
+      apply Hle in H3. apply H3.
+    + apply Hle in H3. destruct H3 as (? & ? & ?).
+      split; [| split]; auto.
+      * eapply dom_respects; eauto. apply H11; auto.
+      * symmetry. apply H8. symmetry. auto.
+  - simpl. pstep. unfold ITree.map. rewritebisim @bind_ret_l.
+    constructor 2. apply sep_conj_Perms_monotone; intuition.
 Qed.
 
-Lemma typing_perm_frame' {R1 R2 : Type} : forall p q o (r2 : R2) (t : itree E R1),
-    typing_perm p q t ->
-    typing_perm (p * o r2) (fun '(r1, r2) => q r1 * o r2) (fmap (fun r1 => (r1, r2)) t).
+Lemma typing_frame2 {R1 R2 : Type} : forall P Q R (r2 : R2) (t : itree E R1),
+    typing P Q t ->
+    typing (P ** R r2) (fun '(r1, r2) => Q r1 ** R r2) (fmap (fun r1 => (r1, r2)) t).
 Proof.
   pcofix CIH. intros. pinversion H0; subst.
   - destruct H as ((? & ? & ? & ?) & ?). pstep. constructor.
     split. {
       simpl. do 3 eexists. eapply step_fmap; eauto.
     }
-    intros. pose proof (step_fmap_snd _ _ _ _ _ H3).
-    edestruct H1; eauto. apply H2.
-    split; [constructor; auto |]. destruct H6 as (p' & ? & ? & ?).
-    pclearbot. exists (p' * o r2). split; [| split]; auto.
+    intros. pose proof (step_fmap_snd _ _ _ _ _ H4).
+    rename p into rp.
+    destruct H2 as (p & r' & Hr & Hp & Hle).
+    edestruct H1. eauto. apply Hle; eauto. eauto. split.
+    apply Hle. constructor. auto.
+    destruct H6 as (P' & ? & (p' & ? & ? & ?)). pclearbot.
+    exists (P' ** R r2). split; [| exists (p' * r'); split; [| split]]; eauto.
     + right.
-      simpl in H3. unfold ITree.map in H3.
-      pose proof @step_fmap_inv. simpl in H9. unfold ITree.map in H9.
-      specialize (H9 _ _ _ _ _ _ _ H3). destruct H9.
+      simpl in H4. unfold ITree.map in H4.
+      pose proof @step_fmap_inv. simpl in H10. unfold ITree.map in H10.
+      specialize (H10 _ _ _ _ _ _ _ H4). destruct H10.
       erewrite fmap_fst; eauto.
-    + apply sep_step_sep_conj_l; auto. apply H2.
-    + split; [| split]; auto.
-      * destruct H2 as (? & ? & ?).
-        eapply dom_respects; eauto. apply H10; auto.
-      * apply H7. apply H2.
-  - simpl. pstep. unfold ITree.map. rewrite bind_ret_l'.
-    constructor 2. apply sep_conj_perm_monotone; intuition.
+    + apply sep_conj_Perms_perm; auto.
+    + eapply sep_step_lte; eauto. apply sep_step_sep_conj_l; auto.
+      apply Hle in H3. apply H3.
+    + apply Hle in H3. destruct H3 as (? & ? & ?).
+      split; [| split]; auto.
+      eapply dom_respects; eauto. apply H11; auto.
+  - simpl. pstep. unfold ITree.map. rewritebisim @bind_ret_l.
+    constructor 2. apply sep_conj_Perms_monotone; intuition.
 Qed.
 
-Lemma parallel_perm : forall {R1 R2} p1 p2 q1 q2 (t1 : itree E R1) (t2 : itree E R2),
-    typing_perm p1 q1 t1 ->
-    typing_perm p2 q2 t2 ->
-    typing_perm (p1 * p2) (fun '(r1, r2) => q1 r1 * q2 r2) (par t1 t2).
+Lemma parallel_perm : forall {R1 R2} P1 P2 Q1 Q2 (t1 : itree E R1) (t2 : itree E R2),
+    typing P1 Q1 t1 ->
+    typing P2 Q2 t2 ->
+    typing (P1 ** P2) (fun '(r1, r2) => Q1 r1 ** Q2 r2) (par t1 t2).
 Proof.
   intros R1 R2.
-  pcofix CIH. intros p1 p2 q1 q2 t1 t2 Ht1 Ht2.
+  pcofix CIH. intros P1 P2 Q1 Q2 t1 t2 Ht1 Ht2.
   pstep. econstructor.
   rewrite rewrite_par. unfold par_match. split.
-  simpl. exists start_config. eexists. exists start_config. constructor.
-  intros c (Hdom1 & Hdom2 & Hsep) t' c' Hstep.
+  { simpl. exists start_config. eexists. exists start_config. constructor. }
+  intros p c (p1 & p2 & Hp1 & Hp2 & Hp) Hdom t' c' Hstep.
+  (* clear p1 p2 Hp1 Hp2 Hp. (* todo *) *)
   inversion Hstep; auto_inj_pair2; subst; clear Hstep; split; try reflexivity.
   { pinversion Ht1; subst.
     - destruct H as ((? & ? & ? & ?) & ?).
       inversion H; subst; clear H.
       + (* tau *) clear x1. simpl.
-        exists (p1 * p2). split; [| split]; intuition.
+        exists (P1 ** P2). split.
         * left. pstep. constructor. split.
           -- exists start_config; eexists; exists start_config; constructor.
-          -- intros. inversion H1; subst.
-             split; intuition. destruct H as (Hdom1' & Hdom2' & Hsep').
-             destruct (H0 _ Hdom1' _ _ (step_tau _ _)) as (? & (p & ? & ? & ?)).
-             pclearbot. exists (p * p2). split; [| split]; auto.
-             ++ apply sep_step_sep_conj_l; auto.
+          -- intros p' c (p1' & p2' & Hp1' & Hp2' & Hp') Hdom' t' c'' Hstep.
+             inversion Hstep; subst. split; intuition.
+             apply Hp' in Hdom'. destruct Hdom' as (Hdom1 & Hdom2 & Hsep).
+             specialize (H0 _ _ Hp1' Hdom1 _ _ (step_tau _ _)) as (? & (P' & ? & (p'' & ? & ? & ?))).
+             pclearbot. exists (P' ** P2). split; eauto. exists (p'' * p2'). split; [| split].
+             ++ apply sep_conj_Perms_perm; auto.
+             ++ eapply sep_step_lte; eauto. apply sep_step_sep_conj_l; auto.
              ++ split; [| split]; auto.
-        * split; [| split]; auto.
+        * exists p. split; [| split]; intuition. exists p1, p2. split; [| split]; auto.
       + (* nondet *) clear x1. simpl.
-        exists (p1 * p2). split; [| split]; auto; intuition.
+        exists (P1 ** P2). split.
         * left. pstep. constructor. split.
           -- exists start_config; eexists; exists start_config; constructor.
-          -- intros. destruct H as (Hdom1' & Hdom2' & Hsep').
-             inversion H1; auto_inj_pair2; subst.
+          -- intros p' c (p1' & p2' & Hp1' & Hp2' & Hp') Hdom' t' c'' Hstep.
+             inversion Hstep; subst; auto_inj_pair2; subst.
              {
                split; intuition.
-               destruct (H0 _ Hdom1' _ _ (step_nondet_true _ _)) as (? & (p & ? & ? & ?)).
-               pclearbot. exists (p * p2). split; [| split]; auto.
-               - apply sep_step_sep_conj_l; auto.
+               apply Hp' in Hdom'. destruct Hdom' as (Hdom1 & Hdom2 & Hsep).
+               specialize (H0 _ _ Hp1' Hdom1 _ _ (step_nondet_true _ _)) as (? & (P' & ? & (p'' & ? & ? & ?))).
+               pclearbot. exists (P' ** P2). split; eauto. exists (p'' * p2'). split; [| split].
+               - apply sep_conj_Perms_perm; auto.
+               - eapply sep_step_lte; eauto. apply sep_step_sep_conj_l; auto.
                - split; [| split]; auto.
              }
              {
                split; intuition.
-               destruct (H0 _ Hdom1' _ _ (step_nondet_false _ _)) as (? & (p & ? & ? & ?)).
-               pclearbot. exists (p * p2). split; [| split]; auto.
-               - apply sep_step_sep_conj_l; auto.
+               apply Hp' in Hdom'. destruct Hdom' as (Hdom1 & Hdom2 & Hsep).
+               specialize (H0 _ _ Hp1' Hdom1 _ _ (step_nondet_false _ _)) as (? & (P' & ? & (p'' & ? & ? & ?))).
+               pclearbot. exists (P' ** P2). split; eauto. exists (p'' * p2'). split; [| split].
+               - apply sep_conj_Perms_perm; auto.
+               - eapply sep_step_lte; eauto. apply sep_step_sep_conj_l; auto.
                - split; [| split]; auto.
              }
-        * split; [| split]; auto.
-      + (* same as previous case *) clear x1. simpl.
-        exists (p1 * p2). split; [| split]; auto; intuition.
+        * exists p. split; [| split]; intuition. exists p1, p2. split; [| split]; auto.
+      + (* nondet again, exactly the same as prev case. *) clear x1. simpl.
+        exists (P1 ** P2). split.
         * left. pstep. constructor. split.
           -- exists start_config; eexists; exists start_config; constructor.
-          -- intros. destruct H as (Hdom1' & Hdom2' & Hsep').
-             inversion H1; auto_inj_pair2; subst.
+          -- intros p' c (p1' & p2' & Hp1' & Hp2' & Hp') Hdom' t' c'' Hstep.
+             inversion Hstep; subst; auto_inj_pair2; subst.
              {
                split; intuition.
-               destruct (H0 _ Hdom1' _ _ (step_nondet_true _ _)) as (? & (p & ? & ? & ?)).
-               pclearbot. exists (p * p2). split; [| split]; auto.
-               - apply sep_step_sep_conj_l; auto.
+               apply Hp' in Hdom'. destruct Hdom' as (Hdom1 & Hdom2 & Hsep).
+               specialize (H0 _ _ Hp1' Hdom1 _ _ (step_nondet_true _ _)) as (? & (P' & ? & (p'' & ? & ? & ?))).
+               pclearbot. exists (P' ** P2). split; eauto. exists (p'' * p2'). split; [| split].
+               - apply sep_conj_Perms_perm; auto.
+               - eapply sep_step_lte; eauto. apply sep_step_sep_conj_l; auto.
                - split; [| split]; auto.
              }
              {
                split; intuition.
-               destruct (H0 _ Hdom1' _ _ (step_nondet_false _ _)) as (? & (p & ? & ? & ?)).
-               pclearbot. exists (p * p2). split; [| split]; auto.
-               - apply sep_step_sep_conj_l; auto.
+               apply Hp' in Hdom'. destruct Hdom' as (Hdom1 & Hdom2 & Hsep).
+               specialize (H0 _ _ Hp1' Hdom1 _ _ (step_nondet_false _ _)) as (? & (P' & ? & (p'' & ? & ? & ?))).
+               pclearbot. exists (P' ** P2). split; eauto. exists (p'' * p2'). split; [| split].
+               - apply sep_conj_Perms_perm; auto.
+               - eapply sep_step_lte; eauto. apply sep_step_sep_conj_l; auto.
                - split; [| split]; auto.
              }
-        * split; [| split]; auto.
-      + (* load *) clear H1 x1. simpl. rename p into l.
-        exists (p1 * p2). split; [| split]; auto; intuition.
+        * exists p. split; [| split]; intuition. exists p1, p2. split; [| split]; auto.
+      + (* load *) clear H1 x1. simpl.
+        exists (P1 ** P2). split.
         * left. pstep. constructor. split.
           -- do 3 eexists. unshelve constructor; auto. apply read_config_mem.
-          -- intros. destruct H as (Hdom1' & Hdom2' & Hsep').
-             inversion H1; auto_inj_pair2; subst.
+          -- intros p' c (p1' & p2' & Hp1' & Hp2' & Hp') Hdom' t' c'' Hstep.
+             apply Hp' in Hdom'. destruct Hdom' as (Hdom1 & Hdom2 & Hsep).
+             inversion Hstep; subst; auto_inj_pair2; subst.
              {
+               specialize (H0 _ _ Hp1' Hdom1 _ _ (step_load _ _ _ _ H5)) as (? & (P' & ? & (p'' & ? & ? & ?))).
                split; intuition.
-               destruct (H0 _ Hdom1' _ _ (step_load _ _ _ _ H6)) as (? & (p & ? & ? & ?)).
-               pclearbot. exists (p * p2). split; [| split]; auto.
-               - apply sep_step_sep_conj_l; auto.
+               pclearbot. exists (P' ** P2). split; eauto. exists (p'' * p2'). split; [| split].
+               - apply sep_conj_Perms_perm; auto.
+               - eapply sep_step_lte; eauto. apply sep_step_sep_conj_l; auto.
                - split; [| split]; auto.
              }
              {
-               destruct (H0 _ Hdom1' _ _ (step_load_fail  _ _ _ H6)) as (? & (p & ? & ? & ?)).
-               split. constructor 1. auto.
-               pclearbot. exists (p * p2). split; [| split]; auto.
-               - apply sep_step_sep_conj_l; auto.
-               - split; [| split]; auto.
-                 respects. apply Hsep. auto.
+               specialize (H0 _ _ Hp1' Hdom1 _ _ (step_load_fail _ _ _ H5)) as (? & (P' & ? & (p'' & ? & ? & ?))).
+               split. apply Hp'. constructor 1. auto.
+               pclearbot. exists (P' ** P2). split; eauto. exists (p'' * p2'). split; [| split].
+               - apply sep_conj_Perms_perm; auto.
+               - eapply sep_step_lte; eauto. apply sep_step_sep_conj_l; auto.
+               - split; [| split]; auto. respects. apply Hsep. auto.
              }
-        * split; [| split]; auto.
-      + (* store *) clear H1 x1 x. simpl. rename p into l.
-        exists (p1 * p2). split; [| split]; auto; intuition.
+        * exists p. split; [| split]; intuition. exists p1, p2. split; [| split]; auto.
+      + (* store *) clear H1 x1 x. simpl.
+        exists (P1 ** P2). split.
         * left. pstep. constructor. split.
-          -- do 3 eexists. constructor. unshelve apply write_config_mem; auto.
-          -- intros. destruct H as (Hdom1' & Hdom2' & Hsep').
-             inversion H1; auto_inj_pair2; subst.
+          -- do 3 eexists. unshelve constructor. apply write_config_mem. Unshelve. apply (Byte 0).
+          -- intros p' c (p1' & p2' & Hp1' & Hp2' & Hp') Hdom' t' c'' Hstep.
+             apply Hp' in Hdom'. destruct Hdom' as (Hdom1 & Hdom2 & Hsep).
+             inversion Hstep; subst; auto_inj_pair2; subst.
              {
-               destruct (H0 _ Hdom1' _ _ (step_store _ _ _ _ _ H7)) as (? & (p & ? & ? & ?)).
-               split. constructor 1; auto.
-               pclearbot. exists (p * p2). split; [| split]; auto.
-               - apply sep_step_sep_conj_l; auto.
-               - split; [| split]; auto.
-                 respects. apply Hsep. auto.
+               specialize (H0 _ _ Hp1' Hdom1 _ _ (step_store _ _ _ _ _ H6)) as (? & (P' & ? & (p'' & ? & ? & ?))).
+               split. apply Hp'. constructor 1. auto.
+               pclearbot. exists (P' ** P2). split; eauto. exists (p'' * p2'). split; [| split].
+               - apply sep_conj_Perms_perm; auto.
+               - eapply sep_step_lte; eauto. apply sep_step_sep_conj_l; auto.
+               - split; [| split]; auto. respects. apply Hsep. auto.
              }
              {
-               destruct (H0 _ Hdom1' _ _ (step_store_fail _ _ _ _ H7)) as (? & (p & ? & ? & ?)).
-               split. constructor 1; auto.
-               pclearbot. exists (p * p2). split; [| split]; auto.
-               - apply sep_step_sep_conj_l; auto.
-               - split; [| split]; auto.
-                 respects. apply Hsep. auto.
+               specialize (H0 _ _ Hp1' Hdom1 _ _ (step_store_fail _ _ _ _ H6)) as (? & (P' & ? & (p'' & ? & ? & ?))).
+               split. apply Hp'. constructor 1. auto.
+               pclearbot. exists (P' ** P2). split; eauto. exists (p'' * p2'). split; [| split].
+               - apply sep_conj_Perms_perm; auto.
+               - eapply sep_step_lte; eauto. apply sep_step_sep_conj_l; auto.
+               - split; [| split]; auto. respects. apply Hsep. auto.
              }
-        * split; [| split]; auto.
-      + (* load *) clear H1 x. simpl. rename p into l.
-        exists (p1 * p2). split; [| split]; auto; intuition.
+        * exists p. split; [| split]; intuition. exists p1, p2. split; [| split]; auto.
+      + (* load *) clear H1. simpl.
+        exists (P1 ** P2). split.
         * left. pstep. constructor. split.
           -- do 3 eexists. unshelve constructor. apply (Byte 0). apply read_config_mem.
-          -- intros. destruct H as (Hdom1' & Hdom2' & Hsep').
-             inversion H1; auto_inj_pair2; subst.
+          -- intros p' c (p1' & p2' & Hp1' & Hp2' & Hp') Hdom' t' c'' Hstep.
+             apply Hp' in Hdom'. destruct Hdom' as (Hdom1 & Hdom2 & Hsep).
+             inversion Hstep; subst; auto_inj_pair2; subst.
              {
+               specialize (H0 _ _ Hp1' Hdom1 _ _ (step_load _ _ _ _ H5)) as (? & (P' & ? & (p'' & ? & ? & ?))).
                split; intuition.
-               destruct (H0 _ Hdom1' _ _ (step_load _ _ _ _ H6)) as (? & (p & ? & ? & ?)).
-               pclearbot. exists (p * p2). split; [| split]; auto.
-               - apply sep_step_sep_conj_l; auto.
+               pclearbot. exists (P' ** P2). split; eauto. exists (p'' * p2'). split; [| split].
+               - apply sep_conj_Perms_perm; auto.
+               - eapply sep_step_lte; eauto. apply sep_step_sep_conj_l; auto.
                - split; [| split]; auto.
              }
              {
-               destruct (H0 _ Hdom1' _ _ (step_load_fail  _ _ _ H6)) as (? & (p & ? & ? & ?)).
-               split. constructor 1. auto.
-               pclearbot. exists (p * p2). split; [| split]; auto.
-               - apply sep_step_sep_conj_l; auto.
-               - split; [| split]; auto.
-                 respects. apply Hsep. auto.
+               specialize (H0 _ _ Hp1' Hdom1 _ _ (step_load_fail _ _ _ H5)) as (? & (P' & ? & (p'' & ? & ? & ?))).
+               split. apply Hp'. constructor 1. auto.
+               pclearbot. exists (P' ** P2). split; eauto. exists (p'' * p2'). split; [| split].
+               - apply sep_conj_Perms_perm; auto.
+               - eapply sep_step_lte; eauto. apply sep_step_sep_conj_l; auto.
+               - split; [| split]; auto. respects. apply Hsep. auto.
              }
-        * split; [| split]; auto.
-      + (* store *) clear H1 x. simpl. rename p into l.
-        exists (p1 * p2). split; [| split]; auto; intuition.
+        * exists p. split; [| split]; intuition. exists p1, p2. split; [| split]; auto.
+      + (* store *) clear H1 x. simpl.
+        exists (P1 ** P2). split.
         * left. pstep. constructor. split.
-          -- do 3 eexists. constructor. unshelve apply write_config_mem; auto.
-          -- intros. destruct H as (Hdom1' & Hdom2' & Hsep').
-             inversion H1; auto_inj_pair2; subst.
+          -- do 3 eexists. unshelve constructor. apply write_config_mem. Unshelve. apply (Byte 0).
+          -- intros p' c (p1' & p2' & Hp1' & Hp2' & Hp') Hdom' t' c'' Hstep.
+             apply Hp' in Hdom'. destruct Hdom' as (Hdom1 & Hdom2 & Hsep).
+             inversion Hstep; subst; auto_inj_pair2; subst.
              {
-               destruct (H0 _ Hdom1' _ _ (step_store _ _ _ _ _ H7)) as (? & (p & ? & ? & ?)).
-               split. constructor 1; auto.
-               pclearbot. exists (p * p2). split; [| split]; auto.
-               - apply sep_step_sep_conj_l; auto.
-               - split; [| split]; auto.
-                 respects. apply Hsep. auto.
+               specialize (H0 _ _ Hp1' Hdom1 _ _ (step_store _ _ _ _ _ H6)) as (? & (P' & ? & (p'' & ? & ? & ?))).
+               split. apply Hp'. constructor 1. auto.
+               pclearbot. exists (P' ** P2). split; eauto. exists (p'' * p2'). split; [| split].
+               - apply sep_conj_Perms_perm; auto.
+               - eapply sep_step_lte; eauto. apply sep_step_sep_conj_l; auto.
+               - split; [| split]; auto. respects. apply Hsep. auto.
              }
              {
-               destruct (H0 _ Hdom1' _ _ (step_store_fail _ _ _ _ H7)) as (? & (p & ? & ? & ?)).
-               split. constructor 1; auto.
-               pclearbot. exists (p * p2). split; [| split]; auto.
-               - apply sep_step_sep_conj_l; auto.
-               - split; [| split]; auto.
-                 respects. apply Hsep. auto.
+               specialize (H0 _ _ Hp1' Hdom1 _ _ (step_store_fail _ _ _ _ H6)) as (? & (P' & ? & (p'' & ? & ? & ?))).
+               split. apply Hp'. constructor 1. auto.
+               pclearbot. exists (P' ** P2). split; eauto. exists (p'' * p2'). split; [| split].
+               - apply sep_conj_Perms_perm; auto.
+               - eapply sep_step_lte; eauto. apply sep_step_sep_conj_l; auto.
+               - split; [| split]; auto. respects. apply Hsep. auto.
              }
-        * split; [| split]; auto.
-    - simpl. exists (q1 r0 * p2). split; [| split].
+        * exists p. split; [| split]; intuition. exists p1, p2. split; [| split]; auto.
+    - simpl. exists (Q1 r0 ** P2). split.
       + left.
         eapply paco3_mon_bot; eauto.
-        apply typing_perm_frame; auto.
-      + apply sep_step_sep_conj_l. auto.
-        apply sep_step_lte'; auto.
-      + split; [| split]; auto.
-        respects; intuition. symmetry. eapply separate_antimonotone; eauto. symmetry. auto.
+        apply typing_frame1; auto.
+      + apply H in Hp1. exists (p1 * p2). split; [| split]; eauto.
+        * apply sep_conj_Perms_perm; auto.
+        * eapply sep_step_lte; eauto; reflexivity.
   }
   { pinversion Ht2; subst.
     - destruct H as ((? & ? & ? & ?) & ?).
       inversion H; subst; clear H.
       + (* tau *) clear x1. simpl.
-        exists (p1 * p2). split; [| split]; intuition.
+        exists (P1 ** P2). split.
         * left. pstep. constructor. split.
           -- exists start_config; eexists; exists start_config; constructor.
-          -- intros. inversion H1; subst.
-             split; intuition. destruct H as (Hdom1' & Hdom2' & Hsep'). symmetry in Hsep'.
-             destruct (H0 _ Hdom2' _ _ (step_tau _ _)) as (? & (p & ? & ? & ?)).
-             pclearbot. exists (p1 * p). split; [| split]; auto.
-             ++ apply sep_step_sep_conj_r; auto.
-             ++ split; [| split]; auto. symmetry; apply H3; auto.
-        * split; [| split]; auto.
+          -- intros p' c (p1' & p2' & Hp1' & Hp2' & Hp') Hdom' t' c'' Hstep.
+             inversion Hstep; subst. split; intuition.
+             apply Hp' in Hdom'. destruct Hdom' as (Hdom1 & Hdom2 & Hsep). symmetry in Hsep.
+             specialize (H0 _ _ Hp2' Hdom2 _ _ (step_tau _ _)) as (? & (P' & ? & (p'' & ? & ? & ?))).
+             pclearbot. exists (P1 ** P'). split; eauto. exists (p1' * p''). split; [| split].
+             ++ apply sep_conj_Perms_perm; auto.
+             ++ eapply sep_step_lte; eauto. apply sep_step_sep_conj_r; auto.
+             ++ split; [| split]; auto. symmetry. auto.
+        * exists p. split; [| split]; intuition. exists p1, p2. split; [| split]; auto.
       + (* nondet *) clear x1. simpl.
-        exists (p1 * p2). split; [| split]; auto; intuition.
+        exists (P1 ** P2). split.
         * left. pstep. constructor. split.
           -- exists start_config; eexists; exists start_config; constructor.
-          -- intros. destruct H as (Hdom1' & Hdom2' & Hsep'). symmetry in Hsep'.
-             inversion H1; auto_inj_pair2; subst.
+          -- intros p' c (p1' & p2' & Hp1' & Hp2' & Hp') Hdom' t' c'' Hstep.
+             inversion Hstep; subst; auto_inj_pair2; subst.
              {
                split; intuition.
-               destruct (H0 _ Hdom2' _ _ (step_nondet_true _ _)) as (? & (p & ? & ? & ?)).
-               pclearbot. exists (p1 * p). split; [| split]; auto.
-               - apply sep_step_sep_conj_r; auto.
-               - split; [| split]; auto. symmetry; apply H3; auto.
+               apply Hp' in Hdom'. destruct Hdom' as (Hdom1 & Hdom2 & Hsep). symmetry in Hsep.
+               specialize (H0 _ _ Hp2' Hdom2 _ _ (step_nondet_true _ _)) as (? & (P' & ? & (p'' & ? & ? & ?))).
+               pclearbot. exists (P1 ** P'). split; eauto. exists (p1' * p''). split; [| split].
+               - apply sep_conj_Perms_perm; auto.
+               - eapply sep_step_lte; eauto. apply sep_step_sep_conj_r; auto.
+               - split; [| split]; auto. symmetry. auto.
              }
              {
                split; intuition.
-               destruct (H0 _ Hdom2' _ _ (step_nondet_false _ _)) as (? & (p & ? & ? & ?)).
-               pclearbot. exists (p1 * p). split; [| split]; auto.
-               - apply sep_step_sep_conj_r; auto.
-               - split; [| split]; auto. symmetry; apply H3; auto.
+               apply Hp' in Hdom'. destruct Hdom' as (Hdom1 & Hdom2 & Hsep). symmetry in Hsep.
+               specialize (H0 _ _ Hp2' Hdom2 _ _ (step_nondet_false _ _)) as (? & (P' & ? & (p'' & ? & ? & ?))).
+               pclearbot. exists (P1 ** P'). split; eauto. exists (p1' * p''). split; [| split].
+               - apply sep_conj_Perms_perm; auto.
+               - eapply sep_step_lte; eauto. apply sep_step_sep_conj_r; auto.
+               - split; [| split]; auto. symmetry. auto.
              }
-        * split; [| split]; auto.
-      + (* same as previous case *) clear x1. simpl.
-        exists (p1 * p2). split; [| split]; auto; intuition.
+        * exists p. split; [| split]; intuition. exists p1, p2. split; [| split]; auto.
+      + (* nondet again, exactly the same as prev case. *) clear x1. simpl.
+        exists (P1 ** P2). split.
         * left. pstep. constructor. split.
           -- exists start_config; eexists; exists start_config; constructor.
-          -- intros. destruct H as (Hdom1' & Hdom2' & Hsep'). symmetry in Hsep'.
-             inversion H1; auto_inj_pair2; subst.
+          -- intros p' c (p1' & p2' & Hp1' & Hp2' & Hp') Hdom' t' c'' Hstep.
+             inversion Hstep; subst; auto_inj_pair2; subst.
              {
                split; intuition.
-               destruct (H0 _ Hdom2' _ _ (step_nondet_true _ _)) as (? & (p & ? & ? & ?)).
-               pclearbot. exists (p1 * p). split; [| split]; auto.
-               - apply sep_step_sep_conj_r; auto.
-               - split; [| split]; auto. symmetry; apply H3; auto.
+               apply Hp' in Hdom'. destruct Hdom' as (Hdom1 & Hdom2 & Hsep). symmetry in Hsep.
+               specialize (H0 _ _ Hp2' Hdom2 _ _ (step_nondet_true _ _)) as (? & (P' & ? & (p'' & ? & ? & ?))).
+               pclearbot. exists (P1 ** P'). split; eauto. exists (p1' * p''). split; [| split].
+               - apply sep_conj_Perms_perm; auto.
+               - eapply sep_step_lte; eauto. apply sep_step_sep_conj_r; auto.
+               - split; [| split]; auto. symmetry. auto.
              }
              {
                split; intuition.
-               destruct (H0 _ Hdom2' _ _ (step_nondet_false _ _)) as (? & (p & ? & ? & ?)).
-               pclearbot. exists (p1 * p). split; [| split]; auto.
-               - apply sep_step_sep_conj_r; auto.
-               - split; [| split]; auto. symmetry; apply H3; auto.
+               apply Hp' in Hdom'. destruct Hdom' as (Hdom1 & Hdom2 & Hsep). symmetry in Hsep.
+               specialize (H0 _ _ Hp2' Hdom2 _ _ (step_nondet_false _ _)) as (? & (P' & ? & (p'' & ? & ? & ?))).
+               pclearbot. exists (P1 ** P'). split; eauto. exists (p1' * p''). split; [| split].
+               - apply sep_conj_Perms_perm; auto.
+               - eapply sep_step_lte; eauto. apply sep_step_sep_conj_r; auto.
+               - split; [| split]; auto. symmetry. auto.
              }
-        * split; [| split]; auto.
-      + (* load *) clear H1 x1. simpl. rename p into l.
-        exists (p1 * p2). split; [| split]; auto; intuition.
+        * exists p. split; [| split]; intuition. exists p1, p2. split; [| split]; auto.
+      + (* load *) clear H1 x1. simpl.
+        exists (P1 ** P2). split.
         * left. pstep. constructor. split.
           -- do 3 eexists. unshelve constructor; auto. apply read_config_mem.
-          -- intros. destruct H as (Hdom1' & Hdom2' & Hsep'). symmetry in Hsep'.
-             inversion H1; auto_inj_pair2; subst.
+          -- intros p' c (p1' & p2' & Hp1' & Hp2' & Hp') Hdom' t' c'' Hstep.
+             apply Hp' in Hdom'. destruct Hdom' as (Hdom1 & Hdom2 & Hsep). symmetry in Hsep.
+             inversion Hstep; subst; auto_inj_pair2; subst.
              {
+               specialize (H0 _ _ Hp2' Hdom2 _ _ (step_load _ _ _ _ H5)) as (? & (P' & ? & (p'' & ? & ? & ?))).
                split; intuition.
-               destruct (H0 _ Hdom2' _ _ (step_load _ _ _ _ H6)) as (? & (p & ? & ? & ?)).
-               pclearbot. exists (p1 * p). split; [| split]; auto.
-               - apply sep_step_sep_conj_r; auto.
-               - split; [| split]; auto. symmetry. apply H3; auto.
+               pclearbot. exists (P1 ** P'). split; eauto. exists (p1' * p''). split; [| split].
+               - apply sep_conj_Perms_perm; auto.
+               - eapply sep_step_lte; eauto. apply sep_step_sep_conj_r; auto.
+               - split; [| split]; auto. symmetry. auto.
              }
              {
-               destruct (H0 _ Hdom2' _ _ (step_load_fail  _ _ _ H6)) as (? & (p & ? & ? & ?)).
-               split. constructor 1. auto.
-               pclearbot. exists (p1 * p). split; [| split]; auto.
-               - apply sep_step_sep_conj_r; auto.
-               - split; [| split]; auto.
-                 respects. apply Hsep. auto.
-                 symmetry. apply H3; auto.
+               specialize (H0 _ _ Hp2' Hdom2 _ _ (step_load_fail _ _ _ H5)) as (? & (P' & ? & (p'' & ? & ? & ?))).
+               split. apply Hp'. constructor 1. auto.
+               pclearbot. exists (P1 ** P'). split; eauto. exists (p1' * p''). split; [| split].
+               - apply sep_conj_Perms_perm; auto.
+               - eapply sep_step_lte; eauto. apply sep_step_sep_conj_r; auto.
+               - split; [| split]; auto. respects. apply Hsep. auto. symmetry. auto.
              }
-        * split; [| split]; auto.
-      + (* store *) clear H1 x1 x. simpl. rename p into l.
-        exists (p1 * p2). split; [| split]; auto; intuition.
+        * exists p. split; [| split]; intuition. exists p1, p2. split; [| split]; auto.
+      + (* store *) clear H1 x1 x. simpl.
+        exists (P1 ** P2). split.
         * left. pstep. constructor. split.
-          -- do 3 eexists. constructor. unshelve apply write_config_mem; auto.
-          -- intros. destruct H as (Hdom1' & Hdom2' & Hsep'). symmetry in Hsep'.
-             inversion H1; auto_inj_pair2; subst.
+          -- do 3 eexists. unshelve constructor; auto. apply write_config_mem. Unshelve. apply (Byte 0).
+          -- intros p' c (p1' & p2' & Hp1' & Hp2' & Hp') Hdom' t' c'' Hstep.
+             apply Hp' in Hdom'. destruct Hdom' as (Hdom1 & Hdom2 & Hsep). symmetry in Hsep.
+             inversion Hstep; subst; auto_inj_pair2; subst.
              {
-               destruct (H0 _ Hdom2' _ _ (step_store _ _ _ _ _ H7)) as (? & (p & ? & ? & ?)).
-               split. constructor 1; auto.
-               pclearbot. exists (p1 * p). split; [| split]; auto.
-               - apply sep_step_sep_conj_r; auto.
-               - split; [| split]; auto.
-                 respects. apply Hsep. auto.
-                 symmetry. apply H3; auto.
+               specialize (H0 _ _ Hp2' Hdom2 _ _ (step_store _ _ _ _ _ H6)) as (? & (P' & ? & (p'' & ? & ? & ?))).
+               split. apply Hp'. constructor 1. auto.
+               pclearbot. exists (P1 ** P'). split; eauto. exists (p1' * p''). split; [| split].
+               - apply sep_conj_Perms_perm; auto.
+               - eapply sep_step_lte; eauto. apply sep_step_sep_conj_r; auto.
+               - split; [| split]; auto. respects. apply Hsep. auto. symmetry. auto.
              }
              {
-               destruct (H0 _ Hdom2' _ _ (step_store_fail _ _ _ _ H7)) as (? & (p & ? & ? & ?)).
-               split. constructor 1; auto.
-               pclearbot. exists (p1 * p). split; [| split]; auto.
-               - apply sep_step_sep_conj_r; auto.
-               - split; [| split]; auto.
-                 respects. apply Hsep. auto.
-                 symmetry. apply H3; auto.
+               specialize (H0 _ _ Hp2' Hdom2 _ _ (step_store_fail _ _ _ _ H6)) as (? & (P' & ? & (p'' & ? & ? & ?))).
+               split. apply Hp'. constructor 1. auto.
+               pclearbot. exists (P1 ** P'). split; eauto. exists (p1' * p''). split; [| split].
+               - apply sep_conj_Perms_perm; auto.
+               - eapply sep_step_lte; eauto. apply sep_step_sep_conj_r; auto.
+               - split; [| split]; auto. respects. apply Hsep. auto. symmetry. auto.
              }
-        * split; [| split]; auto.
-      + (* load *) clear H1 x. simpl. rename p into l.
-        exists (p1 * p2). split; [| split]; auto; intuition.
+        * exists p. split; [| split]; intuition. exists p1, p2. split; [| split]; auto.
+      + (* load *) clear H1. simpl.
+        exists (P1 ** P2). split.
         * left. pstep. constructor. split.
           -- do 3 eexists. unshelve constructor. apply (Byte 0). apply read_config_mem.
-          -- intros. destruct H as (Hdom1' & Hdom2' & Hsep'). symmetry in Hsep'.
-             inversion H1; auto_inj_pair2; subst.
+          -- intros p' c (p1' & p2' & Hp1' & Hp2' & Hp') Hdom' t' c'' Hstep.
+             apply Hp' in Hdom'. destruct Hdom' as (Hdom1 & Hdom2 & Hsep). symmetry in Hsep.
+             inversion Hstep; subst; auto_inj_pair2; subst.
              {
+               specialize (H0 _ _ Hp2' Hdom2 _ _ (step_load _ _ _ _ H5)) as (? & (P' & ? & (p'' & ? & ? & ?))).
                split; intuition.
-               destruct (H0 _ Hdom2' _ _ (step_load _ _ _ _ H6)) as (? & (p & ? & ? & ?)).
-               pclearbot. exists (p1 * p). split; [| split]; auto.
-               - apply sep_step_sep_conj_r; auto.
-               - split; [| split]; auto. symmetry. apply H3; auto.
+               pclearbot. exists (P1 ** P'). split; eauto. exists (p1' * p''). split; [| split].
+               - apply sep_conj_Perms_perm; auto.
+               - eapply sep_step_lte; eauto. apply sep_step_sep_conj_r; auto.
+               - split; [| split]; auto. symmetry. auto.
              }
              {
-               destruct (H0 _ Hdom2' _ _ (step_load_fail  _ _ _ H6)) as (? & (p & ? & ? & ?)).
-               split. constructor 1. auto.
-               pclearbot. exists (p1 * p). split; [| split]; auto.
-               - apply sep_step_sep_conj_r; auto.
-               - split; [| split]; auto.
-                 respects. apply Hsep. auto.
-                 symmetry. apply H3; auto.
+               specialize (H0 _ _ Hp2' Hdom2 _ _ (step_load_fail _ _ _ H5)) as (? & (P' & ? & (p'' & ? & ? & ?))).
+               split. apply Hp'. constructor 1. auto.
+               pclearbot. exists (P1 ** P'). split; eauto. exists (p1' * p''). split; [| split].
+               - apply sep_conj_Perms_perm; auto.
+               - eapply sep_step_lte; eauto. apply sep_step_sep_conj_r; auto.
+               - split; [| split]; auto. respects. apply Hsep. auto. symmetry. auto.
              }
-        * split; [| split]; auto.
-      + (* store *) clear H1 x. simpl. rename p into l.
-        exists (p1 * p2). split; [| split]; auto; intuition.
+        * exists p. split; [| split]; intuition. exists p1, p2. split; [| split]; auto.
+      + (* store *) clear H1 x. simpl.
+        exists (P1 ** P2). split.
         * left. pstep. constructor. split.
-          -- do 3 eexists. constructor. unshelve apply write_config_mem; auto.
-          -- intros. destruct H as (Hdom1' & Hdom2' & Hsep'). symmetry in Hsep'.
-             inversion H1; auto_inj_pair2; subst.
+          -- do 3 eexists. unshelve constructor; auto. apply write_config_mem. Unshelve. apply (Byte 0).
+          -- intros p' c (p1' & p2' & Hp1' & Hp2' & Hp') Hdom' t' c'' Hstep.
+             apply Hp' in Hdom'. destruct Hdom' as (Hdom1 & Hdom2 & Hsep). symmetry in Hsep.
+             inversion Hstep; subst; auto_inj_pair2; subst.
              {
-               destruct (H0 _ Hdom2' _ _ (step_store _ _ _ _ _ H7)) as (? & (p & ? & ? & ?)).
-               split. constructor 1; auto.
-               pclearbot. exists (p1 * p). split; [| split]; auto.
-               - apply sep_step_sep_conj_r; auto.
-               - split; [| split]; auto.
-                 respects. apply Hsep. auto.
-                 symmetry. apply H3; auto.
+               specialize (H0 _ _ Hp2' Hdom2 _ _ (step_store _ _ _ _ _ H6)) as (? & (P' & ? & (p'' & ? & ? & ?))).
+               split. apply Hp'. constructor 1. auto.
+               pclearbot. exists (P1 ** P'). split; eauto. exists (p1' * p''). split; [| split].
+               - apply sep_conj_Perms_perm; auto.
+               - eapply sep_step_lte; eauto. apply sep_step_sep_conj_r; auto.
+               - split; [| split]; auto. respects. apply Hsep. auto. symmetry. auto.
              }
              {
-               destruct (H0 _ Hdom2' _ _ (step_store_fail _ _ _ _ H7)) as (? & (p & ? & ? & ?)).
-               split. constructor 1; auto.
-               pclearbot. exists (p1 * p). split; [| split]; auto.
-               - apply sep_step_sep_conj_r; auto.
-               - split; [| split]; auto.
-                 respects. apply Hsep. auto.
-                 symmetry. apply H3; auto.
+               specialize (H0 _ _ Hp2' Hdom2 _ _ (step_store_fail _ _ _ _ H6)) as (? & (P' & ? & (p'' & ? & ? & ?))).
+               split. apply Hp'. constructor 1. auto.
+               pclearbot. exists (P1 ** P'). split; eauto. exists (p1' * p''). split; [| split].
+               - apply sep_conj_Perms_perm; auto.
+               - eapply sep_step_lte; eauto. apply sep_step_sep_conj_r; auto.
+               - split; [| split]; auto. respects. apply Hsep. auto. symmetry. auto.
              }
-        * split; [| split]; auto.
-    - simpl. exists (p1 * q2 r0). split; [| split].
+        * exists p. split; [| split]; intuition. exists p1, p2. split; [| split]; auto.
+    - simpl. exists (P1 ** Q2 r0). split.
       + left.
         eapply paco3_mon_bot; eauto.
-        apply typing_perm_frame'. auto.
-      + apply sep_step_sep_conj_r. symmetry; auto.
-        apply sep_step_lte'; auto.
-      + split; [| split]; auto.
-        respects; intuition. eapply separate_antimonotone; eauto.
+        apply typing_frame2; auto.
+      + apply H in Hp2. exists (p1 * p2). split; [| split]; eauto.
+        * apply sep_conj_Perms_perm; auto.
+        * eapply sep_step_lte; eauto; reflexivity.
   }
 Qed.
+
+(** everything below is old stuff *)
+
 
 Section ts.
 
