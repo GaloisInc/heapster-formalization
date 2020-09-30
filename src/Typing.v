@@ -437,6 +437,18 @@ Proof.
       rewritebisim_in @bind_vis H6. inversion H6; auto_inj_pair2; subst.
       destruct (H2 _ _ H3 H4 _ _ (step_store_fail _ _ _ _ H7)) as (? & P' & ? & (p' & ? & ? & ?)).
       pclearbot. split; auto. exists P'. split; eauto.
+    + pose proof @eqitree_inv_bind_vis.
+      edestruct H6 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H7; reflexivity | |];
+        apply bisimulation_is_eq in H8; subst; [| inversion H].
+      rewritebisim_in @bind_vis H5. inversion H5; auto_inj_pair2; subst.
+      destruct (H2 _ _ H3 H4 _ _ (step_load_invalid _ _ _)) as (? & P' & ? & (p' & ? & ? & ?)).
+      pclearbot. split; auto. exists P'. split; eauto.
+    + pose proof @eqitree_inv_bind_vis.
+      edestruct H6 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H7; reflexivity | |];
+        apply bisimulation_is_eq in H8; subst; [| inversion H].
+      rewritebisim_in @bind_vis H5. inversion H5; auto_inj_pair2; subst.
+      destruct (H2 _ _ H3 H4 _ _ (step_store_invalid _ _ _ _)) as (? & P' & ? & (p' & ? & ? & ?)).
+      pclearbot. split; auto. exists P'. split; eauto.
   - rewritebisim @bind_ret_l. eapply paco3_mon_bot; eauto. eapply typing_lte; eauto.
     reflexivity.
 Qed.
@@ -841,6 +853,34 @@ Proof.
                - split; [| split]; auto. respects. apply Hsep. auto.
              }
         * exists p. split; [| split]; intuition. exists p1, p2. split; [| split]; auto.
+      + (* load *) simpl.
+        exists (P1 ** P2). split.
+        * left. pstep. constructor. split.
+          -- do 3 eexists. constructor. Unshelve. apply start_config.
+          -- intros p' c (p1' & p2' & Hp1' & Hp2' & Hp') Hdom' t' c'' Hstep.
+             apply Hp' in Hdom'. destruct Hdom' as (Hdom1 & Hdom2 & Hsep).
+             inversion Hstep; subst; auto_inj_pair2; subst.
+             specialize (H0 _ _ Hp1' Hdom1 _ _ (step_load_invalid _ _ _)) as (? & (P' & ? & (p'' & ? & ? & ?))).
+             split. apply Hp'. constructor 1. auto.
+             pclearbot. exists (P' ** P2). split; eauto. exists (p'' * p2'). split; [| split].
+             ++ apply sep_conj_Perms_perm; auto.
+             ++ eapply sep_step_lte; eauto. apply sep_step_sep_conj_l; auto.
+             ++ split; [| split]; auto. respects. apply Hsep. auto.
+        * exists p. split; [| split]; intuition. exists p1, p2. split; [| split]; auto.
+      + (* store *) simpl.
+        exists (P1 ** P2). split.
+        * left. pstep. constructor. split.
+          -- do 3 eexists. constructor. Unshelve. apply start_config.
+          -- intros p' c (p1' & p2' & Hp1' & Hp2' & Hp') Hdom' t' c'' Hstep.
+             apply Hp' in Hdom'. destruct Hdom' as (Hdom1 & Hdom2 & Hsep).
+             inversion Hstep; subst; auto_inj_pair2; subst.
+             specialize (H0 _ _ Hp1' Hdom1 _ _ (step_store_invalid _ _ _ _)) as (? & (P' & ? & (p'' & ? & ? & ?))).
+             split. apply Hp'. constructor 1. auto.
+             pclearbot. exists (P' ** P2). split; eauto. exists (p'' * p2'). split; [| split].
+             ++ apply sep_conj_Perms_perm; auto.
+             ++ eapply sep_step_lte; eauto. apply sep_step_sep_conj_l; auto.
+             ++ split; [| split]; auto. respects. apply Hsep. auto.
+        * exists p. split; [| split]; intuition. exists p1, p2. split; [| split]; auto.
     - simpl. exists (Q1 r0 ** P2). split.
       + left.
         eapply paco3_mon_bot; eauto.
@@ -1010,6 +1050,34 @@ Proof.
                - eapply sep_step_lte; eauto. apply sep_step_sep_conj_r; auto.
                - split; [| split]; auto. respects. apply Hsep. auto. symmetry. auto.
              }
+        * exists p. split; [| split]; intuition. exists p1, p2. split; [| split]; auto.
+      + (* load *) simpl.
+        exists (P1 ** P2). split.
+        * left. pstep. constructor. split.
+          -- do 3 eexists. constructor. Unshelve. apply start_config.
+          -- intros p' c (p1' & p2' & Hp1' & Hp2' & Hp') Hdom' t' c'' Hstep.
+             apply Hp' in Hdom'. destruct Hdom' as (Hdom1 & Hdom2 & Hsep). symmetry in Hsep.
+             inversion Hstep; subst; auto_inj_pair2; subst.
+             specialize (H0 _ _ Hp2' Hdom2 _ _ (step_load_invalid _ _ _)) as (? & (P' & ? & (p'' & ? & ? & ?))).
+             split. apply Hp'. constructor 1. auto.
+             pclearbot. exists (P1 ** P'). split; eauto. exists (p1' * p''). split; [| split].
+             ++ apply sep_conj_Perms_perm; auto.
+             ++ eapply sep_step_lte; eauto. apply sep_step_sep_conj_r; auto.
+             ++ split; [| split]; auto. respects. apply Hsep. auto. symmetry. auto.
+        * exists p. split; [| split]; intuition. exists p1, p2. split; [| split]; auto.
+      + (* store *) simpl.
+        exists (P1 ** P2). split.
+        * left. pstep. constructor. split.
+          -- do 3 eexists. constructor. Unshelve. apply start_config.
+          -- intros p' c (p1' & p2' & Hp1' & Hp2' & Hp') Hdom' t' c'' Hstep.
+             apply Hp' in Hdom'. destruct Hdom' as (Hdom1 & Hdom2 & Hsep). symmetry in Hsep.
+             inversion Hstep; subst; auto_inj_pair2; subst.
+             specialize (H0 _ _ Hp2' Hdom2 _ _ (step_store_invalid _ _ _ _)) as (? & (P' & ? & (p'' & ? & ? & ?))).
+             split. apply Hp'. constructor 1. auto.
+             pclearbot. exists (P1 ** P'). split; eauto. exists (p1' * p''). split; [| split].
+             ++ apply sep_conj_Perms_perm; auto.
+             ++ eapply sep_step_lte; eauto. apply sep_step_sep_conj_r; auto.
+             ++ split; [| split]; auto. respects. apply Hsep. auto. symmetry. auto.
         * exists p. split; [| split]; intuition. exists p1, p2. split; [| split]; auto.
     - simpl. exists (P1 ** Q2 r0). split.
       + left.
@@ -1225,7 +1293,7 @@ Proof.
   - intros. destruct r1.
     + rewrite sep_conj_Perms_commut. rewrite sep_conj_Perms_top_absorb.
       eapply typing_top_step.
-      rewritebisim @bind_trigger. admit.
+      rewritebisim @bind_trigger. do 3 eexists. constructor. Unshelve. apply start_config.
     + eapply typing_bind.
       2: { intros. apply typing_ret. apply bottom_Perms_is_bottom.
            Unshelve. intros. apply bottom_Perms. }
@@ -1233,7 +1301,7 @@ Proof.
       3: { intros. apply bottom_Perms_is_bottom. }
       eapply typing_store; eauto.
       apply lte_r_sep_conj_Perms.
-Abort.
+Qed.
 
 (* below is old stuff *)
 

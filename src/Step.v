@@ -51,8 +51,8 @@ Variant step {R} : itree E R -> config -> itree E R -> config -> Prop :=
                             step (vis (Load (Ptr p)) k) c (k (Byte 0)) (error_config c)
 | step_store_fail : forall k c p v, write c p v = None ->
                                step (vis (Store (Ptr p) v) k) c (k tt) (error_config c)
-(* | step_get : forall k c, step (vis (Get _) k) c (k c) c *)
-(* | step_put : forall k c c', step (vis (Put _ c') k) c (k tt) c' *)
+| step_load_invalid : forall k c b, step (vis (Load (Byte b)) k) c (k (Byte 0)) (error_config c)
+| step_store_invalid : forall k c b v, step (vis (Store (Byte b) v) k) c (k tt) (error_config c)
 .
 
 Inductive multistep {R} : itree E R -> config -> itree E R -> config -> Prop :=
@@ -174,6 +174,20 @@ Proof.
       rewritebisim @bind_bind. rewritebisim @bind_snd. constructor 7; auto.
     + apply bisimulation_is_eq in H2. rewrite H2 in H0.
       rewritebisim_in @bind_ret_l H0. inversion H0.
+  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
+      [rewrite H1; reflexivity | |].
+    + specialize (H2 (Byte 0)). apply bisimulation_is_eq in H0. apply bisimulation_is_eq in H2.
+      rewrite H0. rewrite <- H2.
+      rewritebisim @bind_bind. rewritebisim @bind_snd. constructor; auto.
+    + apply bisimulation_is_eq in H0. rewrite H0 in H1.
+      rewritebisim_in @bind_ret_l H1. inversion H1.
+  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
+      [rewrite H1; reflexivity | |].
+    + specialize (H2 tt). apply bisimulation_is_eq in H0. apply bisimulation_is_eq in H2.
+      rewrite H0. rewrite <- H2.
+      rewritebisim @bind_bind. rewritebisim @bind_snd. constructor; auto.
+    + apply bisimulation_is_eq in H0. rewrite H0 in H1.
+      rewritebisim_in @bind_ret_l H1. inversion H1.
 Qed.
 
 Lemma step_fmap_snd {R1 R2} : forall (t : itree E R1) (t' : itree E (R1 * R2)) c c' (r2 : R2),
@@ -227,6 +241,20 @@ Proof.
       rewritebisim @bind_bind. rewritebisim @bind_fst. constructor 7; auto.
     + apply bisimulation_is_eq in H2. rewrite H2 in H0.
       rewritebisim_in @bind_ret_l H0. inversion H0.
+  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
+      [rewrite H1; reflexivity | |].
+    + specialize (H2 (Byte 0)). apply bisimulation_is_eq in H0. apply bisimulation_is_eq in H2.
+      rewrite H0. rewrite <- H2.
+      rewritebisim @bind_bind. rewritebisim @bind_fst. constructor; auto.
+    + apply bisimulation_is_eq in H0. rewrite H0 in H1.
+      rewritebisim_in @bind_ret_l H1. inversion H1.
+  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
+      [rewrite H1; reflexivity | |].
+    + specialize (H2 tt). apply bisimulation_is_eq in H0. apply bisimulation_is_eq in H2.
+      rewrite H0. rewrite <- H2.
+      rewritebisim @bind_bind. rewritebisim @bind_fst. constructor; auto.
+    + apply bisimulation_is_eq in H0. rewrite H0 in H1.
+      rewritebisim_in @bind_ret_l H1. inversion H1.
 Qed.
 
 Lemma step_fmap_inv {R1 R2 : Type} (f : R1 -> R2) (t : itree E R1) (t' : itree E R2) c c' :
@@ -269,4 +297,14 @@ Proof.
     + specialize (H3 tt). apply bisimulation_is_eq in H3. eexists. symmetry. apply H3.
     + apply bisimulation_is_eq in H2. rewrite H2 in H0.
       rewritebisim_in @bind_ret_l H0. inversion H0.
+  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
+      [rewrite H1; reflexivity | |].
+    + specialize (H2 (Byte 0)). apply bisimulation_is_eq in H2. eexists. symmetry. apply H2.
+    + apply bisimulation_is_eq in H0. rewrite H0 in H1.
+      rewritebisim_in @bind_ret_l H1. inversion H1.
+  - edestruct @eqitree_inv_bind_vis as [(? & ? & ?) | (? & ? & ?)];
+      [rewrite H1; reflexivity | |].
+    + specialize (H2 tt). apply bisimulation_is_eq in H2. eexists. symmetry. apply H2.
+    + apply bisimulation_is_eq in H0. rewrite H0 in H1.
+      rewritebisim_in @bind_ret_l H1. inversion H1.
 Qed.
