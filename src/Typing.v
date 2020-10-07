@@ -1324,3 +1324,89 @@ Proof.
     simpl in H2. exfalso.
     eapply read_perm_read_fail; eauto. apply H4. apply H. auto.
 Qed.
+
+Section test.
+  (* Context {E : Type -> Type}. *)
+  Context {HasMem: MemoryE -< E}.
+  Definition rec_list_match (rec_list : SByte -> itree E SByte) (byte : SByte) : itree E SByte :=
+    match byte with
+    | Byte _ => Ret (Byte 0)
+    | Ptr ptr => if eqb ptr (0, 0)
+                then Ret (Byte 0)
+                else byte' <- trigger (Load (Ptr (next ptr)));;
+                     (Tau (rec_list byte'))
+    end.
+
+  CoFixpoint rec_list : SByte -> itree E SByte := rec_list_match (rec_list).
+
+  Lemma rewrite_rec_list byte : rec_list byte = rec_list_match rec_list byte.
+  Proof.
+    apply bisimulation_is_eq. ginit. revert byte. gcofix CIH. gstep. unfold rec_list.
+    destruct byte; try constructor; auto.
+    destruct (addr_dec a (0, 0)).
+    - subst. constructor. auto.
+    - rewrite (Bool.reflect_iff _ _ (eqb_spec _ _)) in n.
+      apply Bool.not_true_is_false in n. rename n into H.
+      (* TODO figure out how to get this cofix to reduce without cbv *)
+      unfold rec_list_match. rewrite H. cbv in H. cbv. rewrite H.
+      constructor. auto. intros. apply Reflexive_eqit_gen_eq.
+  Qed.
+End test.
+
+Lemma typing_list_load_rec (byte : SByte) (Q : SByte -> Perms) :
+  typing
+    (list_read Q byte)
+    (fun _ => bottom_Perms)
+    (rec_list byte).
+Proof.
+  revert byte. pcofix CIH. pstep. intros. rewrite rewrite_rec_list. destruct byte as [? | ptr].
+  { constructor 2. apply bottom_Perms_is_bottom. }
+  simpl. destruct (eqb ptr (0, 0)) eqn:?.
+  { constructor 2. apply bottom_Perms_is_bottom. }
+  constructor 1. split.
+  { do 3 eexists. apply step_bind. constructor.
+    apply read_config_mem. Unshelve. apply (Byte 0). }
+  intros. rewritebisim_in @bind_trigger H1. inversion H1; subst; auto_inj_pair2; subst.
+  - split; intuition.
+    eexists. split.
+    + left. pstep. constructor 1. split.
+      * do 3 eexists. constructor. Unshelve. 2: apply start_config. shelve.
+      * intros. inversion H4; subst.
+        split; intuition. eexists. split.
+        -- right. auto.
+        -- (* TODO: clean up, this is the same case as below *)
+           apply (μ_fixedpoint _ (list_readF_mon _)) in H. unfold list_readF in H. simpl in H.
+           destruct H as (P & [? | ?] & ?); subst.
+           { inversion H5. subst. inversion Heqb. }
+           destruct H5 as (p1 & p2 & Hp1 & Hp2 & ?).
+           simpl in Hp2. destruct Hp2 as (R & (v' & ?) & Hr); subst.
+           destruct Hr as (? & ? & ? & ? & ?).
+           simpl in H2. assert (v = v').
+           { apply H in H0. destruct H0 as (_ & ? & _).
+             apply H8 in H0. destruct H0 as (? & _).
+             apply H5 in H0. rewrite H0 in H7. inversion H7. auto. } subst.
+           eexists; split; [| split]; eauto; intuition.
+    + apply (μ_fixedpoint _ (list_readF_mon _)) in H. unfold list_readF in H. simpl in H.
+      destruct H as (P & [? | ?] & ?); subst.
+      { inversion H2. subst. inversion Heqb. }
+      destruct H2 as (p1 & p2 & Hp1 & Hp2 & ?).
+      simpl in Hp2. destruct Hp2 as (R & (v' & ?) & Hr); subst.
+      destruct Hr as (? & ? & ? & ? & ?).
+      simpl in H2. assert (v = v').
+      { apply H in H0. destruct H0 as (_ & ? & _).
+        apply H4 in H0. destruct H0 as (? & _).
+        apply H2 in H0. rewrite H0 in H7. inversion H7. auto. } subst.
+      eexists; split; [| split]; eauto.
+      * apply sep_step_lte'. etransitivity.
+        etransitivity. apply lte_r_sep_conj_perm; eauto.
+        apply H4. etransitivity. apply lte_r_sep_conj_perm; eauto. eauto.
+      * apply H4. apply H. auto.
+  - apply (μ_fixedpoint _ (list_readF_mon _)) in H. unfold list_readF in H. simpl in H.
+    destruct H as (P & [? | ?] & ?); subst.
+    { inversion H2. subst. inversion Heqb. }
+    destruct H2 as (p1 & p2 & Hp1 & Hp2 & ?).
+    simpl in Hp2. destruct Hp2 as (R & (v' & ?) & Hr); subst.
+    destruct Hr as (? & ? & ? & ? & ?).
+    simpl in H2. exfalso.
+    eapply read_perm_read_fail; eauto. apply H4. apply H. auto.
+Qed.

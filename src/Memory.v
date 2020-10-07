@@ -26,6 +26,19 @@ Proof.
   destruct (Nat.eq_dec b b'); destruct (Nat.eq_dec o o'); subst; auto.
 Qed.
 
+Lemma eqb_spec : forall x y, Bool.reflect (x = y) (eqb x y).
+Proof.
+  intros [x1 x2] [y1 y2]. destruct (eqb (x1, x2) (y1, y2)) eqn:?; constructor.
+  - unfold eqb in Heqb. simpl in Heqb. symmetry in Heqb. apply Bool.andb_true_eq in Heqb.
+    destruct Heqb. symmetry in H, H0.
+    apply (Bool.reflect_iff _ _ (Nat.eqb_spec _ _)) in H.
+    apply (Bool.reflect_iff _ _ (Nat.eqb_spec _ _)) in H0. subst. auto.
+  - unfold eqb in Heqb. simpl in Heqb. apply Bool.andb_false_iff in Heqb.
+    destruct Heqb.
+    + intro. inversion H0. subst. rewrite Nat.eqb_refl in H. inversion H.
+    + intro. inversion H0. subst. rewrite Nat.eqb_refl in H. inversion H.
+Qed.
+
 Inductive SByte :=
 | Byte : nat -> SByte
 | Ptr : addr -> SByte
