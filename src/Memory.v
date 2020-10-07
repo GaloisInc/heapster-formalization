@@ -6,6 +6,10 @@ Require Export Heapster.Permissions.
 
 (* Memory model *)
 Definition addr : Set := nat * nat.
+
+Definition eqb (a b : addr) : bool :=
+  Nat.eqb (fst a) (fst b) && Nat.eqb (snd a) (snd b).
+
 Lemma addr_dec : forall (a b : addr), {a = b} + {a <> b}.
 Proof.
   intros [a1 a2] [b1 b2].

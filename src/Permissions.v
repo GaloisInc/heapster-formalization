@@ -663,7 +663,7 @@ Qed. *)
     |}.
   Next Obligation.
     exists H. split; auto.
-    apply (Perms_upwards_closed _ p1); try assumption.
+    apply (Perms_upwards_closed _ p1); assumption.
   Qed.
 
   Lemma lte_meet_Perms : forall (Ps : Perms -> Prop) P,
@@ -699,6 +699,11 @@ Qed. *)
     Proper (eq_Perms ==> eq_Perms ==> Basics.flip Basics.impl) lte_Perms.
   Proof.
     do 5 red. intros. etransitivity. apply H. etransitivity. apply H1. apply H0.
+  Qed.
+
+  Instance Proper_eq_Perms_eq_perm_in_Perms : Proper (eq_Perms ==> eq_perm ==> Basics.flip Basics.impl) in_Perms.
+  Proof.
+    repeat intro; subst. apply H. eapply Perms_upwards_closed; eauto.
   Qed.
 
   Program Definition sep_conj_Perms (P Q : Perms) : Perms :=
@@ -833,4 +838,65 @@ Qed. *)
       apply meet_Perms_max. intros P' [? [? ?]]. subst. auto.
   Qed.
 
+  Program Definition meet_A_Perms {A} (Ps : (A -> Perms) -> Prop) : A -> Perms :=
+    fun a =>
+      {|
+        in_Perms := fun p => exists P, Ps P /\ p ∈ P a
+      |}.
+  Next Obligation.
+    exists H. split; auto.
+    apply (Perms_upwards_closed _ p1); assumption.
+  Qed.
+
+  Notation "P -⊑- Q" := (forall a, P a ⊑ Q a) (at level 60).
+  Notation "P -≡- Q" := (P -⊑- Q /\ Q -⊑- P) (at level 60).
+
+  Lemma lte_meet_A_Perms {A} : forall (Ps : (A -> Perms) -> Prop) P,
+      Ps P ->
+      meet_A_Perms Ps -⊑- P.
+  Proof.
+    repeat intro. exists P. auto.
+  Qed.
+
+  Lemma meet_A_Perms_max {A} : forall (Ps : (A -> Perms) -> Prop) Q,
+      (forall P, Ps P -> Q -⊑- P) ->
+      Q -⊑- meet_A_Perms Ps.
+  Proof.
+    repeat intro. destruct H0 as [? [? ?]].
+    eapply H; eauto.
+  Qed.
+
+  Definition μ {A : Type}
+             (F : (A -> Perms) -> A -> Perms)
+             (Hmon: forall P Q, (P -⊑- Q) -> (F P -⊑- F Q)) : A -> Perms :=
+    meet_A_Perms (fun P => F P -⊑- P).
+
+  Lemma μ_fixedpoint {A} : forall (F : (A -> Perms) -> A -> Perms) Hmon,
+      F (μ F Hmon) -≡- (μ F Hmon).
+  Proof.
+    intros. assert (F (μ F Hmon) -⊑- μ F Hmon).
+    {
+      unfold μ. repeat intro. destruct H as (P & ? & ?).
+      eapply Hmon. 2: { apply H. assumption. }
+      repeat intro. eexists. split; eauto.
+    }
+    split; auto.
+    unfold μ. repeat intro. simpl. eexists. split. 2: eauto.
+    apply Hmon. apply H.
+  Qed.
+
+  Lemma μ_least {A} : forall (F : (A -> Perms) -> A -> Perms) Hmon X,
+      F X -≡- X ->
+      μ F Hmon -⊑- X.
+  Proof.
+    intros. unfold μ. apply lte_meet_A_Perms. apply H.
+  Qed.
+
+  Lemma μ_induction {A} F (P : A -> Perms) Hmon :
+    (forall a, F P a ⊑ P a) ->
+    (forall a, μ F Hmon a ⊑ P a).
+  Proof.
+    intros Hlte a p Hp.
+    eexists. split; eauto.
+  Qed.
 End Permissions.
