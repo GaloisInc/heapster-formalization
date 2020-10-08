@@ -574,6 +574,30 @@ Proof.
     + apply bisimulation_is_eq in H2. inversion H2.
 Qed.
 
+Lemma typing_perm_frame {R : Type} : forall P Q P' (t : itree E R),
+    typing P Q t ->
+    typing (P ** P') (fun r => Q r ** P') t.
+Proof.
+  pcofix CIH. intros. pinversion H0; subst.
+  - destruct H as ((? & ? & ? & ?) & ?). pstep. constructor 1. split; [do 3 eexists; eauto |].
+    intros pp c (p & p' & Hp & Hp' & Hpp) Hdom t' c' Hstep.
+    edestruct H1; eauto.
+    { apply Hpp. apply Hdom. }
+    split.
+    { apply Hpp. constructor. left. apply H2. }
+    destruct H3 as (P'' & Ht' & p'' & Hpp' & Hsep_step & Hdom').
+    exists (P'' ** P'). pclearbot. split; auto.
+    exists (p'' * p'). split; [| split].
+    + apply sep_conj_Perms_perm; auto.
+    + eapply sep_step_lte; eauto. eapply sep_step_sep_conj_l; auto.
+      apply Hpp in Hdom. apply Hdom.
+    + split; [| split]; auto.
+      * apply Hpp in Hdom. destruct Hdom as (? & ? & ?). respects.
+        apply H5. auto.
+      * apply Hsep_step. apply Hpp in Hdom. apply Hdom.
+  - pstep. constructor 2. apply sep_conj_Perms_monotone; intuition.
+Qed.
+
 Lemma typing_frame1 {R1 R2 : Type} : forall P Q R (r1 : R1) (t : itree E R2),
     typing P Q t ->
     typing (R r1 ** P) (fun '(r1, r2) => R r1 ** Q r2) (fmap (fun r2 => (r1, r2)) t).
@@ -1325,7 +1349,7 @@ Proof.
     eapply read_perm_read_fail; eauto. apply H4. apply H. auto.
 Qed.
 
-Section test.
+Section test. (* Section because I couldn't figure out how to define the cofixpint without it *)
   (* Context {E : Type -> Type}. *)
   Context {HasMem: MemoryE -< E}.
   Definition rec_list_match (rec_list : SByte -> itree E SByte) (byte : SByte) : itree E SByte :=
@@ -1334,10 +1358,17 @@ Section test.
     | Ptr ptr => if eqb ptr (0, 0)
                 then Ret (Byte 0)
                 else byte' <- trigger (Load (Ptr (next ptr)));;
-                     (Tau (rec_list byte'))
+                     Tau (rec_list byte')
     end.
 
-  CoFixpoint rec_list : SByte -> itree E SByte := rec_list_match (rec_list).
+  (* int f(int* ptr)
+     {
+       if (ptr != NULL)
+          return f( *(ptr + 1));
+       else 0
+     }
+   *)
+  CoFixpoint rec_list : SByte -> itree E SByte := rec_list_match rec_list.
 
   Lemma rewrite_rec_list byte : rec_list byte = rec_list_match rec_list byte.
   Proof.
@@ -1409,4 +1440,115 @@ Proof.
     destruct Hr as (? & ? & ? & ? & ?).
     simpl in H2. exfalso.
     eapply read_perm_read_fail; eauto. apply H4. apply H. auto.
+Qed.
+
+Section test. (* Section because I couldn't figure out how to define the cofixpint without it *)
+  (* Context {E : Type -> Type}. *)
+  Context {HasMem: MemoryE -< E}.
+
+  Definition list_len_step : (SByte * nat) -> itree E (SByte * nat + nat) :=
+    fun '(byte, n) =>
+      match byte with
+      | Byte _ => Ret (inr n)
+      | Ptr ptr => if eqb ptr (0, 0)
+                  then Ret (inr n)
+                  else byte' <- trigger (Load (Ptr (next ptr)));;
+                       Ret (inl (byte', n + 1))
+    end.
+
+  Definition list_len' : SByte * nat -> itree E nat := iter list_len_step.
+  Definition list_len (byte : SByte) : itree E nat := list_len' (byte, 0).
+
+  (* int list_len(int* ptr)
+     {
+       if (ptr != NULL)
+          return 1 + f( *(ptr + 1));
+       else 0
+     }
+   *)
+  (* CoFixpoint list_len : SByte -> itree E nat := list_len_match list_len. *)
+
+  (* Lemma rewrite_rec_list byte : rec_list byte = rec_list_match rec_list byte. *)
+  (* Proof. *)
+  (*   apply bisimulation_is_eq. ginit. revert byte. gcofix CIH. gstep. unfold rec_list. *)
+  (*   destruct byte; try constructor; auto. *)
+  (*   destruct (addr_dec a (0, 0)). *)
+  (*   - subst. constructor. auto. *)
+  (*   - rewrite (Bool.reflect_iff _ _ (eqb_spec _ _)) in n. *)
+  (*     apply Bool.not_true_is_false in n. rename n into H. *)
+  (*     (* TODO figure out how to get this cofix to reduce without cbv *) *)
+  (*     unfold rec_list_match. rewrite H. cbv in H. cbv. rewrite H. *)
+  (*     constructor. auto. intros. apply Reflexive_eqit_gen_eq. *)
+  (* Qed. *)
+End test.
+
+Lemma typing_list_len' (byte : SByte) n (Q : SByte -> Perms) :
+  typing
+    (list_read Q byte)
+    (fun _ => bottom_Perms)
+    (list_len' (byte, n)).
+Proof.
+  revert byte n. pcofix CIH. pstep. intros. unfold list_len, list_len'.
+  rewritebisim @unfold_iter_ktree. unfold list_len_step. destruct byte as [? | ptr].
+  { rewritebisim @bind_ret_l. constructor 2. apply bottom_Perms_is_bottom. }
+  simpl. destruct (eqb ptr (0, 0)) eqn:?.
+  { rewritebisim @bind_ret_l. constructor 2. apply bottom_Perms_is_bottom. }
+  constructor 1. split.
+  { do 3 eexists. repeat apply step_bind. constructor.
+    apply read_config_mem. Unshelve. apply (Byte 0). }
+  intros p c Hp Hdom t' c' Hstep.
+  rewritebisim_in @bind_bind Hstep. rewritebisim_in @bind_trigger Hstep.
+  inversion Hstep; clear Hstep; subst; auto_inj_pair2; subst.
+  - rename c' into c. split; intuition.
+    eexists. split.
+    + left. pstep. constructor 1. split.
+      * do 3 eexists. rewritebisim @bind_ret_l.
+        constructor. Unshelve. 2: apply start_config. shelve.
+      * intros p' c' Hp' Hdom' t' c'' Hstep. rewritebisim_in @bind_ret_l Hstep.
+        inversion Hstep; clear Hstep; subst.
+        split; intuition. eexists. split; eauto.
+        (* TODO: clean up, this is the same case as below *)
+        apply (μ_fixedpoint _ (list_readF_mon _)) in Hp. unfold list_readF in Hp.
+        destruct Hp as (P & [? | ?] & Hp); subst.
+        { inversion Hp. subst. inversion Heqb. }
+        destruct Hp as (p1 & p2 & Hp1 & Hp2 & Hp).
+        simpl in Hp2. destruct Hp2 as (R & (v' & ?) & Hr); subst.
+        destruct Hr as (? & ? & ? & ? & ?).
+        simpl in H. assert (v = v').
+        { apply Hp in Hdom. destruct Hdom as (_ & Hdom & _).
+          apply H1 in Hdom. destruct Hdom as (Hdom & _).
+          apply H in Hdom. rewrite Hdom in H4. inversion H4. auto. } subst.
+        eexists; split; [| split]; eauto; intuition.
+    + apply (μ_fixedpoint _ (list_readF_mon _)) in Hp. unfold list_readF in Hp.
+      destruct Hp as (P & [? | ?] & Hp); subst.
+      { inversion Hp. subst. inversion Heqb. }
+      destruct Hp as (p1 & p2 & Hp1 & Hp2 & Hp).
+      simpl in Hp2. destruct Hp2 as (R & (v' & ?) & Hr); subst.
+      destruct Hr as (? & ? & ? & ? & ?).
+      simpl in H. assert (v = v').
+      { apply Hp in Hdom. destruct Hdom as (_ & Hdom & _).
+        apply H1 in Hdom. destruct Hdom as (Hdom & _).
+        apply H in Hdom. rewrite Hdom in H4. inversion H4. auto. } subst.
+      eexists; split; [| split]; eauto; intuition.
+      * apply sep_step_lte'. etransitivity.
+        etransitivity. apply lte_r_sep_conj_perm; eauto. eauto.
+        etransitivity. apply lte_r_sep_conj_perm; eauto. eauto.
+      * apply H1. apply Hp. auto.
+  - exfalso.
+    apply (μ_fixedpoint _ (list_readF_mon _)) in Hp. unfold list_readF in Hp. simpl in Hp.
+    destruct Hp as (P & [? | ?] & Hp); subst.
+    { inversion Hp. subst. inversion Heqb. }
+    destruct Hp as (p1 & p2 & Hp1 & Hp2 & ?).
+    simpl in Hp2. destruct Hp2 as (R & (v' & ?) & Hr); subst.
+    destruct Hr as (? & ? & ? & ? & ?). simpl in H0.
+    eapply read_perm_read_fail; eauto. apply H2. apply H. auto.
+Qed.
+
+Lemma typing_list_len (byte : SByte) (Q : SByte -> Perms) :
+  typing
+    (list_read Q byte)
+    (fun _ => bottom_Perms)
+    (list_len byte).
+Proof.
+  apply typing_list_len'.
 Qed.
