@@ -106,7 +106,7 @@ Lemma bind_fst {R1 R2} (t : itree E R1) (r2 : R2) :
 Proof.
   revert t r2. pcofix CIH. intros.
   rewritebisim @unfold_bind. pstep.
-  rewrite (itree_eta_ t). destruct (observe t); simpl.
+  rewrite (itree_eta_ t0). destruct (observe t0); simpl.
   - rewritebisim @unfold_bind. constructor; auto.
   - constructor; auto.
   - constructor; auto.
@@ -117,7 +117,7 @@ Lemma bind_snd {R1 R2} (t : itree E R2) (r1 : R1) :
 Proof.
   revert t r1. pcofix CIH. intros.
   rewritebisim @unfold_bind. pstep.
-  rewrite (itree_eta_ t). destruct (observe t); simpl.
+  rewrite (itree_eta_ t0). destruct (observe t0); simpl.
   - rewritebisim @unfold_bind. constructor; auto.
   - constructor; auto.
   - constructor; auto.

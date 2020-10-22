@@ -6,4 +6,8 @@ src/Memory.v
 src/Config.v
 src/Step.v
 src/Implication.v
+src/NoEvent.v
 src/Typing.v
+
+src/ConfigError.v
+src/StepError.v

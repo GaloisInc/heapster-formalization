@@ -5,25 +5,22 @@ From Coq Require Import
      Relations.Relation_Operators
      Relations.Operators_Properties.
 
-(* Module Type Config. *)
-(*   Parameter t : Type. *)
-(* End Config. *)
+Module Type Config.
+  Parameter t : Type.
+End Config.
 
-(* Module Permissions (C : Config). *)
-(* Definition config := C.t. *)
-Section Permissions.
-  Context {config : Type}.
-  Context {specConfig : Type}.
+Module Permissions (C : Config).
+  Definition config := C.t.
 
   (* A single permission *)
   Record perm : Type :=
     {
     rely : config -> config -> Prop; (* rely, the updates this permission allows of others *)
     rely_PO : PreOrder rely;
+    pre : config -> Prop; (* precondition on configs *)
+    pre_respects : forall x y, rely x y -> (pre x -> pre y);
     guar : config -> config -> Prop; (* guarantee, the updates that this permission allows *)
     guar_PO : PreOrder guar;
-    pre : config -> specConfig -> Prop; (* precondition on configs *)
-    pre_respects : forall x y, rely x y -> (forall s, pre x s -> pre y s);
     }.
 
   Hint Unfold rely.
@@ -31,12 +28,12 @@ Section Permissions.
   Hint Unfold guar.
   Hint Resolve pre_respects.
 
-  Global Instance rely_is_preorder p : PreOrder (rely p) := rely_PO p.
-  Global Instance guar_is_preorder p : PreOrder (guar p) := guar_PO p.
+  Instance rely_is_preorder p : PreOrder (rely p) := rely_PO p.
+  Instance guar_is_preorder p : PreOrder (guar p) := guar_PO p.
 
   Record lte_perm (p q: perm) : Prop :=
     {
-    pre_inc : forall x s, pre q x s -> pre p x s;
+    pre_inc : forall x, pre q x -> pre p x;
     rely_inc : forall x y, rely q x y -> rely p x y;
     guar_inc : forall x y, guar p x y -> guar q x y;
     }.
@@ -47,7 +44,7 @@ Section Permissions.
 
   Notation "p <= q" := (lte_perm p q).
 
-  Global Instance lte_perm_is_PreOrder : PreOrder lte_perm.
+  Instance lte_perm_is_PreOrder : PreOrder lte_perm.
   Proof.
     constructor; [ constructor; auto | constructor; intros ]; eauto.
   Qed.
@@ -65,7 +62,7 @@ Section Permissions.
   Hint Resolve eq_perm_lte_1.
   Hint Resolve eq_perm_lte_2.
 
-  Global Instance eq_perm_is_Equivalence : Equivalence eq_perm.
+  Instance eq_perm_is_Equivalence : Equivalence eq_perm.
   Proof.
     constructor.
     - split; reflexivity.
@@ -73,7 +70,7 @@ Section Permissions.
     - intros x y z [] []. split; etransitivity; eauto.
   Qed.
 
-  Global Instance Proper_eq_perm_lte_perm :
+  Instance Proper_eq_perm_lte_perm :
     Proper (eq_perm ==> eq_perm ==> Basics.flip Basics.impl) lte_perm.
   Proof.
     repeat intro. subst. etransitivity; eauto. etransitivity; eauto.
@@ -81,7 +78,7 @@ Section Permissions.
 
   Program Definition bottom_perm : perm :=
     {|
-    pre := fun x s => True;
+    pre := fun x => True;
     rely := fun x y => True;
     guar  := fun x y => x = y;
     |}.
@@ -99,7 +96,7 @@ Section Permissions.
 
   Program Definition top_perm : perm :=
     {|
-    pre := fun x s => False;
+    pre := fun x => False;
     rely := fun x y => x = y;
     guar  := fun x y => True;
     |}.
@@ -119,7 +116,7 @@ Section Permissions.
 
   Program Definition join_perm (p q: perm) : perm :=
     {|
-    pre := fun x s => pre p x s /\ pre q x s;
+    pre := fun x => pre p x /\ pre q x;
     rely := fun x y => rely p x y /\ rely q x y;
     guar  := clos_trans _ (fun x y => (guar p x y) \/ (guar q x y))
     |}.
@@ -127,6 +124,9 @@ Section Permissions.
     constructor; repeat intro.
     - split; reflexivity.
     - destruct H. destruct H0. split; etransitivity; eauto.
+  Qed.
+  Next Obligation.
+    split; respects.
   Qed.
   Next Obligation.
     constructor.
@@ -137,15 +137,12 @@ Section Permissions.
       + econstructor 2; eauto. econstructor 2; eauto. left. assumption.
       + repeat (econstructor 2; eauto).
   Qed.
-  Next Obligation.
-    split; respects.
-  Qed.
 
   Lemma lte_l_join_perm : forall p q,
       p <= join_perm p q.
   Proof.
     intros. constructor; simpl; auto.
-    - intros ? ? [? _]. auto.
+    - intros ? [? _]. auto.
     - intros x y []; auto.
     - constructor; auto.
   Qed.
@@ -154,7 +151,7 @@ Section Permissions.
       q <= join_perm p q.
   Proof.
     intros. constructor; simpl; auto.
-    - intros ? ? [_ ?]. auto.
+    - intros ? [_ ?]. auto.
     - intros x y []; auto.
     - constructor; auto.
   Qed.
@@ -174,7 +171,7 @@ Section Permissions.
       join_perm p q <= join_perm q p.
   Proof.
     constructor.
-    - intros ? ? []. split; auto.
+    - intros ? []. split; auto.
     - intros x y []. repeat split; auto.
     - intros. induction H.
       + destruct H; constructor; auto.
@@ -193,7 +190,7 @@ Section Permissions.
     split; intros.
     {
       constructor.
-      - intros x ? [[? ?] ?]. split; [| split]; auto.
+      - intros x [[? ?] ?]. split; [| split]; auto.
       - intros x y [[] ?].
         repeat split; auto.
       - intros. induction H; try solve [etransitivity; eauto].
@@ -206,7 +203,7 @@ Section Permissions.
     }
     {
       constructor.
-      - intros x ? [? [? ?]]. split; [split |]; auto.
+      - intros x [? [? ?]]. split; [split |]; auto.
       - intros x y [? []].
         repeat split; auto.
       - intros. induction H; try solve [etransitivity; eauto].
@@ -228,7 +225,7 @@ Section Permissions.
       + induction H; try solve [etransitivity; eauto].
         destruct H; auto.
     - constructor.
-      + intros ? ? [? _]; auto.
+      + intros ? [? _]; auto.
       + intros x y []. auto.
       + constructor. auto.
   Qed.
@@ -237,7 +234,7 @@ Section Permissions.
 
   Program Definition meet_perm (p q:perm) : perm :=
     {|
-    pre := fun x s => pre p x s \/ pre q x s \/ exists y, (pre p y s \/ pre q y s) /\ meet_rely p q y x;
+    pre := fun x => pre p x \/ pre q x \/ exists y, (pre p y \/ pre q y) /\ meet_rely p q y x;
     rely := meet_rely p q;
     guar  := fun x y => guar p x y /\ guar q x y;
     |}.
@@ -245,11 +242,6 @@ Section Permissions.
     constructor; repeat intro.
     - constructor. left. reflexivity.
     - econstructor 2; eauto.
-  Qed.
-  Next Obligation.
-    constructor.
-    - constructor; reflexivity.
-    - intros x y z [] []. split; etransitivity; eauto.
   Qed.
   Next Obligation.
     induction H; auto.
@@ -260,6 +252,11 @@ Section Permissions.
       right; right. exists x. split; auto. constructor 1. auto.
     - destruct H; right; right; exists z; split; auto;
         econstructor 2; eauto; constructor 1; auto.
+  Qed.
+  Next Obligation.
+    constructor.
+    - constructor; reflexivity.
+    - intros x y z [] []. split; etransitivity; eauto.
   Qed.
 
   Lemma lte_meet_perm_l : forall p q,
@@ -381,7 +378,7 @@ Qed. *)
 
   Notation "p ⊥ q" := (separate p q) (at level 50).
 
-  Global Instance separate_symmetric: Symmetric separate.
+  Instance separate_symmetric: Symmetric separate.
   Proof.
     intros p q []. constructor; auto.
   Qed.
@@ -394,7 +391,7 @@ Qed. *)
 
   Program Definition sym_guar_perm (p : perm) : perm :=
     {|
-    pre x s := False;
+    pre x := False;
     rely := guar p;
     guar := rely p;
     |}.
@@ -419,7 +416,7 @@ Qed. *)
 
   Program Definition sep_conj_perm (p q: perm) : perm :=
     {|
-    pre := fun x s => pre p x s /\ pre q x s /\ separate p q;
+    pre := fun x => pre p x /\ pre q x /\ separate p q;
     rely := fun x y => rely p x y /\ rely q x y;
     guar  := clos_trans _ (fun x y => (guar p x y) \/ (guar q x y))
     |}.
@@ -431,6 +428,9 @@ Qed. *)
       split; etransitivity; eauto.
   Qed.
   Next Obligation.
+    split; [respects | split; [respects | auto]].
+  Qed.
+  Next Obligation.
     constructor.
     - constructor; intuition.
     - repeat intro. destruct H, H0.
@@ -439,22 +439,19 @@ Qed. *)
       + econstructor 2; eauto. econstructor 2; eauto. left. assumption.
       + repeat (econstructor 2; eauto).
   Qed.
-  Next Obligation.
-    split; [respects | split; [respects | auto]].
-  Qed.
   Notation "p * q" := (sep_conj_perm p q).
 
   Lemma sep_conj_join : forall p q, p ⊥ q -> p * q ≡ join_perm p q.
   Proof.
     split; intros.
-    - constructor; auto; intros x ? []; split; auto.
-    - constructor; auto; intros x ? [? [? ?]]; split; auto.
+    - constructor; auto; intros x []; split; auto.
+    - constructor; auto; intros x [? [? ?]]; split; auto.
   Qed.
 
   Lemma lte_l_sep_conj_perm : forall p q, p <= p * q.
   Proof.
     intros. constructor; simpl; auto.
-    - intros x ? []; auto.
+    - intros x []; auto.
     - intros x y []; auto.
     - constructor; auto.
   Qed.
@@ -462,7 +459,7 @@ Qed. *)
   Lemma lte_r_sep_conj_perm : forall p q, q <= p * q.
   Proof.
     intros. constructor; simpl; auto.
-    - intros x ? [? [? ?]]; auto.
+    - intros x [? [? ?]]; auto.
     - intros x y []; auto.
     - constructor; auto.
   Qed.
@@ -482,7 +479,7 @@ Qed. *)
       + econstructor 2; eauto.
   Qed.
 
-  Global Instance Proper_eq_perm_sep_conj_perm :
+  Instance Proper_eq_perm_sep_conj_perm :
     Proper (eq_perm ==> eq_perm ==> eq_perm) sep_conj_perm.
   Proof.
     repeat intro. split; apply sep_conj_perm_monotone; auto.
@@ -517,7 +514,7 @@ Qed. *)
   Lemma sep_conj_perm_commut' : forall p q, p * q <= q * p.
   Proof.
     constructor.
-    - intros x ? [? [? ?]]; simpl; split; [| split]; intuition.
+    - intros x [? [? ?]]; simpl; split; [| split]; intuition.
     - intros x y []; repeat split; auto.
     - intros. induction H.
       + destruct H; constructor; auto.
@@ -554,12 +551,12 @@ Qed. *)
   Qed.
 
   Lemma sep_conj_perm_assoc : forall p q r,
-      (p * q) * r ≡ p * (q * r).
+      p * q * r ≡ p * (q * r).
   Proof.
     split; intros.
     {
       constructor.
-      - intros x ? [? [[? [? ?]] ?]].
+      - intros x [? [[? [? ?]] ?]].
         pose proof (separate_sep_conj_perm_l _ _ _ H3).
         pose proof (separate_sep_conj_perm_r _ _ _ H3).
         split; [split; [| split] | split]; auto.
@@ -575,7 +572,7 @@ Qed. *)
     }
     {
       constructor.
-      - intros x ? [[? [? ?]] [? ?]]. symmetry in H3.
+      - intros x [[? [? ?]] [? ?]]. symmetry in H3.
         pose proof (separate_sep_conj_perm_l _ _ _ H3). symmetry in H4.
         pose proof (separate_sep_conj_perm_r _ _ _ H3). symmetry in H5.
         split; [| split; [split; [| split] |]]; auto.
@@ -604,7 +601,7 @@ Qed. *)
     forall p, p ∈ Q -> p ∈ P.
   Notation "P ⊑ Q" := (lte_Perms P Q) (at level 60).
 
-  Global Instance lte_Perms_is_preorder : PreOrder lte_Perms.
+  Instance lte_Perms_is_preorder : PreOrder lte_Perms.
   Proof.
     constructor; repeat intro; auto.
   Qed.
@@ -690,7 +687,7 @@ Qed. *)
   Definition eq_Perms (P Q : Perms) : Prop := P ⊑ Q /\ Q ⊑ P.
   Notation "P ≡≡ Q" := (eq_Perms P Q) (at level 60).
 
-  Global Instance Equivalence_eq_Perms : Equivalence eq_Perms.
+  Instance Equivalence_eq_Perms : Equivalence eq_Perms.
   Proof.
     constructor; repeat intro.
     - split; reflexivity.
@@ -698,13 +695,13 @@ Qed. *)
     - destruct H, H0. split; etransitivity; eauto.
   Qed.
 
-  Global Instance Proper_eq_Perms_lte_Perms :
+  Instance Proper_eq_Perms_lte_Perms :
     Proper (eq_Perms ==> eq_Perms ==> Basics.flip Basics.impl) lte_Perms.
   Proof.
     do 5 red. intros. etransitivity. apply H. etransitivity. apply H1. apply H0.
   Qed.
 
-  Global Instance Proper_eq_Perms_eq_perm_in_Perms : Proper (eq_Perms ==> eq_perm ==> Basics.flip Basics.impl) in_Perms.
+  Instance Proper_eq_Perms_eq_perm_in_Perms : Proper (eq_Perms ==> eq_perm ==> Basics.flip Basics.impl) in_Perms.
   Proof.
     repeat intro; subst. apply H. eapply Perms_upwards_closed; eauto.
   Qed.
@@ -716,7 +713,7 @@ Qed. *)
   Next Obligation.
     exists H, H1. split; [| split]; auto. etransitivity; eauto.
   Qed.
-  Notation "P ** Q" := (sep_conj_Perms P Q) (at level 51).
+  Notation "P ** Q" := (sep_conj_Perms P Q) (at level 51, right associativity).
 
   Lemma lte_l_sep_conj_Perms : forall P Q, P ⊑ P ** Q.
   Proof.
@@ -809,18 +806,18 @@ Qed. *)
   Definition entails_Perms P Q := Q ⊑ P.
   Notation "P ⊦ Q" := (entails_Perms P Q) (at level 60).
 
-  Global Instance entails_Perms_preorder : PreOrder entails_Perms.
+  Instance entails_Perms_preorder : PreOrder entails_Perms.
   Proof.
     constructor; repeat intro; auto.
   Qed.
 
-  Global Instance Proper_eq_Perms_entails_Perms :
+  Instance Proper_eq_Perms_entails_Perms :
     Proper (eq_Perms ==> eq_Perms ==> Basics.flip Basics.impl) entails_Perms.
   Proof.
     do 6 red. intros. rewrite H. rewrite H0. auto.
   Qed.
 
-  Global Instance Proper_eq_Perms_sep_conj_Perms :
+  Instance Proper_eq_Perms_sep_conj_Perms :
     Proper (eq_Perms ==> eq_Perms ==> eq_Perms) sep_conj_Perms.
   Proof.
     repeat intro. etransitivity.
@@ -903,28 +900,3 @@ Qed. *)
     eexists. split; eauto.
   Qed.
 End Permissions.
-
-Notation "p <= q" := (lte_perm p q).
-Notation "p ≡ q" := (eq_perm p q) (at level 50).
-Notation "p ⊥ q" := (separate p q) (at level 50).
-Notation "p * q" := (sep_conj_perm p q).
-Notation "p ∈ P" := (in_Perms P p) (at level 60).
-Notation "P ⊑ Q" := (lte_Perms P Q) (at level 60).
-Notation "P ≡≡ Q" := (eq_Perms P Q) (at level 60).
-Notation "P ** Q" := (sep_conj_Perms P Q) (at level 51).
-Notation "P ⊦ Q" := (entails_Perms P Q) (at level 60).
-Notation "P -⊑- Q" := (forall a, P a ⊑ Q a) (at level 60).
-Notation "P -≡- Q" := (P -⊑- Q /\ Q -⊑- P) (at level 60).
-
-Ltac respects := eapply pre_respects; eauto.
-
-Hint Unfold rely.
-Hint Unfold pre.
-Hint Unfold guar.
-Hint Resolve pre_respects.
-Hint Resolve pre_inc.
-Hint Resolve rely_inc.
-Hint Resolve guar_inc.
-Hint Unfold eq_perm.
-Hint Resolve eq_perm_lte_1.
-Hint Resolve eq_perm_lte_2.

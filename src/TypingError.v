@@ -1,7 +1,8 @@
 From Heapster Require Import
      Permissions
-     Config
-     Step.
+     ConfigError
+     StepError
+     NoEvent.
 
 From Coq Require Import
      Structures.Equalities
@@ -23,6 +24,7 @@ From ITree Require Import
      Basics.MonadProp
      Events.State
      Events.Nondeterminism
+     Events.Exception
      Eq.Eq
      Eq.UpToTaus
      Eq.EqAxiom.
@@ -128,7 +130,7 @@ Section ts.
     apply Reflexive_eqit_gen_eq. (* not sure why reflexivity doesn't work here *)
   Qed.
 
-  Lemma rewrite_spin : (ITree.spin : itree E R) = Tau (ITree.spin).
+  Lemma rewrite_spin {E'} {R'} : (ITree.spin : itree E' R') = Tau (ITree.spin).
   Proof.
     intros. apply bisimulation_is_eq.
     ginit. gcofix CIH. gstep. unfold ITree.spin. constructor.
@@ -136,25 +138,28 @@ Section ts.
   Qed.
 
   (* to handle the nondeterminism, par needs double the amount of steps *)
-  Lemma par_step_left : forall (t1 t2 t' : itree E R) (c c' : config),
-      step t1 c t2 c' ->
-      exists t'', step (par t1 t') c t'' c /\ step t'' c (par t2 t') c'.
-  Proof.
-    inversion 1; subst;
-      try solve [rewrite rewrite_par; unfold par_match; simpl; repeat eexists; constructor; auto].
-    (* as above, load case needs its constructor manually applied... *)
-    rewrite rewrite_par; unfold par_match; simpl; repeat eexists. constructor.
-    apply (step_load (fun x => par (k x) t') _ _ _ H0).
-  Qed.
-  Lemma par_step_right : forall (t1 t2 t' : itree E R) (c c' : config),
-      step t1 c t2 c' ->
-      exists t'', step (par t' t1) c t'' c /\ step t'' c (par t' t2) c'.
-  Proof.
-    inversion 1; subst;
-      try solve [rewrite rewrite_par; unfold par_match; simpl; repeat eexists; constructor; auto].
-    rewrite rewrite_par; unfold par_match; simpl; repeat eexists. constructor 3.
-    apply (step_load (fun x => par t' (k x)) _ _ _ H0).
-  Qed.
+  (* Lemma par_step_left : forall (t1 t2 t' : itree E R) (c c' : config), *)
+  (*     step t1 c t2 c' -> *)
+  (*     exists t'', step (par t1 t') c t'' c /\ step t'' c (par t2 t') c'. *)
+  (* Proof. *)
+  (*   inversion 1; subst; *)
+  (*     try solve [rewrite rewrite_par; unfold par_match; simpl; repeat eexists; constructor; auto]. *)
+  (*   (* as above, load case needs its constructor manually applied... *) *)
+  (*   rewrite rewrite_par; unfold par_match; simpl; repeat eexists. constructor. *)
+  (*   apply (step_load (fun x => par (k x) t') _ _ _ H0). *)
+
+  (*   rewrite rewrite_par; unfold par_match; simpl. repeat eexists. constructor. *)
+  (*   constructor. *)
+  (* Qed. *)
+  (* Lemma par_step_right : forall (t1 t2 t' : itree E R) (c c' : config), *)
+  (*     step t1 c t2 c' -> *)
+  (*     exists t'', step (par t' t1) c t'' c /\ step t'' c (par t' t2) c'. *)
+  (* Proof. *)
+  (*   inversion 1; subst; *)
+  (*     try solve [rewrite rewrite_par; unfold par_match; simpl; repeat eexists; constructor; auto]. *)
+  (*   rewrite rewrite_par; unfold par_match; simpl; repeat eexists. constructor 3. *)
+  (*   apply (step_load (fun x => par t' (k x)) _ _ _ H0). *)
+  (* Qed. *)
 
   (* Variant typing_perm_gen typing (p : perm) (q : R -> perm) : itree E R -> Prop := *)
   (* | cond : forall t, (exists c t' c', step t c t' c') /\ (* we can step *) *)
@@ -169,165 +174,200 @@ Section ts.
   (*               typing_perm_gen typing p q t *)
   (* | ret : forall r, q r <= p -> typing_perm_gen typing p q (Ret r). *)
 
+  Definition specE := exceptE unit.
 
-  Variant typing_gen typing (P : Perms) (Q : R -> Perms) : itree E R -> Prop :=
-  | cond : forall t, (exists c t' c', step t c t' c') /\ (* we can step *)
-                (forall p c, p ∈ P ->
-                        pre p c ->
-                        forall t' c',
-                          step t c t' c' -> (* and everything we can step to... *)
-                          (
-                            (* we step to configs that satisfy the perm *)
-                            guar p c c' /\
-                            (* we step to machines that are well-typed by some other perm that maintains separation *)
-                            exists P', typing P' Q t' /\ exists p', p' ∈ P' /\ sep_step p p' /\ pre p' c')) ->
-                typing_gen typing P Q t
-  | ret : forall r, Q r ⊑ P -> typing_gen typing P Q (Ret r).
+  Variant typing_gen {R1 R2 : Type} typing (P : Perms) (Q : R1 -> R2 -> Perms) :
+    itree E R1 -> itree specE R2 -> Prop :=
+  | cond : forall program spec,
+      (exists t, program ≈ t /\
+            (exists c t' c', step t c t' c') /\ (* we can step *)
+            (forall p c, p ∈ P ->
+                    pre p c ->
+                    forall t' c',
+                      step t c t' c' -> (* and everything we can step to... *)
+                      (
+                        (* we step to configs that satisfy the perm *)
+                        guar p c c' /\
+                        (* we step to machines that are well-typed by some
+                                   other perm that maintains separation *)
+                        exists P', typing P' Q t' spec /\ exists p', p' ∈ P' /\ sep_step p p' /\ pre p' c'))) ->
+      typing_gen typing P Q program (Tau spec)
+  | tau : forall t s, typing P Q t s -> typing_gen typing P Q (Tau t) (Tau s)
+  | err : forall t, typing_gen typing P Q t (throw tt)
+  | ret : forall r1 r2 program spec,
+      Ret r1 ≈ program ->
+      Ret r2 ≈ spec ->
+      Q r1 r2 ⊑ P ->
+      typing_gen typing P Q program spec.
 
-  (* Definition typing_perm := paco3 typing_perm_gen bot3. *)
-  Definition typing := paco3 typing_gen bot3.
+  Definition typing {R1 R2} := paco4 (@typing_gen R1 R2) bot4.
 
-  Lemma typing_gen_mon : monotone3 typing_gen.
+  (* Variant typing_gen typing (P : Perms) (Q : R -> Perms) : itree E R -> Prop := *)
+  (* | cond : forall t, (exists c t' c', step t c t' c') /\ (* we can step *) *)
+  (*               (forall p c, p ∈ P -> *)
+  (*                       pre p c -> *)
+  (*                       forall t' c', *)
+  (*                         step t c t' c' -> (* and everything we can step to... *) *)
+  (*                         ( *)
+  (*                           (* we step to configs that satisfy the perm *) *)
+  (*                           guar p c c' /\ *)
+  (*                           (* we step to machines that are well-typed by some other perm that maintains separation *) *)
+  (*                           exists P', typing P' Q t' /\ exists p', p' ∈ P' /\ sep_step p p' /\ pre p' c')) -> *)
+  (*               typing_gen typing P Q t *)
+  (* | ret : forall r, Q r ⊑ P -> typing_gen typing P Q (Ret r). *)
+
+  (* Definition typing := paco3 typing_gen bot3. *)
+
+  Lemma typing_gen_mon R1 R2 : monotone4 (@typing_gen R1 R2).
   Proof.
     repeat intro.
-    inversion IN; subst.
-    - econstructor. destruct H. split; auto.
-      intros. edestruct H0; eauto. split; eauto.
-      destruct H5 as (? & ? & (? & ? & ? & ?)). eexists. split; eauto.
-    - constructor 2; auto.
+    inversion IN; subst; try solve [econstructor; eauto].
+    econstructor. destruct H as (? & ? & ? & ?).
+    eexists. split; eauto. split; auto.
+    intros. edestruct H1; eauto. split; eauto.
+    destruct H6 as (? & ? & (? & ? & ? & ?)). eexists. split; eauto.
   Qed.
   Hint Resolve typing_gen_mon : paco.
 
-  Lemma typing_lte : forall P P' Q Q' t, typing P Q t ->
-                                    P' ⊦ P ->
-                                    (forall r, Q r ⊦ Q' r) ->
-                                    typing P' Q' t.
+  Lemma typing_lte {R1 R2} : forall P P' Q Q' (t : itree E R1) (s : itree specE R2),
+      typing P Q t s ->
+      P' ⊦ P ->
+      (forall r1 r2, Q r1 r2 ⊦ Q' r1 r2) ->
+      typing P' Q' t s.
   Proof.
     pcofix CIH. intros. pstep. pinversion H0; subst.
-    - constructor 1. destruct H. split; auto. intros.
-      edestruct H3; eauto. split; auto.
-      destruct H8 as (? & ? & (? & ? & ? & ?)). pclearbot.
-      eexists; split.
-      + right. eapply CIH; eauto. reflexivity.
-      + eexists. split; [| split]; eauto.
-    - constructor 2. etransitivity; eauto. etransitivity; eauto. apply H2.
+    - constructor 1. destruct H as (? & ? & ? & ?). eexists; split; eauto. split; auto.
+      intros. edestruct H4; eauto. split; auto.
+      destruct H9 as (? & ? & (? & ? & ? & ?)). pclearbot.
+      eexists; split; eauto.
+      right. eapply CIH; eauto. reflexivity.
+    - constructor 2. eauto.
+    - constructor 3.
+    - econstructor 4; eauto. etransitivity; eauto. etransitivity; eauto. apply H2.
   Qed.
 
-  Lemma typing_ret : forall P Q r, Q r ⊑ P -> typing P Q (Ret r).
+  Lemma typing_ret {R1 R2} : forall P Q (r1 : R1) (r2 : R2), P ⊦ Q r1 r2 -> typing P Q (Ret r1) (Ret r2).
   Proof.
-    intros. pstep. constructor 2. auto.
+    intros. pstep. econstructor 4; eauto; reflexivity.
   Qed.
 
-  Lemma typing_spin : forall P Q, typing P Q ITree.spin.
+  Lemma typing_spin {R1 R2} : forall P (Q : R1 -> R2 -> Perms), typing P Q ITree.spin ITree.spin.
   Proof.
-    pcofix CIH. intros. pstep. constructor 1. split.
-    - exists start_config. eexists. exists start_config. rewrite rewrite_spin. constructor.
-    - intros. rewrite rewrite_spin in H1. inversion H1; subst; split; intuition.
-      exists P. split.
-      + right. auto.
-      + exists p; split; [| split]; intuition.
+    pcofix CIH. intros. pstep. pose proof @rewrite_spin. rewrite H. rewrite (H specE _).
+    constructor 2; auto.
   Qed.
 
-  Lemma typing_top : forall P Q t, typing P Q t -> typing top_Perms Q t.
+  Lemma typing_top {R1 R2} : forall P (Q : R1 -> R2 -> Perms) t s,
+      typing P Q t s -> typing top_Perms Q t s.
   Proof.
-    intros. pstep. pinversion H; subst.
-    - constructor 1. destruct H0. split; auto. intros. inversion H2.
-    - constructor 2; auto. apply top_Perms_is_top.
-  Qed.
-  Lemma typing_top_step : forall Q t, (exists c t' c', step t c t' c') -> typing top_Perms Q t.
-  Proof.
-    intros. pstep. constructor. split; auto. inversion 1.
+    pcofix CIH. intros. pstep. pinversion H0; subst; try solve [constructor; eauto].
+    - constructor 1. destruct H as (? & ? & ? & ?). eexists; split; eauto.
+      split; auto. intros. inversion H3.
+    - econstructor 4; eauto. apply top_Perms_is_top.
   Qed.
 
-  Lemma typing_bottom : forall P Q t, typing P Q t -> typing P (fun _ => bottom_Perms) t.
+  (* Lemma typing_top_step {R1 R2} : forall (Q : R1 -> R2 -> Perms) t s, *)
+  (*     (exists c t' c', step t c t' c') -> typing top_Perms Q t s. *)
+  (* Proof. *)
+  (*   intros. pstep. constructor 1. eexists. split. reflexivity. split; auto. inversion 1. *)
+  (* Qed. *)
+
+  Lemma typing_bottom {R1 R2} : forall P (Q : R1 -> R2 -> Perms) t s,
+      typing P Q t s -> typing P (fun _ _ => bottom_Perms) t s.
   Proof.
-    pcofix CIH. intros. pstep. pinversion H0; subst.
-    - destruct H. constructor 1. split; auto. intros.
-      edestruct H1; eauto. split; auto. destruct H6 as (? & ? & (? & ? & ? & ?)).
-      pclearbot. eexists. split; eauto.
-    - constructor 2. apply bottom_Perms_is_bottom.
+    pcofix CIH. intros. pstep. pinversion H0; subst; try solve [constructor; eauto].
+    - destruct H as (? & ? & ? & ?). constructor 1. eexists; split; eauto.
+      split; auto. intros.
+      edestruct H2; eauto. split; auto. destruct H7 as (? & ? & (? & ? & ? & ?)).
+      pclearbot. eexists; split; eauto.
+    - econstructor 4; eauto. apply bottom_Perms_is_bottom.
   Qed.
 
   (* converse not true, e.g. bottom can type Tau t since Tau t steps to t, but
      bottom cannot type t if t doesn't step. *)
-  Lemma typing_tau : forall P Q t, typing P Q t -> typing P Q (Tau t).
-    intros. pstep. pinversion H; subst.
-    - constructor 1. destruct H0 as ((? & ? & ? & ?) & ?). split.
-      + exists start_config. eexists. exists start_config. constructor.
-      + intros. inversion H4; subst.
-        split; intuition.
-        exists P. split; auto. exists p. split; [| split]; intuition.
-    - constructor 1. split.
-      + exists start_config. eexists. exists start_config. constructor.
-      + intros. inversion H3; subst.
-        split; intuition.
-        exists P. split; auto. exists p. split; [| split]; intuition.
-  Qed.
-
-  Definition no_error (c : config) :=
-    e c = false.
-
-  (* use instead of no_guar_error? *)
-  Program Definition no_error_perm : perm :=
-    {|
-    pre := no_error;
-    rely := fun c c' => no_error c -> no_error c';
-    guar := eq;
-    |}.
-  Next Obligation.
-    constructor; auto.
-  Qed.
-
-  Lemma typing_multistep : forall P Q t,
-      typing P Q t ->
-      forall p c, p ∈ P ->
-             pre p c ->
-             forall t' c',
-               multistep t c t' c' ->
-               exists P', typing P' Q t' /\ exists p', p' ∈ P' /\ sep_step p p' /\ pre p' c'.
+  Lemma typing_tau {R1 R2} : forall P (Q : R1 -> R2 -> Perms) t s,
+      typing P Q t s -> typing P Q (Tau t) s.
   Proof.
-    intros. induction H2.
-    - eexists; split; eauto. eexists; split; [| split]; eauto; reflexivity.
-    - destruct IHmultistep as (P' & ? & p' & ? & ? & ?); eauto. pinversion H4; subst.
-      + destruct H8 as (_ & ?). edestruct H8 as (? & P'' & ? & p'' & ? & ? & ?); eauto. pclearbot.
-        exists P''; split; eauto. exists p''; split; [| split]; eauto. etransitivity; eauto.
-      + inversion H3.
+    pcofix CIH. intros. pstep. pinversion H0; subst; try solve [constructor; eauto].
+    - constructor 1. destruct H as (? & ? & ?).
+      eexists; split; eauto. rewrite tau_eutt; eauto.
+      destruct H1. split; auto. intros.
+      edestruct H2 as (? & ? & ? & ? & ? & ? & ?); eauto. pclearbot.
+      split; auto. eexists; split; eauto.
+      left. eapply paco4_mon_bot; eauto.
+    - econstructor 4; eauto. rewrite tau_eutt; auto.
   Qed.
-
-  Lemma typing_soundness_step : forall P Q t,
-      typing P Q t ->
-      forall p c, p ∈ (P ** singleton_Perms no_error_perm) ->
-             pre p c ->
-             forall t' c', step t c t' c' -> no_error c'.
+  Lemma typing_tau' {R1 R2} : forall P (Q : R1 -> R2 -> Perms) t s,
+      typing P Q (Tau t) s -> typing P Q t s.
   Proof.
-    intros. rename p into p'. destruct H0 as (p & no_error & ? & ? & ?).
-    apply H4 in H1. destruct H1 as (? & ? & ?).
-    pinversion H; subst.
-    - destruct H7. specialize (H8 _ _ H0 H1 _ _ H2) as (? & _).
-      apply H3. respects. apply H6. auto.
-    - inversion H2.
-  Qed.
+    pcofix CIH. intros. pstep. pinversion H0; subst; try solve [constructor; eauto].
+    - destruct H as (? & ? & ? & ?).
+      constructor. exists x. split; eauto. rewrite <- tau_eutt; auto.
+      split; auto. intros p c Hp Hpre t' c' Hstep.
+      edestruct H2 as (? & ? & ? & ? & ? & ? & ?); eauto. pclearbot.
+      split; auto. eexists; split; eauto. left. eapply paco4_mon_bot; eauto.
+    - Admitted.
+  (* Qed. *)
 
-  Lemma typing_soundness : forall P Q (t : itree E R),
-      (* (exists q, q ∈ Q) /\ (* change to something involving top_Perms? *) *)
-      typing P Q t ->
-      forall p c, p ∈ (P ** singleton_Perms no_error_perm) ->
-             pre p c ->
-             forall t' c', multistep t c t' c' -> no_error c'.
+  Instance Proper_typing_eutt {R1 R2} : Proper (eq ==> eq ==> eutt eq ==> eutt eq ==> iff) (@typing R1 R2).
   Proof.
-    intros P Q t Htyping p0 c (p & no_err & Hp & Hno_err & Hlte) Hpre t' c' Hmultistep.
-    induction Hmultistep.
-    - apply Hno_err. apply Hlte. auto.
-    - pose proof Hpre as H'. rename H into Hstep.
-      apply Hlte in H'. destruct H' as (Hprep & Hpreno_err & Hsep).
-      destruct (typing_multistep _ _ _ Htyping _ _ Hp Hprep _ _ Hmultistep) as (P' & Htyping' & p' & Hp' & Hsep_step & Hprep').
-      eapply (typing_soundness_step _ _ _ Htyping').
-      3: apply Hstep. (* apply H10 in H7. simpl. *)
-      exists p', no_error_perm. split; [| split]; simpl; auto; reflexivity.
-      split; [| split]; auto.
-      2: { apply Hsep_step in Hsep. eapply separate_antimonotone; eauto. }
-      apply IHHmultistep; eauto.
-  Qed.
+    repeat intro. subst. split.
+    - pinversion H1.
+      + intros.
+  Admitted.
+
+  Definition no_error {R} (t : itree E R) : Prop := no_event_l t.
+
+  (* Lemma typing_multistep : forall P Q t, *)
+  (*     typing P Q t -> *)
+  (*     forall p c, p ∈ P -> *)
+  (*            pre p c -> *)
+  (*            forall t' c', *)
+  (*              multistep t c t' c' -> *)
+  (*              exists P', typing P' Q t' /\ exists p', p' ∈ P' /\ sep_step p p' /\ pre p' c'. *)
+  (* Proof. *)
+  (*   intros. induction H2. *)
+  (*   - eexists; split; eauto. eexists; split; [| split]; eauto; reflexivity. *)
+  (*   - destruct IHmultistep as (P' & ? & p' & ? & ? & ?); eauto. pinversion H4; subst. *)
+  (*     + destruct H8 as (_ & ?). edestruct H8 as (? & P'' & ? & p'' & ? & ? & ?); eauto. pclearbot. *)
+  (*       exists P''; split; eauto. exists p''; split; [| split]; eauto. etransitivity; eauto. *)
+  (*     + inversion H3. *)
+  (* Qed. *)
+
+  (* Lemma typing_soundness_step : forall P Q t, *)
+  (*     typing P Q t -> *)
+  (*     forall p c, p ∈ (P ** singleton_Perms no_error_perm) -> *)
+  (*            pre p c -> *)
+  (*            forall t' c', step t c t' c' -> no_error c'. *)
+  (* Proof. *)
+  (*   intros. rename p into p'. destruct H0 as (p & no_error & ? & ? & ?). *)
+  (*   apply H4 in H1. destruct H1 as (? & ? & ?). *)
+  (*   pinversion H; subst. *)
+  (*   - destruct H7. specialize (H8 _ _ H0 H1 _ _ H2) as (? & _). *)
+  (*     apply H3. respects. apply H6. auto. *)
+  (*   - inversion H2. *)
+  (* Qed. *)
+
+  (* Lemma typing_soundness : forall P Q (t : itree E R), *)
+  (*     (* (exists q, q ∈ Q) /\ (* change to something involving top_Perms? *) *) *)
+  (*     typing P Q t -> *)
+  (*     forall p c, p ∈ (P ** singleton_Perms no_error_perm) -> *)
+  (*            pre p c -> *)
+  (*            forall t' c', multistep t c t' c' -> no_error c'. *)
+  (* Proof. *)
+  (*   intros P Q t Htyping p0 c (p & no_err & Hp & Hno_err & Hlte) Hpre t' c' Hmultistep. *)
+  (*   induction Hmultistep. *)
+  (*   - apply Hno_err. apply Hlte. auto. *)
+  (*   - pose proof Hpre as H'. rename H into Hstep. *)
+  (*     apply Hlte in H'. destruct H' as (Hprep & Hpreno_err & Hsep). *)
+  (*     destruct (typing_multistep _ _ _ Htyping _ _ Hp Hprep _ _ Hmultistep) as (P' & Htyping' & p' & Hp' & Hsep_step & Hprep'). *)
+  (*     eapply (typing_soundness_step _ _ _ Htyping'). *)
+  (*     3: apply Hstep. (* apply H10 in H7. simpl. *) *)
+  (*     exists p', no_error_perm. split; [| split]; simpl; auto; reflexivity. *)
+  (*     split; [| split]; auto. *)
+  (*     2: { apply Hsep_step in Hsep. eapply separate_antimonotone; eauto. } *)
+  (*     apply IHHmultistep; eauto. *)
+  (* Qed. *)
 
   (*   Inductive Returns (r : R) : itree E R -> Prop := *)
   (*   | ReturnsRet: Returns r (Ret r) *)
@@ -345,70 +385,73 @@ End ts.
 
 Hint Resolve typing_gen_mon : paco.
 
-Lemma typing_bind {R1 R2} : forall P Q R (t : itree E R1) (k : R1 -> itree E R2),
-    typing P Q t ->
-    (forall r1, typing (Q r1) R (k r1)) ->
-    typing P R (x <- t;; k x).
+Lemma typing_bind {R1 R2 R3 R4} :
+  forall P Q R
+    (t : itree E R1) (k1 : R1 -> itree E R2)
+    (s : itree specE R3) (k2 : R3 -> itree specE R4),
+    typing P Q t s ->
+    (forall r1 r2, typing (Q r1 r2) R (k1 r1) (k2 r2)) ->
+    typing P R (x <- t;; k1 x) (x <- s;; k2 x).
 Proof.
   pcofix CIH. intros. pinversion H0; subst.
-  - destruct H as ((? & ? & ? & ?) & ?). pstep. constructor. split; auto.
+  - destruct H as (? & ? & (? & ? & ? & ?) & ?). pstep.
+    rewritebisim @bind_tau. constructor. exists (x3 <- x;; k1 x3). split.
+    eapply eutt_clo_bind; intros; eauto; subst; reflexivity. split.
     do 3 eexists. apply step_bind; eauto.
-    intros. inversion H5; subst.
-    + pose proof @eqitree_inv_bind_tau.
-      edestruct H6 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H7; reflexivity | |];
-        apply bisimulation_is_eq in H8; apply bisimulation_is_eq in H9; subst;
-          [| inversion H].
-      destruct (H2 _ _ H3 H4 _ _ (step_tau _ _)) as (? & P' & ? & (p' & ? & ? & ?)).
-      pclearbot. split; auto. exists P'. split; eauto.
+    intros p c Hp Hpre t' c' Hstep. inversion Hstep; subst.
     + pose proof @eqitree_inv_bind_vis.
-      edestruct H6 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H7; reflexivity | |];
-        apply bisimulation_is_eq in H8; subst; [| inversion H].
-      rewritebisim_in @bind_vis H7. inversion H7; auto_inj_pair2; subst.
-      destruct (H2 _ _ H3 H4 _ _ (step_nondet_true _ _)) as (? & P' & ? & (p' & ? & ? & ?)).
-      pclearbot. split; auto. exists P'. split; eauto.
-    + pose proof @eqitree_inv_bind_vis.
-      edestruct H6 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H7; reflexivity | |];
-        apply bisimulation_is_eq in H8; subst; [| inversion H].
-      rewritebisim_in @bind_vis H7. inversion H7; auto_inj_pair2; subst.
-      destruct (H2 _ _ H3 H4 _ _ (step_nondet_false _ _)) as (? & P' & ? & (p' & ? & ? & ?)).
-      pclearbot. split; auto. exists P'. split; eauto.
-    + pose proof @eqitree_inv_bind_vis.
-      edestruct H8 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H6; reflexivity | |];
-        apply bisimulation_is_eq in H9; subst; [| inversion H].
-      rewritebisim_in @bind_vis H6. inversion H6; auto_inj_pair2; subst.
-      destruct (H2 _ _ H3 H4 _ _ (step_load _ _ _ _ H7)) as (? & P' & ? & (p' & ? & ? & ?)).
-      pclearbot. split; auto. exists P'. split; eauto.
-    + pose proof @eqitree_inv_bind_vis.
-      edestruct H8 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H6; reflexivity | |];
-        apply bisimulation_is_eq in H9; subst; [| inversion H].
-      rewritebisim_in @bind_vis H6. inversion H6; auto_inj_pair2; subst.
-      destruct (H2 _ _ H3 H4 _ _ (step_store _ _ _ _ _ H7)) as (? & P' & ? & (p' & ? & ? & ?)).
-      pclearbot. split; auto. exists P'. split; eauto.
-    + pose proof @eqitree_inv_bind_vis.
-      edestruct H8 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H6; reflexivity | |];
-        apply bisimulation_is_eq in H9; subst; [| inversion H].
-      rewritebisim_in @bind_vis H6. inversion H6; auto_inj_pair2; subst.
-      destruct (H2 _ _ H3 H4 _ _ (step_load_fail _ _ _ H7)) as (? & P' & ? & (p' & ? & ? & ?)).
-      pclearbot. split; auto. exists P'. split; eauto.
-    + pose proof @eqitree_inv_bind_vis.
-      edestruct H8 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H6; reflexivity | |];
-        apply bisimulation_is_eq in H9; subst; [| inversion H].
-      rewritebisim_in @bind_vis H6. inversion H6; auto_inj_pair2; subst.
-      destruct (H2 _ _ H3 H4 _ _ (step_store_fail _ _ _ _ H7)) as (? & P' & ? & (p' & ? & ? & ?)).
-      pclearbot. split; auto. exists P'. split; eauto.
-    + pose proof @eqitree_inv_bind_vis.
-      edestruct H6 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H7; reflexivity | |];
-        apply bisimulation_is_eq in H8; subst; [| inversion H].
+      edestruct H4 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H5; reflexivity | |];
+        apply bisimulation_is_eq in H6; subst; [| inversion H2].
       rewritebisim_in @bind_vis H5. inversion H5; auto_inj_pair2; subst.
-      destruct (H2 _ _ H3 H4 _ _ (step_load_invalid _ _ _)) as (? & P' & ? & (p' & ? & ? & ?)).
+      destruct (H3 _ _ Hp Hpre _ _ (step_nondet_true _ _)) as (? & P' & ? & (p' & ? & ? & ?)).
       pclearbot. split; auto. exists P'. split; eauto.
     + pose proof @eqitree_inv_bind_vis.
-      edestruct H6 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H7; reflexivity | |];
-        apply bisimulation_is_eq in H8; subst; [| inversion H].
+      edestruct H4 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H5; reflexivity | |];
+        apply bisimulation_is_eq in H6; subst; [| inversion H2].
       rewritebisim_in @bind_vis H5. inversion H5; auto_inj_pair2; subst.
-      destruct (H2 _ _ H3 H4 _ _ (step_store_invalid _ _ _ _)) as (? & P' & ? & (p' & ? & ? & ?)).
+      destruct (H3 _ _ Hp Hpre _ _ (step_nondet_false _ _)) as (? & P' & ? & (p' & ? & ? & ?)).
       pclearbot. split; auto. exists P'. split; eauto.
-  - rewritebisim @bind_ret_l. eapply paco3_mon_bot; eauto. eapply typing_lte; eauto.
+    + pose proof @eqitree_inv_bind_vis.
+      edestruct H6 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H4; reflexivity | |];
+        apply bisimulation_is_eq in H7; subst; [| inversion H2].
+      rewritebisim_in @bind_vis H4. inversion H4; auto_inj_pair2; subst.
+      destruct (H3 _ _ Hp Hpre _ _ (step_load _ _ _ _ H5)) as (? & P' & ? & (p' & ? & ? & ?)).
+      pclearbot. split; auto. exists P'. split; eauto.
+    + pose proof @eqitree_inv_bind_vis.
+      edestruct H6 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H4; reflexivity | |];
+        apply bisimulation_is_eq in H7; subst; [| inversion H2].
+      rewritebisim_in @bind_vis H4. inversion H4; auto_inj_pair2; subst.
+      destruct (H3 _ _ Hp Hpre _ _ (step_store _ _ _ _ _ H5)) as (? & P' & ? & (p' & ? & ? & ?)).
+      pclearbot. split; auto. exists P'. split; eauto.
+    + pose proof @eqitree_inv_bind_vis.
+      edestruct H6 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H4; reflexivity | |];
+        apply bisimulation_is_eq in H7; subst; [| inversion H2].
+      destruct (H3 _ _ Hp Hpre _ _ (step_load_fail _ _ _ H5)) as (? & P' & ? & (p' & ? & ? & ?)).
+      pclearbot. split; auto. exists P'. split; eauto.
+      erewrite <- throw_bind; eauto.
+    + pose proof @eqitree_inv_bind_vis.
+      edestruct H6 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H4; reflexivity | |];
+        apply bisimulation_is_eq in H7; subst; [| inversion H2].
+      destruct (H3 _ _ Hp Hpre _ _ (step_store_fail _ _ _ _ H5)) as (? & P' & ? & (p' & ? & ? & ?)).
+      pclearbot. split; auto. exists P'. split; eauto.
+      erewrite <- throw_bind; eauto.
+    + pose proof @eqitree_inv_bind_vis.
+      edestruct H4 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H5; reflexivity | |];
+        apply bisimulation_is_eq in H6; subst; [| inversion H2].
+      (* rewritebisim_in @bind_vis H5. inversion H5; auto_inj_pair2; subst. *)
+      destruct (H3 _ _ Hp Hpre _ _ (step_load_invalid _ _ _)) as (? & P' & ? & (p' & ? & ? & ?)).
+      pclearbot. split; auto. exists P'. split; eauto.
+      erewrite <- throw_bind; eauto.
+    + pose proof @eqitree_inv_bind_vis.
+      edestruct H4 as [(? & ? & ?) | (? & ? & ?)]; [rewrite H5; reflexivity | |];
+        apply bisimulation_is_eq in H6; subst; [| inversion H2].
+      destruct (H3 _ _ Hp Hpre _ _ (step_store_invalid _ _ _ _)) as (? & P' & ? & (p' & ? & ? & ?)).
+      pclearbot. split; auto. exists P'. split; eauto.
+      erewrite <- throw_bind; eauto.
+  - pstep. do 2 rewritebisim @bind_tau. constructor 2; eauto.
+  - pstep. rewrite throw_bind. constructor 3.
+  - assert (
+    rewrite <- H. rewritebisim @bind_ret_l. eapply paco3_mon_bot; eauto. eapply typing_lte; eauto.
     reflexivity.
 Qed.
 
