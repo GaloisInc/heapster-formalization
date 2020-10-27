@@ -32,8 +32,7 @@ From Paco Require Import
 
 Import ITreeNotations.
 (* Import CatNotations. *)
-(* Import MonadNotation. *)
-Open Scope monad_scope.
+(* Import MonadNotation. *)Open Scope monad_scope.
 
 Definition sep_step p q : Prop :=
   forall r, p ⊥ r -> q ⊥ r.
