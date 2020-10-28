@@ -48,6 +48,25 @@ Section bisim.
 
   Context {config specConfig : Type}.
 
+  Variant no_error_gen {R C : Type} no_error (c : C) : itree (E C) R -> Prop :=
+  | no_error_ret : forall r, no_error_gen no_error c (Ret r)
+  | no_error_tau : forall t, no_error c t -> no_error_gen no_error c (Tau t)
+  | no_error_modify : forall f k,
+      no_error (f c) (k c) ->
+      no_error_gen no_error c (vis (Modify f) k)
+  | no_error_choice : forall k,
+      (forall b, no_error c (k b)) ->
+      no_error_gen no_error c (vis Or k)
+  .
+  Definition no_error {R C : Type} :=
+    paco2 (@no_error_gen R C) bot2.
+
+  Lemma no_error_gen_mon {R C} : monotone2 (@no_error_gen R C).
+  Proof.
+    repeat intro. inversion IN; subst; try solve [constructor; auto].
+  Qed.
+  Hint Resolve no_error_gen_mon : paco.
+
   (* TODO: move somewhere else *)
   Definition sep_step (p q : @perm config specConfig) : Prop :=
     forall r, p ⊥ r -> q ⊥ r.
@@ -113,14 +132,6 @@ Section bisim.
   Hint Resolve typing_gen_mon : paco.
 
   Definition typing_ {R1 R2} := paco6 (@typing_gen R1 R2) bot6.
-
-  Lemma test {R1 R2} r p Q t c1 s c2 :
-    pre p c1 c2 ->
-    paco6 (@typing_gen R1 R2) r p Q t c1 s c2 ->
-    paco6 (@typing_gen R1 R2) r p Q (Tau t) c1 s c2.
-  Proof.
-    intros. punfold H0. pstep. constructor; auto.
-  Qed.
 
   Lemma typing_gen_pre {R1 R2} r p (Q : R1 -> R2 -> Perms) t s c1 c2 :
     typing_gen r p Q t c1 s c2 ->
@@ -200,7 +211,7 @@ Section bisim.
         c1 c2 :
     pre p c1 c2 ->
     typing_ p Q t1 c1 s1 c2 ->
-    (forall r1 r2, typing (Q r1 r2) R (t2 r1) (s2 r2)) -> (* something to relate r1 and r2? *)
+    (forall r1 r2, typing (Q r1 r2) R (t2 r1) (s2 r2)) ->
     typing_ p R (x <- t1 ;; t2 x) c1 (x <- s1 ;; s2 x) c2.
   Proof.
     revert p Q R t1 t2 s1 s2 c1 c2. pcofix CIH.
@@ -246,29 +257,27 @@ Section bisim.
         (t1 : itree (E config) R1) (t2 : R1 -> itree (E config) R2)
         (s1 : itree (E specConfig) S1) (s2 : S1 -> itree (E specConfig) S2) :
     typing P Q t1 s1 ->
-    (forall r1 r2, typing (Q r1 r2) R (t2 r1) (s2 r2)) -> (* something to relate r1 and r2? *)
+    (forall r1 r2, typing (Q r1 r2) R (t2 r1) (s2 r2)) ->
     typing P R (x <- t1 ;; t2 x) (x <- s1 ;; s2 x).
   Proof.
     repeat intro.
     eapply typing_bind'; eauto.
   Qed.
 
-  (* TODO with a custom definition of no error *)
-  (* Lemma typing_soundness {R1 R2} Q (t : itree (E config) R1) (s : itree (E specConfig) R2) : *)
-  (*       forall p c1 c2, typing_ p Q t c1 s c2 -> *)
-  (*                  no_event_l s -> *)
-  (*                  no_event_l t. *)
-  (* Proof. *)
-  (*   revert Q t s. pcofix CIH. intros Q t s p c1 c2 Htyping Hs. pstep. *)
-  (*   punfold Htyping. pinversion Hs. *)
-  (*   - (* rewrite (itree_eta_ s) in Htyping. unfold E in Htyping. rewrite <- H0 in Htyping.  *) *)
-  (*     clear H0. *)
-  (*     induction Htyping; intros; try solve [constructor; auto]. *)
-  (*     + (* throw *) inversion Hs. *)
-  (*     + (* TauR *) inversion Hs. pclearbot. pinversion H1; eauto. *)
-  (*     + (* Tau *) inversion Hs. pclearbot. constructor. right. eapply CIH; eauto. *)
-  (*     + (* ModifyL *) constructor; intros. left. pstep. apply IHHtyping. *)
-  (* Qed. *)
+  Lemma typing_soundness {R1 R2} Q (t : itree (E config) R1) (s : itree (E specConfig) R2) p c1 c2 :
+    typing_ p Q t c1 s c2 ->
+    no_error c2 s ->
+    no_error c1 t.
+  Proof.
+    revert Q t s p c1 c2. pcofix CIH. intros Q t s p c1 c2 Htyping Hs. pstep.
+    punfold Htyping.
+    induction Htyping;
+      try solve [constructor; eauto];
+      pinversion Hs; auto_inj_pair2; subst; eauto;
+        try solve [constructor; eauto].
+    - apply (H2 true). apply H4.
+    - constructor. intros. right. eapply CIH; [apply (H1 b b) | apply H3].
+  Qed.
 
 End bisim.
 
