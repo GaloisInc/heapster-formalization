@@ -58,6 +58,7 @@ Section bisim.
       (forall b, no_error c (k b)) ->
       no_error_gen no_error c (vis Or k)
   .
+
   Definition no_error {R C : Type} :=
     paco2 (@no_error_gen R C) bot2.
 
@@ -67,6 +68,11 @@ Section bisim.
   Qed.
   Hint Resolve no_error_gen_mon : paco.
 
+  Program Definition eq_p {T : Type} (y x : T) : (@Perms config specConfig) :=
+  {|
+  in_Perms := fun _ => x = y;
+  |}.
+
   (* TODO: move somewhere else *)
   Definition sep_step (p q : @perm config specConfig) : Prop :=
     forall r, p ⊥ r -> q ⊥ r.
@@ -74,52 +80,53 @@ Section bisim.
   Inductive typing_gen {R1 R2 : Type} typing (p : perm) (Q : R1 -> R2 -> Perms) :
     itree (E config) R1 -> config -> itree (E specConfig) R2 -> specConfig -> Prop :=
   | typing_gen_ret r1 c1 r2 c2 :
-      pre p c1 c2 ->
+      pre p (c1, c2) ->
       p ∈ Q r1 r2 ->
       typing_gen typing p Q (Ret r1) c1 (Ret r2) c2
   | typing_gen_err t1 c1 c2 :
       typing_gen typing p Q t1 c1 (throw tt) c2
   | typing_gen_tau_L t1 c1 t2 c2 :
-      pre p c1 c2 ->
+      pre p (c1, c2) ->
       typing_gen typing p Q t1 c1 t2 c2 ->
       typing_gen typing p Q (Tau t1) c1 t2 c2
   | typing_gen_tau_R t1 c1 t2 c2 :
-      pre p c1 c2 ->
+      pre p (c1, c2) ->
       typing_gen typing p Q t1 c1 t2 c2 ->
       typing_gen typing p Q t1 c1 (Tau t2) c2
   | typing_gen_tau t1 c1 t2 c2 :
-      pre p c1 c2 ->
+      pre p (c1, c2) ->
       typing p Q t1 c1 t2 c2 ->
       typing_gen typing p Q (Tau t1) c1 (Tau t2) c2
   | typing_gen_modify_L f k c1 t2 c2 p' :
-      pre p c1 c2 ->
-      guar p c1 (f c1) ->
+      pre p (c1, c2) ->
+      guar p (c1, c2) (f c1, c2) ->
       sep_step p p' ->
       typing_gen typing p' Q (k c1) (f c1) t2 c2 ->
       typing_gen typing p Q (vis (Modify f) k) c1 t2 c2
   | typing_gen_modify_R t1 c1 f k c2 p' :
-      pre p c1 c2 ->
+      pre p (c1, c2) ->
+      guar p (c1, c2) (c1, f c2) ->
       sep_step p p' ->
       typing_gen typing p' Q t1 c1 (k c2) (f c2) ->
       typing_gen typing p Q t1 c1 (vis (Modify f) k) c2
   | typing_gen_modify f1 k1 c1 f2 k2 c2 p' :
-      pre p c1 c2 ->
-      guar p c1 (f1 c1) ->
+      pre p (c1, c2) ->
+      guar p (c1, c2) (f1 c1, f2 c2) ->
       sep_step p p' ->
       typing p' Q (k1 c1) (f1 c1) (k2 c2) (f2 c2) ->
       typing_gen typing p Q (vis (Modify f1) k1) c1 (vis (Modify f2) k2) c2
   | typing_gen_choice_L k c1 t2 c2 p' :
-      pre p c1 c2 ->
+      pre p (c1, c2) ->
       sep_step p p' ->
       (forall b, typing_gen typing p' Q (k b) c1 t2 c2) ->
       typing_gen typing p Q (vis Or k) c1 t2 c2
   | typing_gen_choice_R t1 c1 k c2 p' :
-      pre p c1 c2 ->
+      pre p (c1, c2) ->
       sep_step p p' ->
       (forall b, typing_gen typing p' Q t1 c1 (k b) c2) ->
       typing_gen typing p Q t1 c1 (vis Or k) c2
   | typing_gen_choice k1 c1 k2 c2 p' :
-      pre p c1 c2 ->
+      pre p (c1, c2) ->
       sep_step p p' ->
       (forall b1 b2, typing p' Q (k1 b1) c1 (k2 b2) c2) ->
       typing_gen typing p Q (vis Or k1) c1 (vis Or k2) c2
@@ -135,13 +142,13 @@ Section bisim.
 
   Lemma typing_gen_pre {R1 R2} r p (Q : R1 -> R2 -> Perms) t s c1 c2 :
     typing_gen r p Q t c1 s c2 ->
-    s = throw tt \/ pre p c1 c2.
+    s = throw tt \/ pre p (c1, c2).
   Proof.
     inversion 1; auto.
   Qed.
 
   Definition typing {R1 R2} P Q (t : itree (E config) R1) (s : itree (E specConfig) R2) :=
-    forall p c1 c2, p ∈ P -> pre p c1 c2 -> typing_ p Q t c1 s c2.
+    forall p c1 c2, p ∈ P -> pre p (c1, c2) -> typing_ p Q t c1 s c2.
 
   Lemma typing_lte' {R1 R2} p Q Q' (t : itree (E config) R1) (s : itree (E specConfig) R2) c1 c2 :
     typing_ p Q t c1 s c2 -> (forall r1 r2, Q r1 r2 ⊦ Q' r1 r2) -> typing_ p Q' t c1 s c2.
@@ -209,7 +216,7 @@ Section bisim.
         (t1 : itree (E config) R1) (t2 : R1 -> itree (E config) R2)
         (s1 : itree (E specConfig) S1) (s2 : S1 -> itree (E specConfig) S2)
         c1 c2 :
-    pre p c1 c2 ->
+    pre p (c1, c2) ->
     typing_ p Q t1 c1 s1 c2 ->
     (forall r1 r2, typing (Q r1 r2) R (t2 r1) (s2 r2)) ->
     typing_ p R (x <- t1 ;; t2 x) c1 (x <- s1 ;; s2 x) c2.
@@ -232,13 +239,13 @@ Section bisim.
       + rewrite throw_bind. pstep. constructor.
       + specialize (IHHtyping1 H2 Htyping2). punfold IHHtyping1. pstep. econstructor; eauto.
     - rewritebisim @bind_vis. apply typing_gen_pre in Htyping1. destruct Htyping1; subst.
-      + pstep. econstructor; eauto. rewrite H1. rewrite throw_bind. constructor.
-      + specialize (IHHtyping1 H1 Htyping2). punfold IHHtyping1. pstep. econstructor; eauto.
+      + pstep. econstructor; eauto. rewrite H2. rewrite throw_bind. constructor.
+      + specialize (IHHtyping1 H2 Htyping2). punfold IHHtyping1. pstep. econstructor; eauto.
     - do 2 rewritebisim @bind_vis. pclearbot.
-      pose proof H2.
-      punfold H2. destruct (typing_gen_pre _ _ _ _ _ _ _ H2).
-      + pstep. econstructor 7; eauto. rewrite H4. rewrite throw_bind. constructor.
-      + pstep. econstructor 8; eauto.
+      pose proof H2. punfold H2.
+      pstep. econstructor 8; eauto.
+      destruct (typing_gen_pre _ _ _ _ _ _ _ H2); eauto.
+      rewrite H4. rewrite throw_bind. left. pstep. constructor.
     - rewritebisim @bind_vis. pstep. econstructor; eauto. intros.
       destruct (typing_gen_pre _ _ _ _ _ _ _ (H1 b)).
       + rewrite H3. rewrite throw_bind. constructor.
@@ -281,25 +288,79 @@ Section bisim.
 
 End bisim.
 
+Definition load (v : SByte) : itree (E config) SByte :=
+  c <- trigger (Modify id);;
+  match v with
+  | Byte _ => throw tt
+  | Ptr p => match read c p with
+            | None => throw tt
+            | Some b => Ret b
+            end
+  end.
+
+Definition store (l : SByte) (v : SByte) : itree (E config) config :=
+  match l with
+  | Byte _ => throw tt
+  | Ptr l => c <- trigger (Modify (fun c => match write c l v with
+                                       | None => c
+                                       | Some c' => c'
+                                       end)) ;;
+            match write c l v with
+            | None => throw tt
+            | Some c' => Ret c'
+            end
+  end.
+
+Example no_error_load : no_error (config_mem (0, 0) (Byte 1))
+                                 (load (Ptr (0, 0))).
+Proof.
+  pstep. unfold load. rewritebisim @bind_trigger. constructor.
+  left. pstep. constructor.
+Qed.
+Example no_error_store : no_error (config_mem (0, 0) (Byte 1))
+                                  (store (Ptr (0, 0)) (Byte 2)).
+Proof.
+  pstep. unfold store. rewritebisim @bind_trigger. constructor.
+  left. pstep. constructor.
+Qed.
 
 
-Variant typing_gen {R1 R2 : Type} typing (P : Perms) (Q : R1 -> R2 -> Perms) :
-  itree E R1 -> itree specE R2 -> Prop :=
-| cond : forall t spec, (exists c t' c', step t c t' c') /\ (* we can step *)
-                   (forall p c, p ∈ P ->
-                           pre p c ->
-                           forall t' c',
-                             step t c t' c' -> (* and everything we can step to... *)
-                             (
-                               (* we step to configs that satisfy the perm *)
-                               guar p c c' /\
-                               (* we step to machines that are well-typed by some
-                                  other perm that maintains separation *)
-                               exists spec', spec ≈ spec' /\
-                               exists P', typing P' Q t' spec' /\ exists p', p' ∈ P' /\ p = p' /\ pre p' c')) ->
-                   typing_gen typing P Q t spec
-| err : forall t, typing_gen typing P Q t (throw tt)
-| ret : forall r1 r2, Q r1 r2 ⊑ P -> typing_gen typing P Q (Ret r1) (Ret r2).
+Lemma typing_load {R} ptr (Q : SByte -> (@Perms config R)) (r : R) :
+  typing
+    (read_Perms ptr Q)
+    (fun x _ => (read_Perms ptr (eq_p x)) ** Q x)
+    (load (Ptr ptr))
+    (Ret r).
+Proof.
+  repeat intro. pstep. unfold load. rewritebisim @bind_trigger.
+  econstructor; eauto; try reflexivity.
+  2: { destruct H as (? & (? & ?) & ?); subst.
+       destruct i as (? & ? & ? & ? & ?). simpl in *.
+       assert (read c1 ptr = Some x0).
+       { apply H2 in H0. destruct H0 as (? & _). apply H in H0. auto. }
+       rewrite H3. constructor; eauto.
+       simpl. exists x, x1. split; [| split]; eauto. eexists. split; eauto.
+       simpl. exists x, bottom_perm. split; [| split]; eauto.
+       rewrite sep_conj_perm_bottom. reflexivity.
+  }
+  repeat intro; auto. (* TODO add sep_step properties *)
+Qed.
 
-(* Definition typing_perm := paco3 typing_perm_gen bot3. *)
-Definition typing {R1 R2} := paco4 (@typing_gen R1 R2) bot4.
+Lemma typing_store {R} ptr val' P (Q : SByte -> (@Perms config R)) (r : R) :
+  typing
+    (write_Perms ptr P ** Q val')
+    (fun _ _ => write_Perms ptr Q)
+    (store (Ptr ptr) val')
+    (Ret r).
+Proof.
+  repeat intro. pstep. unfold store. rewritebisim @bind_trigger.
+  destruct H as (? & ? & ? & ? & ?). destruct H as (? & (? & ?) & ?); subst.
+  destruct H3 as (? & ? & ? & ? & ?). simpl in *.
+  assert (exists val, read c1 ptr = Some val).
+  {
+    apply H2 in H0. destruct H0 as (? & _). apply H4 in H0. destruct H0 as (? & _).
+    apply H in H0. simpl in H0. eexists. apply H0.
+  }
+  destruct H5 as (val & ?). unfold write.
+  econstructor; eauto; try reflexivity.
+Qed.

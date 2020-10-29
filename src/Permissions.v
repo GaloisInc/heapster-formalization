@@ -18,12 +18,12 @@ Section Permissions.
   (* A single permission *)
   Record perm : Type :=
     {
-    rely : config -> config -> Prop; (* rely, the updates this permission allows of others *)
+    rely : config * specConfig -> config * specConfig -> Prop; (* rely, the updates this permission allows of others *)
     rely_PO : PreOrder rely;
-    guar : config -> config -> Prop; (* guarantee, the updates that this permission allows *)
+    guar : config * specConfig -> config * specConfig -> Prop; (* guarantee, the updates that this permission allows *)
     guar_PO : PreOrder guar;
-    pre : config -> specConfig -> Prop; (* precondition on configs *)
-    pre_respects : forall x y, rely x y -> (forall s, pre x s -> pre y s);
+    pre : config * specConfig -> Prop; (* precondition on configs *)
+    pre_respects : forall x y, rely x y -> pre x -> pre y;
     }.
 
   Hint Unfold rely.
@@ -36,7 +36,7 @@ Section Permissions.
 
   Record lte_perm (p q: perm) : Prop :=
     {
-    pre_inc : forall x s, pre q x s -> pre p x s;
+    pre_inc : forall x, pre q x -> pre p x;
     rely_inc : forall x y, rely q x y -> rely p x y;
     guar_inc : forall x y, guar p x y -> guar q x y;
     }.
@@ -81,7 +81,7 @@ Section Permissions.
 
   Program Definition bottom_perm : perm :=
     {|
-    pre := fun x s => True;
+    pre := fun x => True;
     rely := fun x y => True;
     guar  := fun x y => x = y;
     |}.
@@ -99,7 +99,7 @@ Section Permissions.
 
   Program Definition top_perm : perm :=
     {|
-    pre := fun x s => False;
+    pre := fun x => False;
     rely := fun x y => x = y;
     guar  := fun x y => True;
     |}.
@@ -119,7 +119,7 @@ Section Permissions.
 
   Program Definition join_perm (p q: perm) : perm :=
     {|
-    pre := fun x s => pre p x s /\ pre q x s;
+    pre := fun x => pre p x /\ pre q x;
     rely := fun x y => rely p x y /\ rely q x y;
     guar  := clos_trans _ (fun x y => (guar p x y) \/ (guar q x y))
     |}.
@@ -145,7 +145,7 @@ Section Permissions.
       p <= join_perm p q.
   Proof.
     intros. constructor; simpl; auto.
-    - intros ? ? [? _]. auto.
+    - intros ? [? _]. auto.
     - intros x y []; auto.
     - constructor; auto.
   Qed.
@@ -154,7 +154,7 @@ Section Permissions.
       q <= join_perm p q.
   Proof.
     intros. constructor; simpl; auto.
-    - intros ? ? [_ ?]. auto.
+    - intros ? [_ ?]. auto.
     - intros x y []; auto.
     - constructor; auto.
   Qed.
@@ -174,7 +174,7 @@ Section Permissions.
       join_perm p q <= join_perm q p.
   Proof.
     constructor.
-    - intros ? ? []. split; auto.
+    - intros ? []. split; auto.
     - intros x y []. repeat split; auto.
     - intros. induction H.
       + destruct H; constructor; auto.
@@ -193,7 +193,7 @@ Section Permissions.
     split; intros.
     {
       constructor.
-      - intros x ? [[? ?] ?]. split; [| split]; auto.
+      - intros x [[? ?] ?]. split; [| split]; auto.
       - intros x y [[] ?].
         repeat split; auto.
       - intros. induction H; try solve [etransitivity; eauto].
@@ -206,7 +206,7 @@ Section Permissions.
     }
     {
       constructor.
-      - intros x ? [? [? ?]]. split; [split |]; auto.
+      - intros x [? [? ?]]. split; [split |]; auto.
       - intros x y [? []].
         repeat split; auto.
       - intros. induction H; try solve [etransitivity; eauto].
@@ -228,7 +228,7 @@ Section Permissions.
       + induction H; try solve [etransitivity; eauto].
         destruct H; auto.
     - constructor.
-      + intros ? ? [? _]; auto.
+      + intros ? [? _]; auto.
       + intros x y []. auto.
       + constructor. auto.
   Qed.
@@ -237,7 +237,7 @@ Section Permissions.
 
   Program Definition meet_perm (p q:perm) : perm :=
     {|
-    pre := fun x s => pre p x s \/ pre q x s \/ exists y, (pre p y s \/ pre q y s) /\ meet_rely p q y x;
+    pre := fun x => pre p x \/ pre q x \/ exists y, (pre p y \/ pre q y) /\ meet_rely p q y x;
     rely := meet_rely p q;
     guar  := fun x y => guar p x y /\ guar q x y;
     |}.
@@ -394,7 +394,7 @@ Qed. *)
 
   Program Definition sym_guar_perm (p : perm) : perm :=
     {|
-    pre x s := False;
+    pre x := False;
     rely := guar p;
     guar := rely p;
     |}.
@@ -419,7 +419,7 @@ Qed. *)
 
   Program Definition sep_conj_perm (p q: perm) : perm :=
     {|
-    pre := fun x s => pre p x s /\ pre q x s /\ separate p q;
+    pre := fun x => pre p x /\ pre q x /\ separate p q;
     rely := fun x y => rely p x y /\ rely q x y;
     guar  := clos_trans _ (fun x y => (guar p x y) \/ (guar q x y))
     |}.
@@ -447,14 +447,14 @@ Qed. *)
   Lemma sep_conj_join : forall p q, p ⊥ q -> p * q ≡ join_perm p q.
   Proof.
     split; intros.
-    - constructor; auto; intros x ? []; split; auto.
-    - constructor; auto; intros x ? [? [? ?]]; split; auto.
+    - constructor; auto; intros x []; split; auto.
+    - constructor; auto; intros x [? [? ?]]; split; auto.
   Qed.
 
   Lemma lte_l_sep_conj_perm : forall p q, p <= p * q.
   Proof.
     intros. constructor; simpl; auto.
-    - intros x ? []; auto.
+    - intros x []; auto.
     - intros x y []; auto.
     - constructor; auto.
   Qed.
@@ -462,7 +462,7 @@ Qed. *)
   Lemma lte_r_sep_conj_perm : forall p q, q <= p * q.
   Proof.
     intros. constructor; simpl; auto.
-    - intros x ? [? [? ?]]; auto.
+    - intros x [? [? ?]]; auto.
     - intros x y []; auto.
     - constructor; auto.
   Qed.
@@ -517,7 +517,7 @@ Qed. *)
   Lemma sep_conj_perm_commut' : forall p q, p * q <= q * p.
   Proof.
     constructor.
-    - intros x ? [? [? ?]]; simpl; split; [| split]; intuition.
+    - intros x [? [? ?]]; simpl; split; [| split]; intuition.
     - intros x y []; repeat split; auto.
     - intros. induction H.
       + destruct H; constructor; auto.
@@ -559,7 +559,7 @@ Qed. *)
     split; intros.
     {
       constructor.
-      - intros x ? [? [[? [? ?]] ?]].
+      - intros x [? [[? [? ?]] ?]].
         pose proof (separate_sep_conj_perm_l _ _ _ H3).
         pose proof (separate_sep_conj_perm_r _ _ _ H3).
         split; [split; [| split] | split]; auto.
@@ -575,7 +575,7 @@ Qed. *)
     }
     {
       constructor.
-      - intros x ? [[? [? ?]] [? ?]]. symmetry in H3.
+      - intros x [[? [? ?]] [? ?]]. symmetry in H3.
         pose proof (separate_sep_conj_perm_l _ _ _ H3). symmetry in H4.
         pose proof (separate_sep_conj_perm_r _ _ _ H3). symmetry in H5.
         split; [| split; [split; [| split] |]]; auto.
