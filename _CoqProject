@@ -3,6 +3,8 @@
 
 src/Permissions.v
 src/Memory.v
-src/Config.v
 src/NoEvent.v
+src/SepStep.v
 src/Functional.v
+
+src/Config.v

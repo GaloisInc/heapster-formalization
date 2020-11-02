@@ -11,10 +11,28 @@ Require Import ExtLib.Data.Monads.OptionMonad.
 
 From Heapster Require Export
      Permissions
-     Memory.
+     Memory
+     SepStep
+     Functional.
+
+From ITree Require Import
+     ITree
+     ITreeFacts
+     Basics.MonadState
+     Basics.MonadProp
+     Events.State
+     Events.Exception
+     Events.Nondeterminism
+     Eq.Eq
+     Eq.UpToTaus
+     Eq.EqAxiom.
+
+From Paco Require Import
+     paco.
 
 Import MonadNotation.
 Import ListNotations.
+Import ITreeNotations.
 
 Section Config.
   Context {specConfig : Type}.
@@ -635,4 +653,122 @@ Section Config.
   (* Proof. *)
   (*   constructor; intros; simpl in *; subst; reflexivity. *)
   (* Qed. *)
+
+
+  Definition load (v : Value) : itree (E config) Value :=
+    c <- trigger (Modify id);;
+    match v with
+    | VNum _ => throw tt
+    | VPtr p => match read c p with
+               | None => throw tt
+               | Some b => Ret b
+               end
+    end.
+
+  Definition store (l : Value) (v : Value) : itree (E config) config :=
+    match l with
+    | VNum _ => throw tt
+    | VPtr l => c <- trigger (Modify (fun c => match write c l v with
+                                          | None => c
+                                          | Some c' => c'
+                                          end)) ;;
+               match write c l v with
+               | None => throw tt
+               | Some c' => Ret c'
+               end
+    end.
+
+  Example no_error_load : no_error (config_mem (0, 0) (VNum 1))
+                                   (load (VPtr (0, 0))).
+  Proof.
+    pstep. unfold load. rewritebisim @bind_trigger. constructor.
+    left. pstep. constructor.
+  Qed.
+  Example no_error_store : no_error (config_mem (0, 0) (VNum 1))
+                                    (store (VPtr (0, 0)) (VNum 2)).
+  Proof.
+    pstep. unfold store. rewritebisim @bind_trigger. constructor.
+    left. pstep. constructor.
+  Qed.
+
+  Lemma typing_load {R} ptr (Q : Value -> (@Perms (config * specConfig))) (r : R) :
+    typing
+      (read_Perms ptr Q)
+      (fun x _ => (read_Perms ptr (eq_p x)) * Q x)
+      (load (VPtr ptr))
+      (Ret r).
+  Proof.
+    repeat intro. pstep. unfold load. rewritebisim @bind_trigger.
+    econstructor; eauto; try reflexivity.
+    destruct H as (? & (? & ?) & ?); subst.
+    destruct H1 as (? & ? & ? & ? & ?). simpl in *.
+    assert (read c1 ptr = Some x0).
+    { apply H2 in H0. destruct H0 as (? & _). apply H in H0. auto. }
+    rewrite H3. constructor; eauto.
+    simpl. exists x, x1. split; [| split]; eauto. eexists. split; eauto.
+    simpl. exists x, bottom_perm. split; [| split]; eauto.
+    rewrite sep_conj_perm_bottom. reflexivity.
+  Qed.
+
+  Lemma typing_store {R} ptr val' (P Q : Value -> (@Perms (config * specConfig))) (r : R) :
+    typing
+      (write_Perms ptr P * Q val')
+      (fun _ _ => write_Perms ptr Q)
+      (store (VPtr ptr) val')
+      (Ret r).
+  Proof.
+    repeat intro. pstep. unfold store. rewritebisim @bind_trigger.
+    rename p into p''. rename H0 into Hpre.
+    destruct H as (p' & q & Hwrite & Hq & Hlte). destruct Hwrite as (? & (v & ?) & Hwrite); subst.
+    destruct Hwrite as (pw & p & Hwritelte & Hp & Hlte'). simpl in *.
+    assert (exists val, read c1 ptr = Some val).
+    {
+      apply Hlte in Hpre. destruct Hpre as (Hpre & _).
+      apply Hlte' in Hpre. destruct Hpre as (Hpre & _).
+      apply Hwritelte in Hpre. eexists. apply Hpre.
+    }
+    destruct H as (val & Hread). eapply (read_success_write _ _ _ val') in Hread.
+    destruct Hread as (c' & Hwrite).
+    assert (Hguar : guar p' (c1, c2) (c', c2)).
+    {
+      apply Hlte'. constructor 1. left. apply Hwritelte. simpl.
+      split; [| split].
+      + eapply write_success_other_ptr; eauto.
+      + eapply write_success_allocation; eauto.
+      + eapply write_success_others; eauto.
+    }
+    econstructor; eauto.
+    3: {
+      rewrite Hwrite. constructor; eauto.
+      2: { simpl. eexists. split. exists val'. reflexivity.
+           simpl. eexists. exists q. split; [reflexivity | split]; eauto. reflexivity. }
+      split; [| split].
+      - eapply write_read; eauto.
+      - apply Hlte in Hpre. respects. 2: apply Hpre; eauto.
+        apply Hpre. auto.
+      - apply Hlte in Hpre. destruct Hpre as (_ & _ & Hsep). symmetry in Hsep.
+        eapply separate_antimonotone in Hsep; eauto. apply separate_sep_conj_perm_l in Hsep.
+        eapply separate_antimonotone in Hsep; eauto. symmetry. constructor; apply Hsep.
+    }
+    - rewrite Hwrite. apply Hlte. constructor 1. left. auto.
+    - eapply sep_step_lte; eauto. apply sep_step_sep_conj_l.
+      { apply Hlte in Hpre. apply Hpre. }
+      eapply sep_step_lte; eauto. eapply sep_step_lte. apply lte_l_sep_conj_perm.
+      eapply sep_step_lte; eauto.
+      intros ? []. constructor; auto.
+  Qed.
+
+  Lemma typing_store' {R} ptr val' (P : Value -> (@Perms (config * specConfig))) (r : R):
+    typing
+      (write_Perms ptr P)
+      (fun _ _ => write_Perms ptr (eq_p val'))
+      (store (VPtr ptr) val')
+      (Ret r).
+  Proof.
+    assert (bottom_Perms ≡ @eq_p config specConfig _ val' val').
+    { split; repeat intro; simpl; auto. }
+    rewrite <- sep_conj_Perms_bottom_identity. rewrite sep_conj_Perms_commut.
+    rewrite H. apply typing_store.
+  Qed.
+
 End Config.

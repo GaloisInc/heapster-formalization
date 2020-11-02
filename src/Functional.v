@@ -1,9 +1,14 @@
+From Coq Require Import
+     Structures.Equalities
+     Classes.Morphisms
+     Classes.RelationClasses
+     Relations.Relation_Operators
+     Relations.Operators_Properties.
+
 From Heapster Require Import
      Permissions
-     Config
-     NoEvent.
-     (* StepError. *)
-     (* Typing. *)
+     NoEvent
+     SepStep.
 
 From ITree Require Import
      ITree
@@ -72,10 +77,6 @@ Section bisim.
   {|
   in_Perms := fun _ => x = y;
   |}.
-
-  (* TODO: move somewhere else *)
-  Definition sep_step (p q : @perm (config * specConfig)) : Prop :=
-    forall r, p ⊥ r -> q ⊥ r.
 
   Inductive typing_gen {R1 R2 : Type} (typing : perm -> (R1 -> R2 -> Perms) -> itree (E config) R1 -> config -> itree (E specConfig) R2 -> specConfig -> Prop)
             (p : perm) (Q : R1 -> R2 -> Perms) :
@@ -303,96 +304,12 @@ Section bisim.
         specialize (H6 x). pclearbot. eauto.
   Qed.
 
+  Global Instance Proper_eq_Perms_typing {R1 R2} :
+    Proper (eq_Perms ==>
+           (pointwise_relation _ (pointwise_relation _ eq_Perms)) ==> eq ==> eq ==> flip impl) (@typing R1 R2).
+  Proof.
+    repeat intro. subst.
+    eapply typing_lte'; eauto. apply H3; auto. rewrite <- H; auto.
+    intros. rewrite H0. reflexivity.
+  Qed.
 End bisim.
-
-Definition load (v : Value) : itree (E config) Value :=
-  c <- trigger (Modify id);;
-  match v with
-  | VNum _ => throw tt
-  | VPtr p => match read c p with
-            | None => throw tt
-            | Some b => Ret b
-            end
-  end.
-
-Definition store (l : Value) (v : Value) : itree (E config) config :=
-  match l with
-  | VNum _ => throw tt
-  | VPtr l => c <- trigger (Modify (fun c => match write c l v with
-                                       | None => c
-                                       | Some c' => c'
-                                       end)) ;;
-            match write c l v with
-            | None => throw tt
-            | Some c' => Ret c'
-            end
-  end.
-
-Example no_error_load : no_error (config_mem (0, 0) (VNum 1))
-                                 (load (VPtr (0, 0))).
-Proof.
-  pstep. unfold load. rewritebisim @bind_trigger. constructor.
-  left. pstep. constructor.
-Qed.
-Example no_error_store : no_error (config_mem (0, 0) (VNum 1))
-                                  (store (VPtr (0, 0)) (VNum 2)).
-Proof.
-  pstep. unfold store. rewritebisim @bind_trigger. constructor.
-  left. pstep. constructor.
-Qed.
-
-Lemma typing_load {R} ptr (Q : Value -> (@Perms (config * unit))) (r : R) :
-  typing
-    (read_Perms ptr Q)
-    (fun x _ => (read_Perms ptr (eq_p x)) * Q x)
-    (load (VPtr ptr))
-    (Ret r).
-Proof.
-  repeat intro. pstep. unfold load. rewritebisim @bind_trigger.
-  econstructor; eauto; try reflexivity.
-  2: { destruct H as (? & (? & ?) & ?); subst.
-       destruct i as (? & ? & ? & ? & ?). simpl in *.
-       assert (read c1 ptr = Some x0).
-       { apply H2 in H0. destruct H0 as (? & _). apply H in H0. auto. }
-       rewrite H3. constructor; eauto.
-       simpl. exists x, x1. split; [| split]; eauto. eexists. split; eauto.
-       simpl. exists x, bottom_perm. split; [| split]; eauto.
-       rewrite sep_conj_perm_bottom. reflexivity.
-  }
-  repeat intro; auto. (* TODO add sep_step properties *)
-Qed.
-
-Lemma typing_store {R} ptr val' P (Q : Value -> (@Perms (config * unit))) (r : R) :
-  typing
-    (write_Perms ptr P * Q val')
-    (fun _ _ => write_Perms ptr Q)
-    (store (VPtr ptr) val')
-    (Ret r).
-Proof.
-  repeat intro. pstep. unfold store. rewritebisim @bind_trigger.
-  destruct H as (? & ? & ? & ? & ?). destruct H as (? & (? & ?) & ?); subst.
-  destruct H3 as (? & ? & ? & ? & ?). simpl in *.
-  assert (exists val, read c1 ptr = Some val).
-  {
-    apply H2 in H0. destruct H0 as (? & _). apply H4 in H0. destruct H0 as (? & _).
-    apply H in H0. simpl in H0. eexists. apply H0.
-  }
-  destruct H5 as (val & ?). eapply (read_success_write _ _ _ val') in H5. destruct H5.
-  econstructor; eauto; try reflexivity.
-  3: {
-    rewrite H5. constructor; eauto.
-    - admit.
-    - simpl. eexists. split. exists val'. reflexivity.
-      simpl. eexists. exists x0. split; [| split]; eauto.
-      split; intros.
-      + admit.
-      + apply H; auto. apply H4. auto.
-      + apply H4. constructor 1. left. apply H. apply H6.
-  }
-  rewrite H5. apply H2. constructor 1. left. apply H4. constructor 1. left. apply H.
-  simpl. split; [| split].
-  + eapply write_success_other_ptr; eauto.
-  + eapply write_success_allocation; eauto.
-  + eapply write_success_others; eauto.
-  + repeat intro; auto. (* TODO *)
-Abort.
