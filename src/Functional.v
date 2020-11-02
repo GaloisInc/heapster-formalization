@@ -68,16 +68,17 @@ Section bisim.
   Qed.
   Hint Resolve no_error_gen_mon : paco.
 
-  Program Definition eq_p {T : Type} (y x : T) : (@Perms config specConfig) :=
+  Program Definition eq_p {T : Type} (y x : T) : (@Perms (config * specConfig)) :=
   {|
   in_Perms := fun _ => x = y;
   |}.
 
   (* TODO: move somewhere else *)
-  Definition sep_step (p q : @perm config specConfig) : Prop :=
+  Definition sep_step (p q : @perm (config * specConfig)) : Prop :=
     forall r, p ⊥ r -> q ⊥ r.
 
-  Inductive typing_gen {R1 R2 : Type} typing (p : perm) (Q : R1 -> R2 -> Perms) :
+  Inductive typing_gen {R1 R2 : Type} (typing : perm -> (R1 -> R2 -> Perms) -> itree (E config) R1 -> config -> itree (E specConfig) R2 -> specConfig -> Prop)
+            (p : perm) (Q : R1 -> R2 -> Perms) :
     itree (E config) R1 -> config -> itree (E specConfig) R2 -> specConfig -> Prop :=
   | typing_gen_ret r1 c1 r2 c2 :
       pre p (c1, c2) ->
@@ -128,13 +129,17 @@ Section bisim.
   | typing_gen_choice k1 c1 k2 c2 p' :
       pre p (c1, c2) ->
       sep_step p p' ->
-      (forall b1 b2, typing p' Q (k1 b1) c1 (k2 b2) c2) ->
+      (forall b1, exists b2, typing p' Q (k1 b1) c1 (k2 b2) c2) ->
+      (forall b2, exists b1, typing p' Q (k1 b1) c1 (k2 b2) c2) ->
       typing_gen typing p Q (vis Or k1) c1 (vis Or k2) c2
   .
 
   Lemma typing_gen_mon {R1 R2} : monotone6 (@typing_gen R1 R2).
   Proof.
     repeat intro. induction IN; subst; try solve [econstructor; eauto]; auto.
+    econstructor 11; eauto; intros.
+    - destruct (H1 b1). eexists; eauto.
+    - destruct (H2 b2). eexists; eauto.
   Qed.
   Hint Resolve typing_gen_mon : paco.
 
@@ -157,7 +162,9 @@ Section bisim.
     punfold Htyping. pstep.
     induction Htyping; pclearbot; try solve [econstructor; eauto].
     - constructor; eauto. apply Hlte. auto.
-    - econstructor 11; eauto. right. eapply CIH; eauto. apply H1.
+    - econstructor 11; eauto; intros.
+      + destruct (H1 b1). eexists. right. eapply CIH; eauto. pclearbot. apply H3.
+      + destruct (H2 b2). eexists. right. eapply CIH; eauto. pclearbot. apply H3.
   Qed.
 
   Lemma typing_lte {R1 R2} P P' Q Q' (t : itree (E config) R1) (s : itree (E specConfig) R2) :
@@ -203,7 +210,9 @@ Section bisim.
   Proof.
     revert p Q t s c1 c2. pcofix CIH. intros. pstep. punfold H0.
     induction H0; pclearbot; try solve [econstructor; simpl; eauto].
-    econstructor 11; intros; eauto. right. eapply CIH; apply H1.
+    econstructor 11; eauto; intros.
+    - destruct (H1 b1). eexists. right. eapply CIH; pclearbot; apply H3.
+    - destruct (H2 b2). eexists. right. eapply CIH; pclearbot; apply H3.
   Qed.
 
   Lemma typing_bottom {R1 R2} P Q (t : itree (E config) R1) (s : itree (E specConfig) R2) :
@@ -254,10 +263,15 @@ Section bisim.
       destruct (typing_gen_pre _ _ _ _ _ _ _ (H1 b)).
       + rewrite H3. rewrite throw_bind. constructor.
       + specialize (H2 b H3 Htyping2). punfold H2.
-    - do 2 rewritebisim @bind_vis. pclearbot. pstep. econstructor 11; eauto. intros.
-      specialize (H1 b1 b2). punfold H1. destruct (typing_gen_pre _ _ _ _ _ _ _ H1).
-      + left. pstep. rewrite H2. rewrite throw_bind. econstructor; eauto.
-      + right. eapply CIH; eauto. pstep; eauto.
+    - do 2 rewritebisim @bind_vis. pclearbot. pstep. econstructor 11; eauto; intros.
+      + specialize (H1 b1). destruct H1. pclearbot.
+        punfold H1. destruct (typing_gen_pre _ _ _ _ _ _ _ H1).
+        * exists x. left. pstep. rewrite H3. rewrite throw_bind. econstructor; eauto.
+        * eexists. right. eapply CIH; eauto. pstep; eauto.
+      + specialize (H2 b2). destruct H2. pclearbot.
+        punfold H2. destruct (typing_gen_pre _ _ _ _ _ _ _ H2).
+        * exists x. left. pstep. rewrite H3. rewrite throw_bind. econstructor; eauto.
+        * eexists. right. eapply CIH; eauto. pstep; eauto.
   Qed.
 
   Lemma typing_bind {R1 R2 S1 S2} (P : Perms) (Q : R1 -> S1 -> Perms) (R : R2 -> S2 -> Perms)
@@ -283,25 +297,28 @@ Section bisim.
       pinversion Hs; auto_inj_pair2; subst; eauto;
         try solve [constructor; eauto].
     - apply (H2 true). apply H4.
-    - constructor. intros. right. eapply CIH; [apply (H1 b b) | apply H3].
+    - constructor. intros. right. destruct (H1 b). eapply CIH.
+      + destruct H3; eauto. inversion b0.
+      + inversion Hs; auto_inj_pair2; subst.
+        specialize (H6 x). pclearbot. eauto.
   Qed.
 
 End bisim.
 
-Definition load (v : SByte) : itree (E config) SByte :=
+Definition load (v : Value) : itree (E config) Value :=
   c <- trigger (Modify id);;
   match v with
-  | Byte _ => throw tt
-  | Ptr p => match read c p with
+  | VNum _ => throw tt
+  | VPtr p => match read c p with
             | None => throw tt
             | Some b => Ret b
             end
   end.
 
-Definition store (l : SByte) (v : SByte) : itree (E config) config :=
+Definition store (l : Value) (v : Value) : itree (E config) config :=
   match l with
-  | Byte _ => throw tt
-  | Ptr l => c <- trigger (Modify (fun c => match write c l v with
+  | VNum _ => throw tt
+  | VPtr l => c <- trigger (Modify (fun c => match write c l v with
                                        | None => c
                                        | Some c' => c'
                                        end)) ;;
@@ -311,25 +328,24 @@ Definition store (l : SByte) (v : SByte) : itree (E config) config :=
             end
   end.
 
-Example no_error_load : no_error (config_mem (0, 0) (Byte 1))
-                                 (load (Ptr (0, 0))).
+Example no_error_load : no_error (config_mem (0, 0) (VNum 1))
+                                 (load (VPtr (0, 0))).
 Proof.
   pstep. unfold load. rewritebisim @bind_trigger. constructor.
   left. pstep. constructor.
 Qed.
-Example no_error_store : no_error (config_mem (0, 0) (Byte 1))
-                                  (store (Ptr (0, 0)) (Byte 2)).
+Example no_error_store : no_error (config_mem (0, 0) (VNum 1))
+                                  (store (VPtr (0, 0)) (VNum 2)).
 Proof.
   pstep. unfold store. rewritebisim @bind_trigger. constructor.
   left. pstep. constructor.
 Qed.
 
-
-Lemma typing_load {R} ptr (Q : SByte -> (@Perms config R)) (r : R) :
+Lemma typing_load {R} ptr (Q : Value -> (@Perms (config * unit))) (r : R) :
   typing
     (read_Perms ptr Q)
-    (fun x _ => (read_Perms ptr (eq_p x)) ** Q x)
-    (load (Ptr ptr))
+    (fun x _ => (read_Perms ptr (eq_p x)) * Q x)
+    (load (VPtr ptr))
     (Ret r).
 Proof.
   repeat intro. pstep. unfold load. rewritebisim @bind_trigger.
@@ -346,11 +362,11 @@ Proof.
   repeat intro; auto. (* TODO add sep_step properties *)
 Qed.
 
-Lemma typing_store {R} ptr val' P (Q : SByte -> (@Perms config R)) (r : R) :
+Lemma typing_store {R} ptr val' P (Q : Value -> (@Perms (config * unit))) (r : R) :
   typing
-    (write_Perms ptr P ** Q val')
+    (write_Perms ptr P * Q val')
     (fun _ _ => write_Perms ptr Q)
-    (store (Ptr ptr) val')
+    (store (VPtr ptr) val')
     (Ret r).
 Proof.
   repeat intro. pstep. unfold store. rewritebisim @bind_trigger.
@@ -361,6 +377,22 @@ Proof.
     apply H2 in H0. destruct H0 as (? & _). apply H4 in H0. destruct H0 as (? & _).
     apply H in H0. simpl in H0. eexists. apply H0.
   }
-  destruct H5 as (val & ?). unfold write.
+  destruct H5 as (val & ?). eapply (read_success_write _ _ _ val') in H5. destruct H5.
   econstructor; eauto; try reflexivity.
-Qed.
+  3: {
+    rewrite H5. constructor; eauto.
+    - admit.
+    - simpl. eexists. split. exists val'. reflexivity.
+      simpl. eexists. exists x0. split; [| split]; eauto.
+      split; intros.
+      + admit.
+      + apply H; auto. apply H4. auto.
+      + apply H4. constructor 1. left. apply H. apply H6.
+  }
+  rewrite H5. apply H2. constructor 1. left. apply H4. constructor 1. left. apply H.
+  simpl. split; [| split].
+  + eapply write_success_other_ptr; eauto.
+  + eapply write_success_allocation; eauto.
+  + eapply write_success_others; eauto.
+  + repeat intro; auto. (* TODO *)
+Abort.

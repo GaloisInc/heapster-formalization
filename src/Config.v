@@ -160,14 +160,14 @@ Section Config.
 
   (* read c at memory location ptr. ptr must be a valid location and allocated. *)
   Definition read (c : config) (ptr : addr)
-    : option SByte :=
+    : option Value :=
     match m c (fst ptr) with
     | Some (LBlock size bytes) => if snd ptr <? size then bytes (snd ptr) else None
     | _ => None
     end.
 
   (* TODO clean up *)
-  Definition config_mem (ptr : addr) (v : SByte) :=
+  Definition config_mem (ptr : addr) (v : Value) :=
     {|
     l := nil;
     m := fun b => if b =? (fst ptr)
@@ -231,7 +231,7 @@ Section Config.
   Qed.
 
   (* write val to c at memory location ptr. ptr must be a valid location and allocated. *)
-  Definition write (c : config) (ptr : addr) (val : SByte)
+  Definition write (c : config) (ptr : addr) (val : Value)
     : option config :=
     match m c (fst ptr) with
     | Some (LBlock size bytes) =>
@@ -270,6 +270,15 @@ Section Config.
     destruct (is_some (bytes o)) eqn:?; try solve [inversion H].
     inversion H; subst; clear H. simpl. repeat rewrite Nat.eqb_refl.
     destruct (bytes o); auto. inversion Heqb1.
+  Qed.
+
+  Lemma read_success_write c ptr val val' :
+    read c ptr = Some val ->
+    exists c', write c ptr val' = Some c'.
+  Proof.
+    unfold read, write. intros. destruct ptr as [b o]. simpl in *.
+    destruct (m c b); inversion H. destruct l0. destruct (o <? size); inversion H.
+    destruct (bytes o); inversion H; subst. simpl. eexists; reflexivity.
   Qed.
 
   Lemma write_success_ptr c c' ptr val :
@@ -540,7 +549,7 @@ Section Config.
 
   (** memory permissions **)
 
-  Program Definition read_perm (ptr : addr) (v : SByte) : (@perm _ specConfig) :=
+  Program Definition read_perm (ptr : addr) (v : Value) : (@perm (config * specConfig)) :=
     {|
     (* ptr points to valid memory *)
     pre '(x, _) := read x ptr = Some v;
@@ -556,7 +565,7 @@ Section Config.
     constructor; [intros [] | intros [] [] [] ? ?]; subst; auto.
   Qed.
 
-  Program Definition write_perm (ptr : addr) (v : SByte) : (@perm _ specConfig) :=
+  Program Definition write_perm (ptr : addr) (v : Value) : (@perm (config * specConfig)) :=
     {|
     (* ptr points to valid memory *)
     pre '(x, _) := read x ptr = Some v;
@@ -577,11 +586,11 @@ Section Config.
       etransitivity. apply H; auto. apply H2; auto.
   Qed.
 
-  Definition read_Perms (ptr : addr) (P : SByte -> Perms) : Perms :=
-    meet_Perms (fun Q => exists y : SByte, Q = singleton_Perms (read_perm ptr y) ** P y).
+  Definition read_Perms (ptr : addr) (P : Value -> Perms) : Perms :=
+    meet_Perms (fun Q => exists y : Value, Q = singleton_Perms (read_perm ptr y) * P y).
 
-  Definition write_Perms (ptr : addr) (P : SByte -> Perms) : Perms :=
-    meet_Perms (fun Q => exists y : SByte, Q = singleton_Perms (write_perm ptr y) ** P y).
+  Definition write_Perms (ptr : addr) (P : Value -> Perms) : Perms :=
+    meet_Perms (fun Q => exists y : Value, Q = singleton_Perms (write_perm ptr y) * P y).
 
   Lemma read_lte_write : forall ptr v, read_perm ptr v <= write_perm ptr v.
   Proof.

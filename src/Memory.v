@@ -39,12 +39,11 @@ Proof.
     + intro. inversion H0. subst. rewrite Nat.eqb_refl in H. inversion H.
 Qed.
 
-Inductive SByte :=
-| Byte : nat -> SByte
-| Ptr : addr -> SByte
-(* | SUndef : SByte. *)
+Inductive Value :=
+| VNum : nat -> Value
+| VPtr : addr -> Value
 .
-Definition mem_block := nat -> option SByte.
+Definition mem_block := nat -> option Value.
 
 Variant logical_block :=
 | LBlock (size : nat) (bytes : mem_block) : logical_block.
