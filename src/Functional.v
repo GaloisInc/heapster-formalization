@@ -45,11 +45,11 @@ Proof.
 Qed.
 
 Section bisim.
-  Variant ModifyE {C : Type} : Type -> Type :=
-  | Modify : forall (f : C -> C), ModifyE C
-  .
+  Variant modifyE C : Type -> Type :=
+  | Modify : forall (f : C -> C), modifyE C C.
+  Global Arguments Modify {C} f.
 
-  Definition sceE (C : Type) := (exceptE unit +' @ModifyE C +' nondetE).
+  Definition sceE (C : Type) := (exceptE unit +' modifyE C +' nondetE).
 
   Context {config specConfig : Type}.
 
