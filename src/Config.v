@@ -655,7 +655,7 @@ Section Config.
   (* Qed. *)
 
 
-  Definition load (v : Value) : itree (E config) Value :=
+  Definition load (v : Value) : itree (sceE config) Value :=
     c <- trigger (Modify id);;
     match v with
     | VNum _ => throw tt
@@ -665,7 +665,7 @@ Section Config.
                end
     end.
 
-  Definition store (l : Value) (v : Value) : itree (E config) config :=
+  Definition store (l : Value) (v : Value) : itree (sceE config) config :=
     match l with
     | VNum _ => throw tt
     | VPtr l => c <- trigger (Modify (fun c => match write c l v with
@@ -678,14 +678,14 @@ Section Config.
                end
     end.
 
-  Example no_error_load : no_error (config_mem (0, 0) (VNum 1))
-                                   (load (VPtr (0, 0))).
+  Example no_error_load : no_errors (config_mem (0, 0) (VNum 1))
+                                    (load (VPtr (0, 0))).
   Proof.
     pstep. unfold load. rewritebisim @bind_trigger. constructor.
     left. pstep. constructor.
   Qed.
-  Example no_error_store : no_error (config_mem (0, 0) (VNum 1))
-                                    (store (VPtr (0, 0)) (VNum 2)).
+  Example no_error_store : no_errors (config_mem (0, 0) (VNum 1))
+                                     (store (VPtr (0, 0)) (VNum 2)).
   Proof.
     pstep. unfold store. rewritebisim @bind_trigger. constructor.
     left. pstep. constructor.
