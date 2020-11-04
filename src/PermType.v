@@ -113,3 +113,6 @@ Class Lens (A B:Type) : Type :=
     lGetPut: forall a b, lget (lput a b) = b;
     lPutGet: forall a, lput a (lget a) = a;
     lPutPut: forall a b b', lput (lput a b) b' = lput a b' }.
+
+Definition vsingle {A} (a:A) : Vector.t A 1 :=
+  Vector.cons _ a 0 (Vector.nil _).
