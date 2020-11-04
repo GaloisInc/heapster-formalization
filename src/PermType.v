@@ -45,10 +45,10 @@ Definition starPT {Ai As Bs} (T:PermType Ai As) (U:PermType Ai Bs)
   {| ptApp := fun ai abs => ai : T @ fst abs * ai : U @ snd abs |}.
 
 
-Definition exPerms {Ai As} {Bs:As -> Type}
+Definition existsPT {Ai As} {Bs:As -> Type}
   (F : forall a, PermType Ai (Bs a)) : PermType Ai (sigT Bs) :=
   {| ptApp := fun ai abs => ai : F (projT1 abs) @ (projT2 abs) |}.
-Notation "'ex' ( x : A ) . T" := (exPerms (As:=A) (fun x => T)) (at level 70).
+Notation "'ex' ( x : A ) . T" := (existsPT (As:=A) (fun x => T)) (at level 70).
 
 Definition either {A B C} (f:A -> C) (g:B -> C) (x:A+B): C :=
   match x with inl a => f a | inr b => g b end.
