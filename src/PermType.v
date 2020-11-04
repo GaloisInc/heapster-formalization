@@ -110,6 +110,6 @@ Definition eqp {A} (a:A): PermType A unit :=
 
 Class Lens (A B:Type) : Type :=
   { lget: A -> B; lput: A -> B -> A;
-    lGetPut: forall a b, lget (lput b a) = a;
-    lPutGet: forall b, lput b (lget b) = b;
-    lPutPut: forall a a' b, lput (lput b a) a' = lput b a' }.
+    lGetPut: forall a b, lget (lput a b) = b;
+    lPutGet: forall a, lput a (lget a) = a;
+    lPutPut: forall a b b', lput (lput a b) b' = lput a b' }.
