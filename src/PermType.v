@@ -107,3 +107,9 @@ Defined.
 
 Definition eqp {A} (a:A): PermType A unit :=
   {| ptApp := fun a' _ => singleton_Perms (equals_perm a a') |}.
+
+Class Lens (A B:Type) : Type :=
+  { lget: A -> B; lput: A -> B -> A;
+    lGetPut: forall a b, lget (lput b a) = a;
+    lPutGet: forall b, lput b (lget b) = b;
+    lPutPut: forall a a' b, lput (lput b a) a' = lput b a' }.
