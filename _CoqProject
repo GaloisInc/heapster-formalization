@@ -8,3 +8,4 @@ src/SepStep.v
 src/Functional.v
 
 src/Config.v
+src/PermType.v
