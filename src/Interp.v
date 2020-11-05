@@ -105,17 +105,23 @@ Proof.
 Qed.
 
 
+Lemma interpTr_Tau {S} R t (s:S) o :
+  interpTr R (Tau t) (s,o) ≈ interpTr R t (s,o).
+Proof.
+  rewrite unfold_interpTr; cbn.
+  apply eqit_tauL.
+  reflexivity.
+Qed.
+
 Lemma interpSet_Tau {S R} t c (tr : trace S (S * R)) :
   interpSet (Tau t) c tr <-> interpSet t c tr.
 Proof.
   split; intro.
   - destruct H as [o H]; exists o.
-    rewrite unfold_interpTr, unfold_fmap_trace in H; cbn in H.
-    apply eqit_inv_tauL in H.
+    rewrite interpTr_Tau in H.
     assumption.
   - destruct H as [o H]; exists o.
-    rewrite unfold_interpTr, unfold_fmap_trace; cbn.
-    apply eqit_tauL in H.
+    rewrite <- interpTr_Tau in H.
     assumption.
 Qed.
 
@@ -162,12 +168,61 @@ Inductive ruts_gen {S1 S2 R1 R2} ruts (PS:S1 -> S2 -> Prop) (PR:R1 -> R2 -> Prop
 
 Definition ruts {S1 S2 R1 R2} := paco6 (@ruts_gen S1 S2 R1 R2) bot6.
 
-Instance Proper_ruts_gen {S1 S2 R1 R2} PS PR :
+Instance Proper_ruts {S1 S2 R1 R2} PS PR :
   Proper (eq ==> eutt eq ==> eq ==> eutt eq ==> impl) (@ruts S1 S2 R1 R2 PS PR).
 Admitted.
 
 
 Definition curry {A B C} (f:A*B->C) a b := f (a, b).
+
+Definition outRel' {S1 S2 T R1 R2} (Q:R1 -> R2 -> Perms)
+           (sr1:S1*T*R1) (sr2:S2*T*R2) : Prop :=
+  exists q, q ∈ (Q (snd sr1) (snd sr2)) /\ pre q (fst (fst sr1), fst (fst sr2)).
+
+Theorem typing_soundness_fwd_lem {S1 S2 R1 R2 : Type} (P : @Perms (S1*S2))
+        (Q: R1 -> R2 -> @Perms (S1*S2)) s1 t1 s2 t2 p q :
+  p ∈ P -> pre (p ** q) (s1,s2) ->
+  (forall tr2, interpSet t2 s2 tr2 -> no_errors_tr tr2) ->
+  sbuter p Q t1 s1 t2 s2 ->
+  forall o1, exists o2,
+      ruts (curry (pre q)) (outRel' Q) s1 (interpTr _ t1 (s1,o1))
+                                       s2 (interpTr _ t2 (s2,o2)).
+Proof.
+  intros pInP prePQ no_errors_r H_sbuter o1.
+  punfold H_sbuter; [induction H_sbuter | apply sbuter_gen_mon].
+  (* sbuter_gen_ret *)
+  - exists o1.
+    repeat rewritebisim @unfold_interpTr; cbn.
+    pstep; constructor.
+    exists p; split; assumption.
+  (* sbuter_gen_err - this case is impossible *)
+  - exists o1.
+    pose (tr2 := throw (E:=traceE S2) (X:=S2*R2) tt).
+    assert (interpSet (throw tt) c2 tr2).
+    + exists (Streams.const false).
+      rewrite unfold_interpTr, unfold_fmap_trace; cbn.
+      apply eqit_Vis.
+      inversion u.
+    + apply (fun no_errors_r => no_errors_r tr2 H) in no_errors_r.
+      punfold no_errors_r; inversion no_errors_r.
+  (* sbuter_gen_tau_L *)
+  - apply (fun H => H pInP prePQ no_errors_r) in IHH_sbuter.
+    destruct IHH_sbuter as [o IHH_sbuter]; exists o.
+    rewrite @interpTr_Tau.
+    assumption.
+  (* sbuter_gen_tau_R *)
+  - assert (no_errors_r' : forall tr2, interpSet t2 c2 tr2 -> no_errors_tr tr2).
+    + intros.
+      rewrite <- interpSet_Tau in H0.
+      apply no_errors_r; assumption.
+    + apply (fun H => H pInP prePQ no_errors_r') in IHH_sbuter.
+      destruct IHH_sbuter as [o IHH_sbuter]; exists o.
+      rewrite @interpTr_Tau.
+      assumption.
+  (* sbuter_gen_tau *)
+  - admit. (* wait... I need to induct here? *)
+Admitted.
+
 
 Definition outRel {S1 S2 R1 R2} (Q:R1 -> R2 -> Perms)
            (sr1:S1*R1) (sr2:S2*R2) : Prop :=
@@ -185,51 +240,15 @@ Theorem typing_soundness {S1 S2 R1 R2 : Type} (P: @Perms (S1*S2))
    exists tr1, interpSet t1 s1 tr1
           /\ ruts (curry (pre q)) (outRel Q) s1 tr1 s2 tr2).
 Proof.
-  intros pInP prePQ no_errors_r H_sbuter; split.
-  all: punfold H_sbuter; [induction H_sbuter | apply sbuter_gen_mon].
-  all: intros.
-  (* sbuter_gen_ret fwd *)
-  - destruct H1 as [bs H1].
-    esplit; split; [exists bs|].
-    + rewrite unfold_interpTr, unfold_fmap_trace; cbn.
+  intros pInP prePQ no_errors_r H_sbuter; split; intros.
+  all: destruct H as [o1 H].
+  - pose (H0 := typing_soundness_fwd_lem _ _ _ _ _ _ _ _ pInP prePQ no_errors_r H_sbuter o1).
+    destruct H0 as [o2 H0].
+    exists (fmap (fun '(s', _, r) => (s', r)) (interpTr R2 t2 (s2, o2))).
+    split.
+    + exists o2.
       reflexivity.
-    + rewrite unfold_interpTr, unfold_fmap_trace in H1; cbn in H1.
-      rewrite <- H1.
-      pfold; apply ruts_ret.
-      exists p; split; assumption.
-  (* sbuter_gen_err fwd - this case is impossible! *)
-  - pose (tr2 := throw (E:=traceE S2) (X:=S2*R2) tt).
-    assert (interpSet (throw tt) c2 tr2).
-    + exists (Streams.const false).
-      rewrite unfold_interpTr, unfold_fmap_trace; cbn.
-      apply eqit_Vis.
-      inversion u.
-    + apply (fun no_errors_r => no_errors_r tr2 H0) in no_errors_r.
-      punfold no_errors_r; inversion no_errors_r.
-  (* sbuter_gen_tau_L fwd *)
-  - rewrite interpSet_Tau in H0.
-    apply IHH_sbuter; assumption.
-  (* sbuter_gen_tau_R fwd - very much like the previous case, just needs more tactics *)
-  - assert (forall tr2, interpSet t2 c2 tr2 -> no_errors_tr tr2)
-      by (intros; apply no_errors_r, interpSet_Tau; assumption).
-    apply (fun IH => IH pInP prePQ H1 tr1 H0) in IHH_sbuter.
-    destruct IHH_sbuter as [tr2 []].
-    exists tr2; split.
-    + apply interpSet_Tau.
-      assumption.
-    + assumption.
-  (* sbuter_gen_tau fwd *)
-  - admit.
-  (* sbuter_gen_modify_L fwd *)
-  - admit.
-  (* sbuter_gen_modify_R fwd *)
-  - admit.
-  (* sbuter_gen_modify fwd *)
-  - admit.
-  (* sbuter_gen_choice_L fwd *)
-  - admit.
-  (* sbuter_gen_choice_R fwd *)
-  - admit.
-  (* sbuter_gen_choice fwd *)
+    + rewrite <- H.
+      admit.
   - admit.
 Admitted.
