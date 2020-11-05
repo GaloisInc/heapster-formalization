@@ -62,6 +62,8 @@ Variant RW: Type := R | W.
 
 Definition trueP {A B} : PermType A B :=
   {| ptApp := fun _ _ => bottom_Perms |}.
+Definition falseP {A B} : PermType A B :=
+  {| ptApp := fun _ _ => top_Perms |}.
 
 Definition ptr_perm (rw:RW) (v x:Value) : @Perms(Si*Ss) := bottom_Perms.
 Definition offset (x:Value) (o:nat) : Value := x.
@@ -116,3 +118,34 @@ Class Lens (A B:Type) : Type :=
 
 Definition vsingle {A} (a:A) : Vector.t A 1 :=
   Vector.cons _ a 0 (Vector.nil _).
+
+Definition ifz {A} n (x y:A) : A :=
+  if Nat.eqb n 0 then x else y.
+
+Definition getNum {S} v : itree (sceE S) nat :=
+  match v with VNum n => Ret n | VPtr _ => throw tt end.
+Definition addOff v o : Value :=
+  match v with VNum n => VNum (n+o)
+    | VPtr (blk,n) => VPtr (blk,n+o) end.
+Definition isNull {S} v: itree (sceE S) bool :=
+  match v with
+  | VNum n => if Nat.eqb n 0 then Ret true else throw tt
+  | VPtr _ => Ret false end.
+
+Definition meetF_Perms {A S} (F:A -> @Perms S) : @Perms S :=
+  meet_Perms (fun P => exists a, P = F a).
+
+Fixpoint mapN {A} n (f:A -> A) (a:A) : A :=
+  match n with 0 => a | S n' => f (mapN n' f a) end.
+Definition muPT {A B} (G:PermType A B -> PermType A B) : PermType A B :=
+  {| ptApp := fun a b =>
+       meet_Perms (fun P => exists n, P = a : mapN n G falseP @ b) |}.
+Class FixedPoint (G:Type -> Type) X : Type :=
+  { foldFP : G X -> X; unfoldFP : X -> G X;
+    foldUnfold : forall gx, unfoldFP (foldFP gx) = gx;
+    unfoldFold : forall x, foldFP (unfoldFP x) = x; }.
+Definition unmaprPT {A B C} (f:B -> C) (T:PermType A C) : PermType A B :=
+  {| ptApp := fun a b => a:T@(f b) |}.
+Definition mu {A G X} `{FixedPoint G X}
+  (F:PermType A X -> PermType A (G X)) : PermType A X :=
+  muPT (fun T => unmaprPT unfoldFP (F T)).
