@@ -39,16 +39,23 @@ Definition traceE S := (exceptE unit +' writerE S).
 
 Definition trace S R := itree (traceE S) R.
 
+(* Trivial instances for `trace` *)
+Instance Functor_trace {S} : Functor (trace S) := Functor_itree.
+Instance Monad_trace {S} : Monad (trace S) := Monad_itree.
+Instance MonadIter_trace {S} : MonadIter (trace S) := MonadIter_itree.
+
+
+Print subevent.
+
+
+(** * old stuff with StTraceM and interpSet **)
+
 Definition StTraceM S := stateT (S * Stream bool) (trace S).
 
-(* Trivial instances for `trace` and `StTraceM` *)
-Instance Functor_trace {S} : Functor (trace S) := Functor_itree.
+(* Trivial instances for `StTraceM` *)
 Instance Functor_StTraceM {S} : Functor (StTraceM S) := Functor_stateT.
-Instance Monad_trace {S} : Monad (trace S) := Monad_itree.
 Instance Monad_StTraceM {S} : Monad (StTraceM S) := Monad_stateT.
-Instance MonadIter_trace {S} : MonadIter (trace S) := MonadIter_itree.
 Instance MonadIter_StTraceM {S} : MonadIter (StTraceM S) := MonadIter_stateT0.
-
 
 Open Scope sum_scope.
 
@@ -83,6 +90,17 @@ Proof.
   destruct observe; reflexivity.
 Qed.
 
+Goal forall {S R} f k (s : S) o,
+  interpTr R (vis (Modify f) k) (s,o) ≅
+   vis (Tell (f s)) (fun _ => Tau (interpTr R (k (f s)) (f s, o))).
+Proof.
+  intros.
+  rewrite unfold_interpTr; cbn.
+  rewrite unfold_bind; cbn.
+  apply eqit_Vis; intros [].
+  rewrite unfold_bind; cbn.
+  reflexivity.
+Qed.
 
 Definition interpSet {S R} t s (tr: trace S (S * R)) :=
   exists o, fmap (fun '(s',_,r) => (s',r)) (interpTr R t (s,o)) ≈ tr.
@@ -103,7 +121,6 @@ Proof.
   rewrite unfold_bind.
   destruct observe; reflexivity.
 Qed.
-
 
 Lemma interpTr_Tau {S} R t (s:S) o :
   interpTr R (Tau t) (s,o) ≈ interpTr R t (s,o).
@@ -126,6 +143,42 @@ Proof.
 Qed.
 
 
+(** * new stuff with is_trace **)
+
+Inductive is_trace_gen {S R} is_trace :
+  itree (sceE S) R -> S -> trace S R -> Prop :=
+| is_trace_ret r s :
+    is_trace_gen is_trace (Ret r) s (Ret r)
+| is_trace_tau_L t s tr :
+    is_trace_gen is_trace t s tr ->
+    is_trace_gen is_trace (Tau t) s tr
+| is_trace_tau_R t s tr :
+    is_trace_gen is_trace t s tr ->
+    is_trace_gen is_trace t s (Tau tr)
+| is_trace_tau t s tr :
+    is_trace t s tr ->
+    is_trace_gen is_trace (Tau t) s (Tau tr)
+| is_trace_err s :
+    is_trace_gen is_trace (throw tt) s (throw tt)
+| is_trace_modify f kt s s' ktr :
+    f s = s' -> is_trace (kt s) (f s) (ktr tt) ->
+    is_trace_gen is_trace (vis (Modify f) kt) s (vis (Tell s') ktr)
+| is_trace_choice kt b s tr :
+    is_trace (kt b) s tr ->
+    is_trace_gen is_trace (vis Or kt) s tr
+.
+
+Definition is_trace {S R} := paco3 (@is_trace_gen S R) bot3.
+
+Lemma is_trace_gen_mon {S R} : monotone3 (@is_trace_gen S R).
+Admitted.
+Hint Resolve is_trace_gen_mon : paco.
+
+(* This should hold - does the other direction also hold? *)
+(* Lemma interpSet_impl_is_trace {S R} (t : itree (sceE S) R) s : *)
+(*   (exists trM, interpSet t s trM) -> exists tr, is_trace t s tr. *)
+
+
 Variant no_errors_tr_gen {S R : Type} no_errors_tr : trace S R -> Prop :=
 | no_error_ret : forall r, no_errors_tr_gen no_errors_tr (Ret r)
 | no_error_tau : forall t, no_errors_tr t -> no_errors_tr_gen no_errors_tr (Tau t)
@@ -143,10 +196,10 @@ Qed.
 Hint Resolve no_errors_tr_gen_mon : paco.
 
 
-Inductive ruts_gen {S1 S2 R1 R2} ruts (PS:S1 -> S2 -> Prop) (PR:R1 -> R2 -> Prop) :
+Inductive ruts_gen {S1 S2 R1 R2} ruts (PS:S1 -> S2 -> Prop) (PR:S1 -> R1 -> S2 ->R2 -> Prop) :
   S1 -> trace S1 R1 -> S2 -> trace S2 R2 -> Prop :=
 | ruts_ret s1 r1 s2 r2 :
-    PR r1 r2 -> ruts_gen ruts PS PR s1 (Ret r1) s2 (Ret r2)
+    PR s1 r1 s2 r2 -> ruts_gen ruts PS PR s1 (Ret r1) s2 (Ret r2)
 | ruts_tau_L s1 t1 s2 t2 :
     ruts_gen ruts PS PR s1 t1 s2 t2 ->
     ruts_gen ruts PS PR s1 (Tau t1) s2 t2
@@ -173,6 +226,28 @@ Instance Proper_ruts {S1 S2 R1 R2} PS PR :
 Admitted.
 
 
+Definition curry {A B C} (f:A*B->C) a b := f (a, b).
+
+Definition outRel {S1 S2 R1 R2} Q (s1 : S1) (r1 : R1) (s2 : S2) (r2 : R2) : Prop :=
+  exists q, q ∈ (Q r1 r2) /\ pre q (s1, s2).
+
+(* is this what we want? hmm... *)
+Lemma maybe_typing_soundness {S1 S2 R1 R2 : Type} (P: @Perms (S1*S2))
+        (Q: R1 -> R2 -> @Perms (S1*S2)) s1 t1 s2 t2 p q :
+  p ∈ P -> pre (p ** q) (s1,s2) ->
+  sbuter p Q t1 s1 t2 s2 ->
+  forall tr1 tr2, is_trace t1 s1 tr1 ->
+                  is_trace t2 s2 tr2 ->
+                  no_errors_tr tr2 ->
+                  ruts (curry (pre q)) (outRel Q) s1 tr1 s2 tr2.
+Proof.
+  intros pInP prePQ H_sbuter tr1 tr2 IsTrace1 IsTrace2 NoErrors2.
+Admitted.
+
+
+(** * Old typing_soundness using interpSet **)
+
+(*
 Definition curry {A B C} (f:A*B->C) a b := f (a, b).
 
 Definition outRel' {S1 S2 T R1 R2} (Q:R1 -> R2 -> Perms)
@@ -252,3 +327,4 @@ Proof.
       admit.
   - admit.
 Admitted.
+*)
