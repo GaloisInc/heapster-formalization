@@ -35,6 +35,15 @@ Import ITreeNotations.
 Import SumNotations.
 
 
+Inductive steps_to' {S R} : itree (sceE S) R -> S -> itree (sceE S) R -> S -> Prop :=
+| steps_to_modify f k s : steps_to' (vis (Modify f) k) s (k s) (f s)
+| steps_to_or b k s1 t2 s2 :
+    steps_to' (k b) s1 t2 s2 -> steps_to' (vis Or k) s1 t2 s2
+.
+Definition steps_to {S R} t1 s1 t2 s2 :=
+  exists t1', exists t2', t1 ≅ t1' /\ t2 ≅ t2' /\ @steps_to' S R t1' s1 t2' s2.
+
+
 Definition traceE S := (exceptE unit +' writerE S).
 
 Definition trace S R := itree (traceE S) R.
