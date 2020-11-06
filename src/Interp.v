@@ -41,7 +41,15 @@ Inductive steps_to' {S R} : itree (sceE S) R -> S -> itree (sceE S) R -> S -> Pr
     steps_to' (k b) s1 t2 s2 -> steps_to' (vis Or k) s1 t2 s2
 .
 Definition steps_to {S R} t1 s1 t2 s2 :=
-  exists t1', exists t2', t1 ≅ t1' /\ t2 ≅ t2' /\ @steps_to' S R t1' s1 t2' s2.
+  exists t1' t2', t1 ≅ t1' /\ t2 ≅ t2' /\ @steps_to' S R t1' s1 t2' s2.
+
+Definition CompM S R := itree (sceE S) R.
+Definition TPred S R := CompM S R -> S -> Prop.
+Definition eq_sat_sep_sbuter {S1 S2 R1 R2} (q:@perm (S1*S2))
+  (P1:TPred S1 R1) (P2:TPred S2 R2) :=
+  forall p Q t1 s1 t2 s2, pre q (s1,s2) -> separate p q ->
+    sbuter p Q t1 s1 t2 s2 -> no_errors s2 t2 ->
+    (P1 t1 s1 <-> P2 t2 s2).
 
 
 Definition traceE S := (exceptE unit +' writerE S).
