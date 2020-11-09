@@ -34,14 +34,16 @@ Import ITree.Basics.Basics.Monads.
 Import ITreeNotations.
 Import SumNotations.
 
+Hint Resolve no_errors_gen_mon : paco.
+Hint Resolve sbuter_gen_mon : paco.
+
 
 Inductive steps_to' {S R} : itree (sceE S) R -> S -> itree (sceE S) R -> S -> Prop :=
 | steps_to_modify f k s : steps_to' (vis (Modify f) k) s (k s) (f s)
-| steps_to_or b k s1 t2 s2 :
-    steps_to' (k b) s1 t2 s2 -> steps_to' (vis Or k) s1 t2 s2
-.
+| steps_to_or b k s1 t2 s2 : steps_to' (k b) s1 t2 s2 -> steps_to' (vis Or k) s1 t2 s2.
+
 Definition steps_to {S R} t1 s1 t2 s2 :=
-  exists t1' t2', t1 ≅ t1' /\ t2 ≅ t2' /\ @steps_to' S R t1' s1 t2' s2.
+  exists t1' t2', t1 ≈ t1' /\ t2 ≈ t2' /\ @steps_to' S R t1' s1 t2' s2.
 
 Definition CompM S R := itree (sceE S) R.
 Definition TPred S R := CompM S R -> S -> Prop.
@@ -51,6 +53,64 @@ Definition eq_sat_sep_sbuter {S1 S2 R1 R2} (q:@perm (S1*S2))
     sbuter p Q t1 s1 t2 s2 -> no_errors s2 t2 ->
     (P1 t1 s1 <-> P2 t2 s2).
 
+
+Definition state_pred {S} R P : TPred S R := fun _ s => P s.
+
+Lemma eq_sat_state_preds {S1 S2 R1 R2} q (P1 : S1 -> Prop) (P2 : S2 -> Prop)
+  : (forall s1 s2, pre q (s1,s2) -> (P1 s1 <-> P2 s2)) ->
+    eq_sat_sep_sbuter q (state_pred R1 P1) (state_pred R2 P2).
+Proof.
+  unfold eq_sat_sep_sbuter; intros.
+  apply H; assumption.
+Qed.
+
+
+Lemma steps_to_sbuter {S1 S2 R1 R2} (p:@perm (S1*S2)) (Q: R1 -> R2 -> Perms) t1 s1 t2 s2 t1' s1' :
+  steps_to t1 s1 t1' s1' -> sbuter p Q t1 s1 t2 s2 ->
+  exists t2' s2', steps_to t2 s2 t2' s2' /\ sbuter p Q t1' s1' t2' s2'.
+Admitted.
+
+Lemma no_errors_steps_to {S R} (t : CompM S R) s (t' : CompM S R) s' :
+  steps_to t s t' s' -> no_errors s t -> no_errors s' t'.
+Admitted.
+
+Inductive EF : forall {S R} (P : TPred S R), TPred S R :=
+| EF_refl {S R} {P:TPred S R} t s : P t s -> EF P t s
+| EF_step {S R} {P:TPred S R} t s t' s' : steps_to t s t' s' -> EF P t' s' -> EF P t s.
+
+Lemma eq_sat_EF {S1 S2 R1 R2} q (P1 : TPred S1 R1) (P2 : TPred S2 R2)
+  : eq_sat_sep_sbuter q P1 P2 ->
+    eq_sat_sep_sbuter q (EF P1) (EF P2).
+Proof.
+  split; intro.
+  - revert H4 t2 s2 H0 H2 H3.
+    induction 1 as [S1 R1 P1 t1 s1 | S1 R1 P1 t1 s1 t1' s1']; intros.
+    + apply EF_refl.
+      apply (H p Q t1 s1 t2 s2); assumption.
+    + pose proof (steps_to_sbuter _ _ _ _ _ _ _ _ H0 H3).
+      destruct H6 as [t2' [s2' []]].
+      apply (EF_step _ _ _ _ H6).
+      apply (IHEF q H p Q H1).
+      * (* hmm... *)
+        punfold H7.
+        pose proof (sbuter_gen_pre _ _ _ _ _ _ _ H7).
+        destruct H8.
+        ** apply (no_errors_steps_to _ _ _ _ H6) in H5.
+           rewrite H8 in H5.
+           punfold H5; inversion H5.
+        ** admit. (* wait, does having this hypothesis even help? *)
+      * assumption.
+      * apply (no_errors_steps_to t2 s2); assumption.
+  - admit.
+Admitted.
+
+
+Definition AG {S R} : TPred S R -> TPred S R :=
+  paco3 (fun AG P t1 s1 => P t1 s1 /\ (forall t2 s2, steps_to t1 s1 t2 s2 -> AG P t2 s2)) bot3.
+
+
+
+(*
 
 Definition traceE S := (exceptE unit +' writerE S).
 
@@ -344,4 +404,4 @@ Proof.
       admit.
   - admit.
 Admitted.
-*)
+*) *)
