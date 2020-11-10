@@ -6,8 +6,10 @@ From Heapster Require Import
 
 From Coq Require Import
      Program
+     Program.Equality
      Morphisms
-     Streams.
+     Streams
+     Vector.
 
 From ExtLib Require Import
      Structures.Functor
@@ -33,9 +35,29 @@ From Paco Require Import
 Import ITree.Basics.Basics.Monads.
 Import ITreeNotations.
 Import SumNotations.
+Import VectorNotations.
 
 Hint Resolve no_errors_gen_mon : paco.
 Hint Resolve sbuter_gen_mon : paco.
+
+Instance Proper_eutt_no_errors {S R} :
+  Proper (eq ==> eutt eq ==> impl) (@no_errors S R).
+Admitted.
+
+Definition CompM S R := itree (sceE S) R.
+
+Lemma no_errors_Tau {S R} (s : S) (t : CompM S R)
+  : no_errors s t <-> no_errors s (Tau t).
+Proof.
+  split; intro H.
+  - pfold.
+    apply no_errors_tau.
+    unfold no_errors in H.
+    left; assumption.
+  - punfold H; inv H; inv H1.
+    + assumption.
+    + inv H.
+Qed.
 
 
 Inductive steps_to' {S R} : itree (sceE S) R -> S -> itree (sceE S) R -> S -> Prop :=
@@ -45,7 +67,74 @@ Inductive steps_to' {S R} : itree (sceE S) R -> S -> itree (sceE S) R -> S -> Pr
 Definition steps_to {S R} t1 s1 t2 s2 :=
   exists t1' t2', t1 ≈ t1' /\ t2 ≈ t2' /\ @steps_to' S R t1' s1 t2' s2.
 
-Definition CompM S R := itree (sceE S) R.
+Lemma no_errors_steps_to {S R} (t : CompM S R) s (t' : CompM S R) s' :
+  steps_to t s t' s' -> no_errors s t -> no_errors s' t'.
+Proof.
+  intros [t1' [t2' [eq_t1 [eq_t2 Ht]]]] ne_t.
+  induction Ht.
+  - punfold ne_t; induction ne_t.
+    + punfold eq_t1; inversion eq_t1.
+    + rewrite eq_t2.
+Admitted.
+
+
+Fixpoint is_path {S R} {n} t0 s0 (ts : Vector.t (CompM S R * S) n) tf sf :=
+  match ts with
+  | [] => steps_to t0 s0 tf sf
+  | (t,s) :: ts' => steps_to t0 s0 t s /\ is_path t s ts' tf sf
+  end.
+
+Definition sbuter_step {S1 S2 R1 R2} (p:@perm (S1*S2)) (Q: R1 -> R2 -> Perms) t1 s1 t2 s2 :=
+  exists p', sep_step p p' /\ sbuter p' Q t1 s1 t2 s2.
+
+(* A picture for the following lemma, where the diagonal and horizontal lines in
+   the middle are sbuter and the vertical lines on the sides are steps_to.
+            (t4,s4)
+          ⋰   ⋮
+   (t2,s2)  (ti,si)
+      |   ⋰   ⋮
+   (t1,s1)~~(t3,s3)
+ *)
+Lemma steps_to'_sbuter_r {S1 S2 R1 R2} (p:@perm (S1*S2)) (Q: R1 -> R2 -> Perms) t1 s1 t2 s2 t3 s3 :
+  no_errors s3 t3 -> steps_to' t1 s1 t2 s2 -> sbuter p Q t1 s1 t3 s3 ->
+  exists n (ts : Vector.t (CompM S2 R2 * S2) n) t4 s4,
+    is_path t3 s3 ts t4 s4 /\
+    (forall i, sbuter_step p Q t1 s1 (fst ts[@i]) (snd ts[@i]) /\
+               guar p (s1, s3) (s1, snd ts[@i])) /\
+    sbuter_step p Q t2 s2 t4 s4 /\ guar p (s1, s3) (s2, s4).
+Proof.
+  intros ne3 Ht Hb.
+  induction Ht.
+  - punfold Hb; dependent induction Hb.
+    (* sbuter_gen_err *)
+    + punfold ne3; inv ne3.
+    (* sbuter_gen_tau_R *)
+    + apply no_errors_Tau in ne3.
+      specialize (IHHb ne3 f k JMeq_refl eq_refl).
+      destruct IHHb as [n [ts [t4 [s4 [Hp [H0 H1]]]]]].
+      exists n; exists ts; exists t4; exists s4; split; [|split].
+      * admit.
+      * assumption.
+      * assumption.
+    (* sbuter_gen_modify_L *)
+    + admit.
+    (* sbuter_gen_modify_R *)
+    + admit.
+    (* sbuter_gen_modify *)
+    + exists 0; exists []; exists (k2 c2); exists (f2 c2); split; [|split;[|split]].
+      * exists (vis (Modify f2) k2); exists (k2 c2).
+        split; [reflexivity | split; [reflexivity|]].
+        constructor.
+      * inversion i.
+      * pclearbot.
+        exists p'; split; assumption.
+      * assumption.
+    (* sbuter_gen_choice_R *)
+    + admit.
+  - admit.
+Admitted.
+
+
 Definition TPred S R := CompM S R -> S -> Prop.
 Definition eq_sat_sep_sbuter {S1 S2 R1 R2} (q:@perm (S1*S2))
   (P1:TPred S1 R1) (P2:TPred S2 R2) :=
@@ -65,19 +154,16 @@ Proof.
 Qed.
 
 
-Lemma steps_to_sbuter_l {S1 S2 R1 R2} (p:@perm (S1*S2)) (Q: R1 -> R2 -> Perms) t1 s1 t2 s2 t3 s3 :
-  steps_to t1 s1 t2 s2 -> sbuter p Q t1 s1 t3 s3 ->
-  exists t4 s4, steps_to t3 s3 t4 s4 /\ sbuter p Q t2 s2 t4 s4.
-Admitted.
+(* Lemma steps_to_sbuter_l {S1 S2 R1 R2} (p:@perm (S1*S2)) (Q: R1 -> R2 -> Perms) t1 s1 t2 s2 t3 s3 : *)
+(*   steps_to t1 s1 t2 s2 -> sbuter p Q t1 s1 t3 s3 -> *)
+(*   exists t4 s4, steps_to t3 s3 t4 s4 /\ sbuter p Q t2 s2 t4 s4. *)
+(* Admitted. *)
 
-Lemma steps_to_sbuter_r {S1 S2 R1 R2} (p:@perm (S1*S2)) (Q: R1 -> R2 -> Perms) t1 s1 t2 s2 t3 s3 :
-  steps_to t1 s1 t2 s2 -> sbuter p Q t3 s3 t1 s1 ->
-  exists t4 s4, steps_to t3 s3 t4 s4 /\ sbuter p Q t4 s4 t2 s2.
-Admitted.
+(* Lemma steps_to_sbuter_r {S1 S2 R1 R2} (p:@perm (S1*S2)) (Q: R1 -> R2 -> Perms) t1 s1 t2 s2 t3 s3 : *)
+(*   steps_to t1 s1 t2 s2 -> sbuter p Q t3 s3 t1 s1 -> *)
+(*   exists t4 s4, steps_to t3 s3 t4 s4 /\ sbuter p Q t4 s4 t2 s2. *)
+(* Admitted. *)
 
-Lemma no_errors_steps_to {S R} (t : CompM S R) s (t' : CompM S R) s' :
-  steps_to t s t' s' -> no_errors s t -> no_errors s' t'.
-Admitted.
 
 Inductive EF {S R} (P : TPred S R) : TPred S R :=
 | EF_refl t s : P t s -> EF P t s
@@ -88,6 +174,7 @@ Arguments EF_step {S R P} t s t' s'.
 Lemma eq_sat_EF {S1 S2 R1 R2} q (P1 : TPred S1 R1) (P2 : TPred S2 R2)
   : eq_sat_sep_sbuter q P1 P2 ->
     eq_sat_sep_sbuter q (EF P1) (EF P2).
+Admitted. (*
 Proof.
   split; intro.
   - revert H4 t2 s2 H0 H2 H3.
@@ -119,12 +206,22 @@ Proof.
       * admit.
       * assumption.
       * apply (no_errors_steps_to t2 s2); assumption.
+Admitted. *)
+
+
+Definition AG_gen {S R} (AG : TPred S R -> TPred S R) (P : TPred S R) : TPred S R :=
+  fun t1 s1 => P t1 s1 /\ (forall t2 s2, steps_to t1 s1 t2 s2 -> AG P t2 s2).
+
+Definition AG {S R} : TPred S R -> TPred S R := paco3 AG_gen bot3.
+
+Lemma AG_gen_mon {S R} : monotone3 (@AG_gen S R).
 Admitted.
+Hint Resolve AG_gen_mon : paco.
 
-
-Definition AG {S R} : TPred S R -> TPred S R :=
-  paco3 (fun AG P t1 s1 => P t1 s1 /\ (forall t2 s2, steps_to t1 s1 t2 s2 -> AG P t2 s2)) bot3.
-
+Lemma eq_sat_AG {S1 S2 R1 R2} q (P1 : TPred S1 R1) (P2 : TPred S2 R2)
+  : eq_sat_sep_sbuter q P1 P2 ->
+    eq_sat_sep_sbuter q (AG P1) (AG P2).
+Admitted.
 
 
 (*
