@@ -106,8 +106,8 @@ Section permType.
     repeat constructor. intros x y z e1 e2. transitivity y; assumption.
   Defined.
 
-  Definition eqp {A} (a:A): PermType A unit :=
-    {| ptApp := fun a' _ => singleton_Perms (equals_perm a a') |}.
+  Program Definition eqp {A} (a:A): PermType A unit :=
+    {| ptApp := fun a' _ => {| in_Perms := fun _ => a=a' |} |}.
 
   Class Lens (A B:Type) : Type :=
     { lget: A -> B; lput: A -> B -> A;
