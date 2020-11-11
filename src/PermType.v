@@ -146,8 +146,8 @@ Section permType.
   Definition unmaprPT {A B C} (f:B -> C) (T:PermType A C) : PermType A B :=
     {| ptApp := fun a b => a:T@(f b) |}.
   Definition mu {A G X} `{FixedPoint G X}
-             (F:PermType A X -> PermType A (G X)) : PermType A X :=
-    muPT (fun T => unmaprPT unfoldFP (F T)).
+             (F:forall Y, PermType A Y -> PermType A (G Y)) : PermType A X :=
+    muPT (fun T => unmaprPT unfoldFP (F X T)).
 End permType.
 
 Notation "P ⊢ ti ▷ ts ::: U" := (typing P (ptApp _ _ _ _ U) ti ts) (at level 60).
