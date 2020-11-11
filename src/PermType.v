@@ -39,10 +39,13 @@ Section permType.
   Definition VPermType A := PermType Value A.
   Notation "xi : T @ xs" := (ptApp _ _ T xi xs) (at level 35).
 
+  Definition withPerms {Ai As} (T: PermType Ai As) (P:@Perms (Si * Ss)) : PermType Ai As:=
+    {| ptApp:= fun ai abs => ai : T @ abs * P|}.
+  Notation "T ∅ P" := (withPerms T P) (at level 40).
+
   Definition starPT {Ai As Bs} (T:PermType Ai As) (U:PermType Ai Bs)
     : PermType Ai (As * Bs) :=
     {| ptApp := fun ai abs => ai : T @ fst abs * ai : U @ snd abs |}.
-
 
   Definition existsPT {Ai As} {Bs:As -> Type}
              (F : forall a, PermType Ai (Bs a)) : PermType Ai (sigT Bs) :=
@@ -155,3 +158,4 @@ Notation "xi : T @ xs" := (ptApp _ _ _ _ T xi xs) (at level 35).
 Notation "T1 +T+ T2" := (plusPT _ _ T1 T2) (at level 50).
 Notation "T1 *T* T2" := (timesPT _ _ T1 T2) (at level 40).
 (* Notation "'ex' ( x : A ) . T" := (existsPT _ _ (As:=A) (fun x => T)) (at level 70). *)
+Notation "T ∅ P" := (withPerms _ _ T P) (at level 40).
