@@ -107,7 +107,7 @@ Section permType.
   Defined.
 
   Program Definition eqp {A} (a:A): PermType A unit :=
-    {| ptApp := fun a' _ => {| in_Perms := fun _ => a=a' |} |}.
+    {| ptApp := fun a' _ => {| in_Perms _ := a=a' |} |}.
 
   Class Lens (A B:Type) : Type :=
     { lget: A -> B; lput: A -> B -> A;
