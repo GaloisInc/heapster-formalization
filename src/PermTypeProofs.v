@@ -98,12 +98,12 @@ Qed.
 
 Notation "'ex' ( x 'uhh' A ) T" := (existsPT _ _ (As:=A) (fun x => T)) (at level 70).
 
-Lemma ExI (A B : Type) (xi : A) xs ys (F : forall (a : A), PermType Si Ss A B) :
-  xi : F ys @ xs ⊑ xi : ex (z uhh A) (F z) @ existT _ ys xs.
+Lemma ExI (A B C : Type) (xi : A) (xs : C) ys (F : forall (b : B), PermType Si Ss A C) :
+  xi : ex (z uhh B) (F z) @ existT _ ys xs ⊑ xi : F ys @ xs.
 Proof. reflexivity. Qed.
 
-Lemma ExE (A B : Type) (xi : A) xs (F : forall (a : A), PermType Si Ss A B) :
-  xi : ex (z uhh A) (F z) @ xs ⊑ xi : F (projT1 xs) @ (projT2 xs).
+Lemma ExE (A B C : Type) (xi : A) (xs : sigT (fun b : B => C)) (F : forall (b : B), PermType Si Ss A C) :
+   xi : F (projT1 xs) @ (projT2 xs) ⊑ xi : ex (z uhh B) (F z) @ xs.
 Proof. reflexivity. Qed.
 
 Lemma frame (A B : Type) (P1 P2 : Perms) ti ts (T : PermType Si Ss A B) :
@@ -168,7 +168,7 @@ Proof.
   repeat intro. pstep. constructor; auto.
 Qed.
 
-Lemma Bind (A B C : Type) P ti ts fi fs (T : PermType Si Ss A B) (U : PermType Si Ss B C) :
+Lemma Bind (A B C D : Type) P ti ts fi fs (T : PermType Si Ss A B) (U : PermType Si Ss C D) :
   P ⊢ ti ▷ ts ::: T ->
   (forall xi xs, xi : T @ xs ⊢ fi xi ▷ fs xs ::: U) ->
   P ⊢ ITree.bind ti fi ▷ ITree.bind ts fs ::: U.
@@ -182,13 +182,13 @@ Proof.
   repeat intro. simpl in *. subst. simpl. pstep. constructor; auto. reflexivity.
 Qed.
 
-Lemma Err (A B : Type) P (U : PermType Ss Si A B) :
+Lemma Err (A B : Type) P (U : PermType Si Ss A B) :
   P ⊢ throw tt ▷ throw tt ::: U.
 Proof.
   repeat intro. pstep. constructor.
 Qed.
 
-Lemma If (A B : Type) P ti1 ti2 ts1 ts2 (xi yi : bool) xs (U : PermType Ss Si A B) :
+Lemma If (A B : Type) P ti1 ti2 ts1 ts2 (xi yi : bool) xs (U : PermType Si Ss A B) :
   P ⊢ ti1 ▷ ts1 ::: U ->
   P ⊢ ti2 ▷ ts2 ::: U ->
   P * xi : eqp _ _ yi @ xs ⊢ if xi then ti1 else ti2 ▷ if yi then ts1 else ts2 ::: U.
@@ -199,4 +199,39 @@ Proof.
     etransitivity; eauto. apply lte_l_sep_conj_perm.
   - apply H0; auto. eapply Perms_upwards_closed; eauto.
     etransitivity; eauto. apply lte_l_sep_conj_perm.
+Qed.
+
+Lemma Iter (A B C D : Type) (T : PermType Si Ss C D) xi xs fi fs (U : PermType Si Ss A B) :
+  (forall yi ys, yi : T @ ys ⊢ fi yi ▷ fs ys ::: T +T+ U) ->
+  xi : T @ xs ⊢ iter fi xi ▷ iter fs xs ::: U.
+Proof.
+Abort.
+
+Definition ex1i xi : (itree (sceE Si) Value) :=
+  x <- getNum xi;;
+  Ret (VNum (Init.Nat.mul 5 x)).
+
+Definition ex1s (xs : sigT (fun _ : nat => unit)) : itree (sceE Ss) (sigT (fun _ : nat => unit)) :=
+  x <- Ret tt;;
+  Ret (existT _ (Init.Nat.mul 5 (projT1 xs)) tt).
+
+Definition IsNat : VPermType Si Ss (sigT (fun _ : nat => unit)) :=
+  ex (n uhh nat) eqp Si Ss (VNum n).
+
+Lemma ex1_typing xi xs :
+  xi : IsNat @ xs ⊢ ex1i xi ▷ ex1s xs ::: IsNat.
+Proof.
+  (* ExE *)
+  unfold IsNat. eapply Weak; [eapply ExE | reflexivity |].
+  (* Bind *)
+  unfold ex1s, ex1i. eapply Bind.
+  (* GetNum *)
+  apply GetNum.
+  (* EqCtx *)
+  intros yi []. clear xi.
+  eapply Weak; [apply EqCtx with (f := fun x => VNum (Init.Nat.mul 5 x)) | reflexivity |].
+  (* ExI *)
+  eapply Weak. apply ExI with (F := fun n : nat => eqp Si Ss (VNum n)). reflexivity. fold IsNat.
+  (* Ret *)
+  apply Ret_.
 Qed.
