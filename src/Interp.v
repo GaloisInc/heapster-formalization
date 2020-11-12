@@ -425,16 +425,35 @@ Proof.
     + apply (sep_step_guar p p'); assumption.
 Qed.
 
+(* Maybe this holds... *)
+Lemma sbuter_Or_l_fwd {S1 S2 R1 R2} b p Q k s1 t3 s3 :
+  sbuter p Q (vis Or k) s1 t3 s3 -> @sbuter S1 S2 R1 R2 p Q (k b) s1 t3 s3.
+Admitted.
+
+(* ...but this definitely doesn't! *)
+Lemma sbuter_Or_l_bwd {S1 S2 R1 R2} b p Q k s1 t3 s3 :
+  sbuter p Q (k b) s1 t3 s3 -> @sbuter S1 S2 R1 R2 p Q (vis Or k) s1 t3 s3.
+Admitted.
+
+(* This doesn't hold because it needs the above! *)
 Lemma steps_to_sbuter_l {S1 S2 R1 R2} (p:@perm (S1*S2)) (Q: R1 -> R2 -> Perms) t1 s1 t2 s2 t3 s3 :
   no_errors s3 t3 -> steps_to t1 s1 t2 s2 -> sbuter_impl_path_r p Q t1 s1 t2 s2 t3 s3.
 Proof.
   intro; revert t1 s1 t2 s2.
   eapply (euttOr_closure_rec _ (fun t1 s1 t2 s2 =>  sbuter_impl_path_r p Q t1 s1 t2 s2 t3 s3)).
-  - cbv - [eutt sbuter_impl_path_r]; intros t1 t1' eqt1 s1 s1' eqs1 t2 t2' eqt2 s2 s2' eqs2 ?.
-    rewrite <- eqs1, <- eqs2; clear s1' s2' eqs1 eqs2.
-    admit.
-  - unfold is_Or_closed; intros.
-    admit.
+  - cbv - [eutt sbuter_impl_path_r]; intros t1 t1' eqt1 s1 s1' eqs1 t2 t2' eqt2 s2 s2' eqs2 ? ?.
+    rewrite <- eqs1, <- eqs2 in *; clear s1' s2' eqs1 eqs2.
+    rewrite <- eqt1 in H1.
+    specialize (H0 H1); destruct H0 as [n [ts [t4 [s4 [? [? [?]]]]]]].
+    exists n; exists ts; exists t4; exists s4; split; [|split; [|split]]; try assumption.
+    + intro i; specialize (H2 i).
+      rewrite eqt1 in H2; assumption.
+    + rewrite eqt2 in H3; assumption.
+  - unfold is_Or_closed; intros b k s1 t2 s2 ? ?.
+    unfold sbuter_impl_path_r in H0.
+    apply (sbuter_Or_l_fwd b) in H1.
+    specialize (H0 H1); destruct H0 as [n [ts [t4 [s4 [? [? [?]]]]]]].
+    admit. (* Needs sbuter_Or_l_bwd... *)
   - intros; apply steps_to'_sbuter_l; assumption.
 Admitted.
 
@@ -536,7 +555,7 @@ Proof.
       apply (EF_path n t2 s2 ts t2' s2'); try assumption.
       destruct H8 as [p' [? ?]].
       apply (IHEF p').
-      * admit. (* need lemma about steps_to, is_path, sbuter, and pre *)
+      * apply (sep_r _ _ H2) in H9; respects.
       * apply H8; assumption.
       * assumption.
       * apply (no_errors_is_path _ t2 s2 ts t2' s2'); assumption.
@@ -549,11 +568,11 @@ Proof.
       apply (EF_path n t1 s1 ts t1' s1'); try assumption.
       destruct H8 as [p' [? ?]].
       apply (IHEF p').
-      * admit. (* need lemma about steps_to, is_path, sbuter, and pre *)
+      * apply (sep_r _ _ H2) in H9; respects.
       * apply H8; assumption.
       * assumption.
       * apply (no_errors_steps_to t2 s2 t2' s2'); assumption.
-Admitted.
+Qed.
 
 
 (** * `AG` and lemmas  **)
