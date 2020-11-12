@@ -51,6 +51,7 @@ Global Instance Proper_eutt_sbuter {S1 S2 R1 R2} :
 Admitted.
 
 Definition CompM S R := itree (sceE S) R.
+Definition TPred S R := CompM S R -> S -> Prop.
 
 Lemma no_errors_Tau {S R} (s : S) (t : CompM S R)
   : no_errors s t <-> no_errors s (Tau t).
@@ -247,56 +248,64 @@ Proof.
 Qed.
 
 
+(** * `is_no_step_invariant` and basic facts  **)
+
+Definition is_no_step_invariant {S R} (P : TPred S R) :=
+  Proper (eutt eq ==> eq ==> impl) P /\ (forall k b s, P (vis Or k) s <-> P (k b) s).
+
+Lemma is_no_step_invariant_no_steps {S R} (P : TPred S R) t1 s1 t2 s2 :
+  is_no_step_invariant P ->
+  no_steps_to t1 s1 t2 s2 -> P t1 s1 <-> P t2 s2.
+Proof.
+  destruct 2 as [t1' t2' eqt1 eqt2].
+  induction H0.
+  - destruct H0.
+    split; apply H; auto.
+    + now rewrite eqt1, H0.
+    + now rewrite eqt2, <- H0.
+Admitted.
+
+
 (** * `is_path` and lemmas **)
 
-(* The proposition that `(t0,s0) steps_to ... (ti,si) ... steps_to (tf,sf)` *)
-Fixpoint steps_between {S R} {n} t0 s0 (ts : Vector.t (CompM S R * S) n) tf sf :=
+(* The proposition that there are `n` or `n+1` steps from (t0,s0) to (tf,sf),
+   i.e. `(t0,s0) steps_to ... (ti,si) ... steps_to (tn,sn) steps_to (tf,sf)` or
+        `(t0,s0) steps_to ... (ti,si) ... steps_to (tn,sn) no_steps_to (tf,sf)`. *)
+Fixpoint is_path {S R} n t0 s0 (ts : Vector.t (CompM S R * S) n) tf sf :=
   match ts with
-  | [] => steps_to t0 s0 tf sf
-  | (t,s) :: ts => steps_to t0 s0 t s /\ steps_between t s ts tf sf
+  | [] => no_steps_to t0 s0 tf sf \/ steps_to t0 s0 tf sf
+  | (t,s) :: ts' => steps_to t0 s0 t s /\ is_path _ t s ts' tf sf
   end.
 
-(* The proposition that there are `n` steps from (t0,s0) to (tf,sf),
-   i.e. `no_steps_to t0 s0 tf sf` or `(t0,s0) steps_to ... (ti,si) ... steps_to (tf,sf)` *)
-Definition is_path {S R} n t0 s0 (ts : Vector.t (CompM S R * S) (pred n)) tf sf :=
-  match n return Vector.t _ (pred n) -> Prop with
-  | 0 => fun _ => no_steps_to t0 s0 tf sf
-  | S n' => fun ts => steps_between t0 s0 ts tf sf
-  end ts.
-
-Lemma is_path_Tau_l {S R} n t0 s0 (ts : Vector.t (CompM S R * S) (pred n)) tf sf :
+Lemma is_path_Tau_l {S R} n t0 s0 (ts : Vector.t (CompM S R * S) n) tf sf :
   is_path n t0 s0 ts tf sf <-> is_path n (Tau t0) s0 ts tf sf.
 Proof.
-  destruct n; simpl.
-  - now unfold no_steps_to, euttOr_closure; rewrite <- eutt_closure_Tau_L.
-  - simpl in ts; destruct ts; [|destruct h]; simpl.
-    all: now unfold steps_to, euttOr_closure; rewrite <- eutt_closure_Tau_L.
+  destruct ts; [|destruct h]; simpl.
+  - now unfold is_path, no_steps_to, steps_to, euttOr_closure; do 2 rewrite <- eutt_closure_Tau_L.
+  - now unfold steps_to, euttOr_closure; rewrite <- eutt_closure_Tau_L.
 Defined.
 
 Lemma no_steps_is_path {S R} n t s t0 s0 ts tf sf :
   no_steps_to t s t0 s0 -> is_path n t0 s0 ts tf sf -> @is_path S R n t s ts tf sf.
 Proof.
-  induction n; simpl in *.
-  - apply no_steps_to_trans.
-  - destruct ts; [|destruct h]; simpl.
-    + apply euttOr_closure_trans_eq_l.
-    + intros ? [? ?]; split.
-      * eapply euttOr_closure_trans_eq_l.
-        apply H. apply H0.
-      * assumption.
+  destruct ts; [|destruct h]; simpl.
+  - destruct 2.
+    + now left; apply (no_steps_to_trans t0 s0).
+    + now right; apply (euttOr_closure_trans_eq_l t0 s0).
+  - intros ? [? ?]; split.
+    + eapply euttOr_closure_trans_eq_l.
+      apply H. apply H0.
+    + assumption.
 Qed.
 
-Lemma no_errors_is_path {S R} n t0 s0 (ts : Vector.t (CompM S R * S) (pred n)) tf sf :
+Lemma no_errors_is_path {S R} n t0 s0 (ts : Vector.t (CompM S R * S) n) tf sf :
   is_path n t0 s0 ts tf sf -> no_errors s0 t0 -> no_errors sf tf.
 Proof.
-  destruct n; simpl.
-  - apply no_errors_no_steps_to.
-  - revert t0 s0 tf sf.
-    simpl in ts; induction ts; [|destruct h]; simpl.
-    + apply no_errors_steps_to.
-    + intros; destruct H.
-      apply (IHts c s tf sf); try assumption.
-      apply (no_errors_steps_to t0 s0); assumption.
+  revert t0 s0; induction ts; [|destruct h]; simpl; intros; destruct H.
+  - apply (no_errors_no_steps_to t0 s0); assumption.
+  - apply (no_errors_steps_to t0 s0); assumption.
+  - apply (IHts c s); try assumption.
+    apply (no_errors_steps_to t0 s0); assumption.
 Qed.
 
 
@@ -316,18 +325,6 @@ Proof.
   - now rewrite eqQ, eqt1, eqs1, eqt2, eqs2 in H.
 Qed.
 
-Lemma sbuter_ex_no_steps_r {S1 S2 R1 R2} {p:@perm (S1*S2)}
-                           {Q: R1 -> R2 -> Perms} {t1 s1} t2 s2 t3 s3 :
-  no_steps_to t2 s2 t3 s3 -> sbuter_ex p Q t1 s1 t2 s2 -> sbuter_ex p Q t1 s1 t3 s3.
-Proof.
-  intros [t2' t3' eqt2 eqt3 H] sb.
-  rewrite eqt2 in sb; rewrite eqt3.
-  clear eqt2; clear eqt3.
-  revert t2' s2 t3' s3 H t1 s1 t2 t3 sb.
-  induction 1 as [t2' s t3' s' | b t2'' t3'' k s t3' s'].
-  - destruct H; rewrite H, H0; easy.
-Admitted.
-
 
 (** * `steps_to_sbuter_l` and `steps_to_sbuter_r`  **)
 
@@ -339,13 +336,18 @@ Admitted.
       |   ⋰   ⋮
    (t1,s1)~~(t3,s3)
  *)
-Lemma steps_to'_sbuter_l {S1 S2 R1 R2} (p:@perm (S1*S2)) (Q: R1 -> R2 -> Perms) t1 s1 t2 s2 t3 s3 :
-  no_errors s3 t3 -> steps_to' t1 s1 t2 s2 -> sbuter p Q t1 s1 t3 s3 ->
-  exists n (ts : Vector.t (CompM S2 R2 * S2) (pred n)) t4 s4,
+
+Definition sbuter_impl_path_r {S1 S2 R1 R2} (p:@perm (S1*S2)) (Q: R1 -> R2 -> Perms)
+                              t1 s1 t2 s2 t3 s3 :=
+  sbuter p Q t1 s1 t3 s3 ->
+  exists n (ts : Vector.t (CompM S2 R2 * S2) n) t4 s4,
     is_path n t3 s3 ts t4 s4 /\
     (forall i, sbuter_ex p Q t1 s1 (fst ts[@i]) (snd ts[@i]) /\
                guar p (s1, s3) (s1, snd ts[@i])) /\
     sbuter_ex p Q t2 s2 t4 s4 /\ guar p (s1, s3) (s2, s4).
+
+Lemma steps_to'_sbuter_l {S1 S2 R1 R2} (p:@perm (S1*S2)) (Q: R1 -> R2 -> Perms) t1 s1 t2 s2 t3 s3 :
+  no_errors s3 t3 -> steps_to' t1 s1 t2 s2 -> sbuter_impl_path_r p Q t1 s1 t2 s2 t3 s3.
 Proof.
   intros ne3 Ht Hb; destruct Ht.
   punfold Hb; dependent induction Hb.
@@ -359,89 +361,92 @@ Proof.
     + rewrite <- is_path_Tau_l; easy.
     + easy.
   (* sbuter_gen_modify_L *)
-  - exists 0; exists []; exists t2; exists c2; split; [|split; [|split]].
-    + apply no_steps_to_refl.
+  - exists 0; exists []; exists t2; exists c2. split; [|split; [|split]].
+    + left; apply no_steps_to_refl.
     + inversion i.
-    + exists p'; split; try assumption.
-      pfold; assumption.
+    + exists p'; split; [|pfold]; assumption.
     + assumption.
   (* sbuter_gen_modify_R *)
   - apply no_errors_Modify in ne3.
     specialize (IHHb ne3 f k JMeq_refl eq_refl).
     destruct IHHb as [n [ts [t4 [s4 [? [? [? ?]]]]]]].
-    exists (S n); destruct n.
-    + exists []; exists (k0 c2); exists (f0 c2); split; [|split; [|split]].
-      * apply steps_to_modify.
-      * inversion i.
-      * destruct H4 as [p'' [? ?]].
-        exists p''; split.
+    exists (S n); exists ((k0 c2, f0 c2) :: ts); exists t4; exists s4; split; [|split; [|split]].
+    + split; try assumption.
+      apply steps_to_modify.
+    + dependent destruction i; simpl.
+      * split.
+        -- exists p'; split; try assumption.
+           pfold; assumption.
+        -- assumption.
+      * specialize (H3 i); destruct H3; split.
         -- rewrite H1; assumption.
-        -- admit.
-      * apply no_steps_to_eqs in H2.
-        rewrite <- H2 in H5.
-        rewrite H0.
-        apply (sep_step_guar p p'); easy.
-    + exists ((k0 c2, f0 c2) :: ts); exists t4; exists s4; split; [|split; [|split]].
-      * split; try assumption.
-        apply steps_to_modify.
-      * dependent destruction i; simpl.
-        -- split.
-           ++ exists p'; split; try assumption.
-              pfold; assumption.
-           ++ assumption.
-        -- specialize (H3 i); destruct H3; split.
-           ++ rewrite H1; assumption.
-           ++ rewrite H0.
-              apply (sep_step_guar p p'); assumption.
-      * rewrite H1; assumption.
-      * rewrite H0.
-        apply (sep_step_guar p p'); assumption.
-  (* sbuter_gen_modify *)
-  - exists 1; exists []; exists (k2 c2); exists (f2 c2); split; [|split].
-    + apply steps_to_modify.
+        -- rewrite H0.
+           apply (sep_step_guar p p'); assumption.
+     + rewrite H1; assumption.
+     + rewrite H0.
+       apply (sep_step_guar p p'); assumption.
+   (* sbuter_gen_modify *)
+  - exists 0; exists []; exists (k2 c2); exists (f2 c2); split; [|split; [|split]].
+    + right; apply steps_to_modify.
     + inversion i.
-    + pclearbot.
-      split; [ exists p'; split |]; assumption.
+    + exists p'; pclearbot; easy.
+    + assumption.
   (* sbuter_gen_choice_R *)
   - rewrite <- no_errors_Choice in ne3.
     specialize (H1 false); specialize (ne3 false).
     specialize (H2 false ne3 f k JMeq_refl eq_refl).
     destruct H2 as [n [ts [t4 [s4 [? [? [? ?]]]]]]].
     exists n; exists ts; exists t4; exists s4; split; [|split; [|split]].
-    + eapply no_steps_is_path.
-      * apply (euttOr_closure_or false).
-        apply no_steps_to_refl.
-      * assumption.
+    + apply (no_steps_is_path _ _ _ (k0 false) c2); try assumption.
+      apply (euttOr_closure_or false), no_steps_to_refl.
     + intro i; specialize (H3 i).
       destruct H3; split.
       * rewrite H0; assumption.
       * apply (sep_step_guar p p'); assumption.
     + rewrite H0; assumption.
     + apply (sep_step_guar p p'); assumption.
+Qed.
+
+(* I have a feeling these don't hold... *)
+Lemma sbuter_unfold_or_l {S1 S2 R1 R2} (p:@perm (S1*S2)) (Q: R1 -> R2 -> Perms) k s1 t2 s2 :
+  sbuter p Q (vis Or k) s1 t2 s2 -> forall b, sbuter p Q (k b) s1 t2 s2.
+Admitted.
+Lemma sbuter_ex_fold_or_l {S1 S2 R1 R2} (p:@perm (S1*S2)) (Q: R1 -> R2 -> Perms) k b s1 t2 s2 :
+  sbuter_ex p Q (k b) s1 t2 s2 -> sbuter_ex p Q (vis Or k) s1 t2 s2.
 Admitted.
 
 Lemma steps_to_sbuter_l {S1 S2 R1 R2} (p:@perm (S1*S2)) (Q: R1 -> R2 -> Perms) t1 s1 t2 s2 t3 s3 :
-  no_errors s3 t3 -> steps_to t1 s1 t2 s2 -> sbuter p Q t1 s1 t3 s3 ->
-  exists n (ts : Vector.t (CompM S2 R2 * S2) (pred n)) t4 s4,
-    is_path n t3 s3 ts t4 s4 /\
-    (forall i, sbuter_ex p Q t1 s1 (fst ts[@i]) (snd ts[@i]) /\
-               guar p (s1, s3) (s1, snd ts[@i])) /\
-    sbuter_ex p Q t2 s2 t4 s4 /\ guar p (s1, s3) (s2, s4).
+  no_errors s3 t3 -> steps_to t1 s1 t2 s2 -> sbuter_impl_path_r p Q t1 s1 t2 s2 t3 s3.
+Proof.
+  intros ne3 [t1' t2' eqt1 eqt2] Hb.
+  rewrite eqt1 in Hb.
+  revert t1 t2 eqt1 eqt2; induction H; intros.
+  - pose proof (steps_to'_sbuter_l _ _ _ _ _ _ _ _ ne3 H Hb).
+    destruct H0 as [n [ts [t4' [s4' [? [? [? ?]]]]]]].
+    exists n; exists ts; exists t4'; exists s4'; split; [|split; [|split]].
+    all : try assumption.
+    + intro i; specialize (H1 i).
+      rewrite eqt1; assumption.
+    + rewrite eqt2; assumption.
+  - admit. (* this should follow from the two lemmas immediately above? *)
 Admitted.
 
-Lemma steps_to_sbuter_r {S1 S2 R1 R2} (p:@perm (S1*S2)) (Q: R1 -> R2 -> Perms) t1 s1 t3 s3 t4 s4 :
-  no_errors s3 t3 -> steps_to t3 s3 t4 s4 -> sbuter p Q t1 s1 t3 s3 ->
-  exists n (ts : Vector.t (CompM S1 R1 * S1) (pred n)) t2 s2,
+Definition sbuter_impl_path_l {S1 S2 R1 R2} (p:@perm (S1*S2)) (Q: R1 -> R2 -> Perms)
+                              t1 s1 t3 s3 t4 s4 :=
+  sbuter p Q t1 s1 t3 s3 ->
+  exists n (ts : Vector.t (CompM S1 R1 * S1) n) t2 s2,
     is_path n t1 s1 ts t2 s2 /\
     (forall i, sbuter_ex p Q (fst ts[@i]) (snd ts[@i]) t3 s3 /\
                guar p (s1, s3) (snd ts[@i], s3)) /\
     sbuter_ex p Q t2 s2 t4 s4 /\ guar p (s1, s3) (s2, s4).
+
+Lemma steps_to_sbuter_r {S1 S2 R1 R2} (p:@perm (S1*S2)) (Q: R1 -> R2 -> Perms) t1 s1 t3 s3 t4 s4 :
+  no_errors s3 t3 -> steps_to t3 s3 t4 s4 -> sbuter_impl_path_l p Q t1 s1 t3 s3 t4 s4.
 Admitted.
 
 
 (** * `eq_sat_sep_sbuter` and basic facts  **)
 
-Definition TPred S R := CompM S R -> S -> Prop.
 Definition eq_sat_sep_sbuter {S1 S2 R1 R2} (q:@perm (S1*S2))
   (P1:TPred S1 R1) (P2:TPred S2 R2) :=
   forall p Q t1 s1 t2 s2, pre q (s1,s2) -> separate p q ->
@@ -462,45 +467,44 @@ Qed.
 (** * `EF` and lemmas  **)
 
 Inductive EF {S R} (P : TPred S R) : TPred S R :=
-| EF_no_step t s t' s' : no_steps_to t s t' s' -> P t' s' -> EF P t s
+| EF_refl t s : P t s -> EF P t s
 | EF_step t s t' s' : steps_to t s t' s' -> EF P t' s' -> EF P t s.
-Arguments EF_no_step {S R P t s} t' s'.
+Arguments EF_refl {S R P} t s.
 Arguments EF_step {S R P t s} t' s'.
 
-Definition EF_refl {S R} {P : TPred S R} t s :=
-  @EF_no_step S R P t s t s (no_steps_to_refl _ _).
-
-Lemma EF_path {S1 R1 P} n t0 s0 (ts : Vector.t (CompM S1 R1 * S1) (pred n)) tf sf :
+Lemma EF_path {S1 R1 P} n t0 s0 (ts : Vector.t (CompM S1 R1 * S1) n) tf sf :
+  is_no_step_invariant P ->
   is_path n t0 s0 ts tf sf -> EF P tf sf -> EF P t0 s0.
 Proof.
-  destruct n.
-  - destruct 2.
-    + apply (EF_no_step t' s'); try assumption.
-      apply (no_steps_to_trans t s); assumption.
-    + apply (EF_step t' s'); try assumption.
-      apply (euttOr_closure_trans_eq_l t s); assumption.
-  - revert t0 s0.
-    simpl in ts; induction ts; intros.
-    + now apply (EF_step tf sf).
-    + destruct h, H.
-      apply (EF_step c s); try assumption.
-      now apply IHts.
+  intros.
+  revert t0 s0 H0; induction ts; [|destruct h]; intros.
+  - destruct H0, H1.
+    + apply EF_refl.
+      now rewrite (is_no_step_invariant_no_steps P t0 s0 t s).
+    + apply (euttOr_closure_trans_eq_l (t1:=t0) (s1:=s0) t s) in H1; try assumption.
+      apply (EF_step t' s'); assumption.
+    + apply (EF_step t s); try assumption.
+      apply EF_refl; assumption.
+    + apply (EF_step t s); try assumption.
+      apply (EF_step t' s'); assumption.
+  - destruct H0.
+    apply (EF_step c s); try assumption.
+    apply IHts; assumption.
 Qed.
 
 
 (** * `eq_sat_EF`  **)
 
 Lemma eq_sat_EF {S1 S2 R1 R2} q (P1 : TPred S1 R1) (P2 : TPred S2 R2)
-  : eq_sat_sep_sbuter q P1 P2 ->
+  : is_no_step_invariant P1 -> is_no_step_invariant P2 ->
+    eq_sat_sep_sbuter q P1 P2 ->
     eq_sat_sep_sbuter q (EF P1) (EF P2).
 Proof.
-  split; intro.
+  intros invar1 invar2; split; intros.
   - revert H4 p t2 s2 H0 H1 H2 H3.
     induction 1 as [t1 s1 | t1 s1 t1' s1']; intros.
     + apply (EF_refl t2 s2).
-      (* rewrite (no_steps_to_eqs H0) in H2. *)
-      apply (H p Q t1 s1 t2 s2); try assumption.
-      apply (no_steps_to_sbuter_l t1 s1 t' s'); assumption.
+      apply (H p Q t1 s1 t2 s2); assumption.
     + pose proof (steps_to_sbuter_l _ _ _ _ _ _ _ _ H5 H0 H3).
       destruct H6 as [n [ts [t2' [s2' [? [? [? ?]]]]]]].
       apply (EF_path n t2 s2 ts t2' s2'); try assumption.
@@ -513,10 +517,7 @@ Proof.
   - revert H4 p t1 s1 H0 H1 H2 H3.
     induction 1 as [t2 s2 | t2 s2 t2' s2']; intros.
     + apply (EF_refl t1 s1).
-      rewrite (no_steps_to_eqs H0) in H2.
-      apply (no_errors_no_steps_to t2 s2 t' s' H0) in H5.
-      apply (H p Q t1 s1 t' s'); try assumption.
-      eapply (no_steps_to_sbuter_r t1 s1 t2 s2 t' s'); assumption.
+      apply (H p Q t1 s1 t2 s2); assumption.
     + pose proof (steps_to_sbuter_r _ _ _ _ _ _ _ _ H5 H0 H3).
       destruct H6 as [n [ts [t1' [s1' [? [? [? ?]]]]]]].
       apply (EF_path n t1 s1 ts t1' s1'); try assumption.
@@ -549,9 +550,6 @@ Lemma eq_sat_AG {S1 S2 R1 R2} q (P1 : TPred S1 R1) (P2 : TPred S2 R2)
 Proof.
   split.
   - pcofix CIH.
-    punfold H4; destruct H4.
-    pcofix CIH; pfold; split.
-    + 
 Admitted.
 
 
