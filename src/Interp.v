@@ -92,7 +92,7 @@ Proof.
 Admitted.
 
 
-(** * `euttOr_closure` and lemmas **)
+(** * `eutt_closure` and lemmas **)
 
 Inductive eutt_closure {S R} r (t1 : itree (sceE S) R) (s1 : S)
                                (t2 : itree (sceE S) R) (s2 : S) : Prop :=
@@ -100,7 +100,10 @@ Inductive eutt_closure {S R} r (t1 : itree (sceE S) R) (s1 : S)
     t1 ≈ t1' -> t2 ≈ t2' -> r t1' s1 t2' s2 -> eutt_closure r t1 s1 t2 s2.
 Arguments eutt_closure_ex {S R r t1 s1 t2 s2} t1' t2'.
 
-Global Instance eutt_Proper_eutt_closure {S R} r :
+Definition is_eutt_closed {S R} (r : itree (sceE S) R -> S -> itree (sceE S) R -> S -> Prop) :=
+  Proper (eutt eq ==> eq ==> eutt eq ==> eq ==> impl) r.
+
+Global Instance eutt_closure_is_eutt_closed {S R} r :
   Proper (eutt eq ==> eq ==> eutt eq ==> eq ==> impl) (@eutt_closure S R r).
 Proof.
   intros t1 t1' eqt1 s1 s1' eqs1 t2 t2' eqt2 s2 s2' eqs2 H.
@@ -110,13 +113,29 @@ Proof.
   rewrite eqs1, eqs2 in X; exact X.
 Qed.
 
+Lemma eutt_closure_rec {S R} (r r' : itree (sceE S) R -> S -> itree (sceE S) R -> S -> Prop) :
+  is_eutt_closed r' -> (forall t1 s1 t2 s2, r t1 s1 t2 s2 -> r' t1 s1 t2 s2) ->
+  forall t1 s1 t2 s2, eutt_closure r t1 s1 t2 s2 -> r' t1 s1 t2 s2.
+Proof.
+  intros.
+  destruct H1.
+  apply H0 in H3.
+  eapply H.
+  5: exact H3.
+  all: easy.
+Qed.
+
 Lemma eutt_closure_Tau_L {S R} r t1 s1 t2 s2 :
   @eutt_closure S R r t1 s1 t2 s2 <-> @eutt_closure S R r (Tau t1) s1 t2 s2.
 Proof.
   split; rewrite tau_eutt; easy.
 Qed.
 
-Inductive euttOr_closure' {S R} r : itree (sceE S) R -> S -> itree (sceE S) R -> S -> Prop :=
+
+(** * `eutt_or_closure` and lemmas **)
+
+Inductive euttOr_closure' {S R} (r : itree (sceE S) R -> S -> itree (sceE S) R -> S -> Prop) :
+  itree (sceE S) R -> S -> itree (sceE S) R -> S -> Prop :=
 | euttOr_closure'_rel t1 s1 t2 s2 :
     r t1 s1 t2 s2 -> euttOr_closure' r t1 s1 t2 s2
 | euttOr_closure'_or b t1' t2' k s1 t2 s2 :
@@ -126,17 +145,21 @@ Arguments euttOr_closure'_or {S R r} b t1' t2' k s1 t2 s2.
 
 Definition euttOr_closure {S R} r := @eutt_closure S R (euttOr_closure' r).
 
-Global Instance eutt_Proper_euttOr_closure {S R} r :
+Global Instance euttOr_closure_is_eutt_closed {S R} r :
   Proper (eutt eq ==> eq ==> eutt eq ==> eq ==> impl) (@euttOr_closure S R r).
-Proof. apply eutt_Proper_eutt_closure. Qed.
+Proof. apply eutt_closure_is_eutt_closed. Qed.
 
-Definition euttOr_closure_rel {S R} r t1 s1 t2 s2 :
+Definition euttOr_closure_rel {S R} (r : itree (sceE S) R -> S -> itree (sceE S) R -> S -> Prop)
+                              t1 s1 t2 s2 :
   r t1 s1 t2 s2 -> @euttOr_closure S R r t1 s1 t2 s2.
 Proof.
   intro.
   apply (eutt_closure_ex t1 t2); try reflexivity.
   apply euttOr_closure'_rel; assumption.
 Defined.
+
+Definition is_Or_closed {S R} (r : itree (sceE S) R -> S -> itree (sceE S) R -> S -> Prop) :=
+  forall b k s1 t2 s2, r (k b) s1 t2 s2 -> r (vis Or k) s1 t2 s2.
 
 Definition euttOr_closure_or {S R r} b k s1 t2 s2 :
   euttOr_closure r (k b) s1 t2 s2 -> @euttOr_closure S R r (vis Or k) s1 t2 s2.
@@ -147,23 +170,36 @@ Proof.
   apply (euttOr_closure'_or b t1' t2'); easy.
 Defined.
 
+Definition euttOr_closure_rec {S R}
+           (r r' : itree (sceE S) R -> S -> itree (sceE S) R -> S -> Prop) :
+  is_eutt_closed r' -> is_Or_closed r' ->
+  (forall t1 s1 t2 s2, r t1 s1 t2 s2 -> r' t1 s1 t2 s2) ->
+  forall t1 s1 t2 s2, euttOr_closure r t1 s1 t2 s2 -> r' t1 s1 t2 s2.
+Proof.
+  intros euttC OrC H.
+  apply eutt_closure_rec; [ assumption | intros ].
+  induction H0.
+  - apply H; assumption.
+  - apply (OrC b).
+    eapply euttC.
+    5: exact IHeuttOr_closure'.
+    all: easy.
+Qed.
+
 Lemma euttOr_closure_no_errors {S R}
       (r : itree (sceE S) R -> S -> itree (sceE S) R -> S -> Prop)
       (Hr : forall t s t' s', r t s t' s' -> no_errors s t -> no_errors s' t')
       t s t' s' :
   euttOr_closure r t s t' s' -> no_errors s t -> no_errors s' t'.
 Proof.
-  intros [t1' t2' eqt1 eqt2 H] ne.
-  rewrite eqt1 in ne; rewrite eqt2.
-  clear eqt1; clear eqt2.
-  revert t1' t2' H ne.
-  induction 1 as [t1' s t2' s' | b t1'' t2'' k s t2' s'].
-  - now apply Hr.
-  - intro ne; rewrite <- no_errors_Choice in ne; specialize (ne b).
-    rewrite H0.
-    apply IHeuttOr_closure'.
-    rewrite <- H.
-    assumption.
+  revert t s t' s'.
+  apply (euttOr_closure_rec r (fun t1 s1 t2 s2 => no_errors s1 t1 -> no_errors s2 t2)).
+  - cbv - [eutt no_errors]; intros; rewrite H, H0, H1, H2 in H3; auto.
+  - unfold is_Or_closed; intros.
+    rewrite <- no_errors_Choice in H0.
+    apply H, H0.
+  - intros.
+    eapply (Hr t1 s1); assumption.
 Qed.
 
 Lemma euttOr_closure_trans_eq_l {S R} {r} {t1 s1} t2 s2 {t3 s3} :
@@ -177,7 +213,7 @@ Proof.
   induction H.
   - destruct H0.
     + destruct H.
-      rewrite H, H0, eqt2'.
+      rewrite H, eqt2', H1.
       apply euttOr_closure_rel; assumption.
     + destruct H.
       rewrite H, eqt2', H3.
@@ -204,9 +240,9 @@ Inductive steps_to' {S R} : itree (sceE S) R -> S -> itree (sceE S) R -> S -> Pr
 
 Definition steps_to {S R} := @euttOr_closure S R steps_to'.
 
-Global Instance eutt_Proper_steps_to {S R} :
+Global Instance steps_to_is_eutt_closed {S R} :
   Proper (eutt eq ==> eq ==> eutt eq ==> eq ==> impl) (@steps_to S R).
-Proof. apply eutt_Proper_euttOr_closure. Qed.
+Proof. apply euttOr_closure_is_eutt_closed. Qed.
 
 Definition steps_to_modify {S R} f k s : @steps_to S R (vis (Modify f) k) s (k s) (f s).
 Proof. apply euttOr_closure_rel; constructor. Defined.
@@ -246,24 +282,6 @@ Proof.
   destruct 1; clear H H0.
   revert t1' t2' H1; induction 1; intros; easy.
 Qed.
-
-
-(** * `is_no_step_invariant` and basic facts  **)
-
-Definition is_no_step_invariant {S R} (P : TPred S R) :=
-  Proper (eutt eq ==> eq ==> impl) P /\ (forall k b s, P (vis Or k) s <-> P (k b) s).
-
-Lemma is_no_step_invariant_no_steps {S R} (P : TPred S R) t1 s1 t2 s2 :
-  is_no_step_invariant P ->
-  no_steps_to t1 s1 t2 s2 -> P t1 s1 <-> P t2 s2.
-Proof.
-  destruct 2 as [t1' t2' eqt1 eqt2].
-  induction H0.
-  - destruct H0.
-    split; apply H; auto.
-    + now rewrite eqt1, H0.
-    + now rewrite eqt2, <- H0.
-Admitted.
 
 
 (** * `is_path` and lemmas **)
@@ -407,28 +425,17 @@ Proof.
     + apply (sep_step_guar p p'); assumption.
 Qed.
 
-(* I have a feeling these don't hold... *)
-Lemma sbuter_unfold_or_l {S1 S2 R1 R2} (p:@perm (S1*S2)) (Q: R1 -> R2 -> Perms) k s1 t2 s2 :
-  sbuter p Q (vis Or k) s1 t2 s2 -> forall b, sbuter p Q (k b) s1 t2 s2.
-Admitted.
-Lemma sbuter_ex_fold_or_l {S1 S2 R1 R2} (p:@perm (S1*S2)) (Q: R1 -> R2 -> Perms) k b s1 t2 s2 :
-  sbuter_ex p Q (k b) s1 t2 s2 -> sbuter_ex p Q (vis Or k) s1 t2 s2.
-Admitted.
-
 Lemma steps_to_sbuter_l {S1 S2 R1 R2} (p:@perm (S1*S2)) (Q: R1 -> R2 -> Perms) t1 s1 t2 s2 t3 s3 :
   no_errors s3 t3 -> steps_to t1 s1 t2 s2 -> sbuter_impl_path_r p Q t1 s1 t2 s2 t3 s3.
 Proof.
-  intros ne3 [t1' t2' eqt1 eqt2] Hb.
-  rewrite eqt1 in Hb.
-  revert t1 t2 eqt1 eqt2; induction H; intros.
-  - pose proof (steps_to'_sbuter_l _ _ _ _ _ _ _ _ ne3 H Hb).
-    destruct H0 as [n [ts [t4' [s4' [? [? [? ?]]]]]]].
-    exists n; exists ts; exists t4'; exists s4'; split; [|split; [|split]].
-    all : try assumption.
-    + intro i; specialize (H1 i).
-      rewrite eqt1; assumption.
-    + rewrite eqt2; assumption.
-  - admit. (* this should follow from the two lemmas immediately above? *)
+  intro; revert t1 s1 t2 s2.
+  eapply (euttOr_closure_rec _ (fun t1 s1 t2 s2 =>  sbuter_impl_path_r p Q t1 s1 t2 s2 t3 s3)).
+  - cbv - [eutt sbuter_impl_path_r]; intros t1 t1' eqt1 s1 s1' eqs1 t2 t2' eqt2 s2 s2' eqs2 ?.
+    rewrite <- eqs1, <- eqs2; clear s1' s2' eqs1 eqs2.
+    admit.
+  - unfold is_Or_closed; intros.
+    admit.
+  - intros; apply steps_to'_sbuter_l; assumption.
 Admitted.
 
 Definition sbuter_impl_path_l {S1 S2 R1 R2} (p:@perm (S1*S2)) (Q: R1 -> R2 -> Perms)
@@ -443,6 +450,25 @@ Definition sbuter_impl_path_l {S1 S2 R1 R2} (p:@perm (S1*S2)) (Q: R1 -> R2 -> Pe
 Lemma steps_to_sbuter_r {S1 S2 R1 R2} (p:@perm (S1*S2)) (Q: R1 -> R2 -> Perms) t1 s1 t3 s3 t4 s4 :
   no_errors s3 t3 -> steps_to t3 s3 t4 s4 -> sbuter_impl_path_l p Q t1 s1 t3 s3 t4 s4.
 Admitted.
+
+
+(** * `is_no_step_invariant` and basic facts  **)
+
+Definition is_no_step_invariant {S R} (P : TPred S R) :=
+  is_eutt_closed (fun t1 s1 t2 s2 => P t1 s1 <-> P t2 s2) /\
+  is_Or_closed   (fun t1 s1 t2 s2 => P t1 s1 <-> P t2 s2).
+
+Lemma is_no_step_invariant_no_steps {S R} (P : TPred S R) t1 s1 t2 s2 :
+  is_no_step_invariant P ->
+  no_steps_to t1 s1 t2 s2 -> P t1 s1 <-> P t2 s2.
+Proof.
+  intros [? ?]; revert t1 s1 t2 s2.
+  apply (euttOr_closure_rec _ (fun t1 s1 t2 s2 => P t1 s1 <-> P t2 s2)).
+  - assumption.
+  - assumption.
+  - intros ? ? ? ? [? ?].
+    rewrite H1, H2; reflexivity.
+Qed.
 
 
 (** * `eq_sat_sep_sbuter` and basic facts  **)
