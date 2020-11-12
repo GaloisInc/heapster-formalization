@@ -310,7 +310,8 @@ Proof.
     apply (IHor_tau_step H0 H1).
 Qed.
 
-(* An impressionistic picture of `step_sbuter_r`.
+(* An impressionistic picture of `step_sbuter_r` - the proof is essentially
+   identical to that of `step_sbuter_r`.
 
          (t2,s2)
    any_step ⋮      ⋱
@@ -333,7 +334,70 @@ Definition sbuter_impl_path_l {S1 S2 R1 R2} (p:@perm (S1*S2)) (Q: R1 -> R2 -> Pe
 
 Lemma modify_step_sbuter_r {S1 S2 R1 R2} (p:@perm (S1*S2)) (Q: R1 -> R2 -> Perms) t1 s1 t3 s3 t4 s4 :
   no_errors s3 t3 -> modify_step t3 s3 t4 s4 -> sbuter_impl_path_l p Q t1 s1 t3 s3 t3 s3 t4 s4.
-Admitted.
+Proof.
+  intros ne3 Ht Hb; destruct Ht.
+  rewrite <- no_errors_Modify in ne3.
+  punfold Hb; dependent induction Hb.
+  (* sbuter_gen_tau_L *)
+  - specialize (IHHb f k ne3 JMeq_refl eq_refl).
+    destruct IHHb as [n [ts [t2 [s2 [? [? ?]]]]]].
+    exists (S n); exists ((t1,c1) :: ts); exists t2; exists s2; split; [|split].
+    + split; try assumption.
+      left; apply or_tau_step_Tau, or_tau_step_refl.
+    + intro i; dependent destruction i; [split|].
+      * exists p; split; [reflexivity|].
+        pfold; assumption.
+      * easy.
+      * apply H1.
+    + easy.
+  (* sbuter_gen_modify_L *)
+  - specialize (IHHb f k ne3 JMeq_refl eq_refl).
+    destruct IHHb as [n [ts [t2 [s2 [? [? [? ?]]]]]]].
+    exists (S n); exists ((k0 c1, f0 c1) :: ts); exists t2; exists s2; split; [|split; [|split]].
+    + split; try assumption.
+      right; apply modify_step_Modify.
+    + dependent destruction i; simpl.
+      * split.
+        -- exists p'; split; try assumption.
+           pfold; assumption.
+        -- assumption.
+      * specialize (H3 i); destruct H3; split.
+        -- rewrite H1; assumption.
+        -- rewrite H0.
+           apply (sep_step_guar p p'); assumption.
+     + rewrite H1; assumption.
+     + rewrite H0.
+       apply (sep_step_guar p p'); assumption.
+  (* sbuter_gen_modify_R *)
+  - exists 0; exists []; exists t1; exists c1; split; [|split; [|split]].
+    + left; apply or_tau_step_refl.
+    + inversion i.
+    + exists p'; split; [|pfold]; assumption.
+    + assumption.
+  (* sbuter_gen_modify *)
+  - exists 0; exists []; exists (k1 c1); exists (f1 c1); split; [|split; [|split]].
+    + right; apply modify_step_Modify.
+    + inversion i.
+    + exists p'; pclearbot; easy.
+    + assumption.
+  (* sbuter_gen_choice_L *)
+  - specialize (H1 false).
+    specialize (H2 false f k ne3 JMeq_refl eq_refl).
+    destruct H2 as [n [ts [t2 [s2 [? [? [? ?]]]]]]].
+    exists (S n); exists ((k0 false, c1) :: ts); exists t2; exists s2; split; [|split; [|split]].
+    + split; try assumption.
+      left; apply (or_tau_step_Or false), or_tau_step_refl.
+    + intro i; dependent destruction i; simpl.
+      * split.
+        -- exists p'; split; try assumption.
+           pfold; assumption.
+        -- reflexivity.
+      * specialize (H3 i); destruct H3; split.
+        -- rewrite H0; assumption.
+        -- apply (sep_step_guar p p'); assumption.
+    + rewrite H0; assumption.
+    + apply (sep_step_guar p p'); assumption.
+Qed.
 
 Lemma step_sbuter_r {S1 S2 R1 R2} (p:@perm (S1*S2)) (Q: R1 -> R2 -> Perms) t1 s1 t0 s0 t3 s3 t4 s4 :
   no_errors s0 t0 ->
