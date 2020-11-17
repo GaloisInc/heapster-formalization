@@ -34,8 +34,15 @@ Import MonadNotation.
 Import ListNotations.
 Import ITreeNotations.
 
+(* TODO put in some utilities file? *)
+Class Lens (A B:Type) : Type :=
+  { lget: A -> B; lput: A -> B -> A;
+    lGetPut: forall a b, lget (lput a b) = b;
+    lPutGet: forall a, lput a (lget a) = a;
+    lPutPut: forall a b b', lput (lput a b) b' = lput a b' }.
+
 Section Config.
-  Context {specConfig : Type}.
+  Context {Si Ss : Type}.
 
   Variant Lifetime := current | finished.
 
@@ -44,6 +51,8 @@ Section Config.
     l : list Lifetime;
     m : memory;
     }.
+
+  Context `{Hlens: Lens Si config}.
 
   Definition start_config :=
     {|
@@ -75,7 +84,7 @@ Section Config.
   Proof.
     intros. destruct c. unfold lifetime in H. unfold replace_lifetime. f_equal. simpl in *.
     generalize dependent n. induction l0; intros; simpl in *; auto.
-    - assert (@nth_error Lifetime [] n <> None). intro. rewrite H in H0. discriminate H0.
+    - assert (@nth_error Lifetime [] n <> None). intro. rewrite H0 in H. discriminate H.
       apply nth_error_Some in H0. inversion H0.
     - destruct n; auto.
       + inversion H. auto.
@@ -567,12 +576,12 @@ Section Config.
 
   (** memory permissions **)
 
-  Program Definition read_perm (ptr : addr) (v : Value) : (@perm (config * specConfig)) :=
+  Program Definition read_perm (ptr : addr) (v : Value) : (@perm (Si * Ss)) :=
     {|
     (* ptr points to valid memory *)
-    pre '(x, _) := read x ptr = Some v;
+    pre '(x, _) := read (lget x) ptr = Some v;
     (* only checks if the memory ptr points to in the 2 configs are equal *)
-    rely '(x, _) '(y, _) := read x ptr = read y ptr;
+    rely '(x, _) '(y, _) := read (lget x) ptr = read (lget y) ptr;
     (* no guarates allowed *)
     guar '(x, _) '(y, _) := x = y;
     |}.
@@ -583,16 +592,16 @@ Section Config.
     constructor; [intros [] | intros [] [] [] ? ?]; subst; auto.
   Qed.
 
-  Program Definition write_perm (ptr : addr) (v : Value) : (@perm (config * specConfig)) :=
+  Program Definition write_perm (ptr : addr) (v : Value) : (@perm (Si * Ss)) :=
     {|
     (* ptr points to valid memory *)
-    pre '(x, _) := read x ptr = Some v;
+    pre '(x, _) := read (lget x) ptr = Some v;
     (* only checks if the memory ptr points to in the 2 configs are equal *)
-    rely '(x, _) '(y, _) := read x ptr = read y ptr;
+    rely '(x, _) '(y, _) := read (lget x) ptr = read (lget y) ptr;
     (* only the pointer we have write permission to may change *)
-    guar '(x, _) '(y, _) := (forall ptr', ptr <> ptr' -> read x ptr' = read y ptr') /\
-                            alloc_invariant x y ptr /\
-                            l x = l y
+    guar '(x, _) '(y, _) := (forall ptr', ptr <> ptr' -> read (lget x) ptr' = read (lget y) ptr') /\
+                            alloc_invariant (lget x) (lget y) ptr /\
+                            l (lget x) = l (lget y)
     |}.
   Next Obligation.
     constructor; [intros [] | intros [] [] []]; auto; etransitivity; eauto.
@@ -655,43 +664,43 @@ Section Config.
   (* Qed. *)
 
 
-  Definition load (v : Value) : itree (sceE config) Value :=
-    c <- trigger (Modify id);;
+  Definition load (v : Value) : itree (sceE Si) Value :=
+    s <- trigger (Modify id);;
     match v with
     | VNum _ => throw tt
-    | VPtr p => match read c p with
+    | VPtr p => match read (lget s) p with
                | None => throw tt
                | Some b => Ret b
                end
     end.
 
-  Definition store (l : Value) (v : Value) : itree (sceE config) config :=
+  Definition store (l : Value) (v : Value) : itree (sceE Si) Si :=
     match l with
     | VNum _ => throw tt
-    | VPtr l => c <- trigger (Modify (fun c => match write c l v with
-                                          | None => c
-                                          | Some c' => c'
+    | VPtr l => s <- trigger (Modify (fun s => match write (lget s) l v with
+                                          | None => s
+                                          | Some c => (lput s c)
                                           end)) ;;
-               match write c l v with
+               match write (lget s) l v with
                | None => throw tt
-               | Some c' => Ret c'
+               | Some c => Ret (lput s c)
                end
     end.
 
-  Example no_error_load : no_errors (config_mem (0, 0) (VNum 1))
-                                    (load (VPtr (0, 0))).
+  Example no_error_load s : no_errors (lput s (config_mem (0, 0) (VNum 1)))
+                                      (load (VPtr (0, 0))).
   Proof.
     pstep. unfold load. rewritebisim @bind_trigger. constructor.
-    left. pstep. constructor.
+    left. pstep. rewrite lGetPut. constructor.
   Qed.
-  Example no_error_store : no_errors (config_mem (0, 0) (VNum 1))
-                                     (store (VPtr (0, 0)) (VNum 2)).
+  Example no_error_store s : no_errors (lput s (config_mem (0, 0) (VNum 1)))
+                                       (store (VPtr (0, 0)) (VNum 2)).
   Proof.
     pstep. unfold store. rewritebisim @bind_trigger. constructor.
-    left. pstep. constructor.
+    left. pstep. rewrite lGetPut. constructor.
   Qed.
 
-  Lemma typing_load {R} ptr (Q : Value -> (@Perms (config * specConfig))) (r : R) :
+  Lemma typing_load {R} ptr (Q : Value -> Perms) (r : R) :
     typing
       (read_Perms ptr Q)
       (fun x _ => (read_Perms ptr (eq_p x)) * Q x)
@@ -702,7 +711,7 @@ Section Config.
     econstructor; eauto; try reflexivity.
     destruct H as (? & (? & ?) & ?); subst.
     destruct H1 as (? & ? & ? & ? & ?). simpl in *.
-    assert (read c1 ptr = Some x0).
+    assert (read (lget c1) ptr = Some x0).
     { apply H2 in H0. destruct H0 as (? & _). apply H in H0. auto. }
     rewrite H3. constructor; eauto.
     simpl. exists x, x1. split; [| split]; eauto. eexists. split; eauto.
@@ -710,7 +719,7 @@ Section Config.
     rewrite sep_conj_perm_bottom. reflexivity.
   Qed.
 
-  Lemma typing_store {R} ptr val' (P Q : Value -> (@Perms (config * specConfig))) (r : R) :
+  Lemma typing_store {R} ptr val' (P Q : Value -> Perms) (r : R) :
     typing
       (write_Perms ptr P * Q val')
       (fun _ _ => write_Perms ptr Q)
@@ -721,7 +730,7 @@ Section Config.
     rename p into p''. rename H0 into Hpre.
     destruct H as (p' & q & Hwrite & Hq & Hlte). destruct Hwrite as (? & (v & ?) & Hwrite); subst.
     destruct Hwrite as (pw & p & Hwritelte & Hp & Hlte'). simpl in *.
-    assert (exists val, read c1 ptr = Some val).
+    assert (exists val, read (lget c1) ptr = Some val).
     {
       apply Hlte in Hpre. destruct Hpre as (Hpre & _).
       apply Hlte' in Hpre. destruct Hpre as (Hpre & _).
@@ -729,10 +738,10 @@ Section Config.
     }
     destruct H as (val & Hread). eapply (read_success_write _ _ _ val') in Hread.
     destruct Hread as (c' & Hwrite).
-    assert (Hguar : guar p' (c1, c2) (c', c2)).
+    assert (Hguar : guar p' (c1, c2) ((lput c1 c'), c2)).
     {
       apply Hlte'. constructor 1. left. apply Hwritelte. simpl.
-      split; [| split].
+      split; [| split]; rewrite lGetPut.
       + eapply write_success_other_ptr; eauto.
       + eapply write_success_allocation; eauto.
       + eapply write_success_others; eauto.
@@ -743,7 +752,7 @@ Section Config.
       2: { simpl. eexists. split. exists val'. reflexivity.
            simpl. eexists. exists q. split; [reflexivity | split]; eauto. reflexivity. }
       split; [| split].
-      - eapply write_read; eauto.
+      - eapply write_read; rewrite lGetPut; eauto.
       - apply Hlte in Hpre. respects. 2: apply Hpre; eauto.
         apply Hpre. auto.
       - apply Hlte in Hpre. destruct Hpre as (_ & _ & Hsep). symmetry in Hsep.
@@ -758,14 +767,14 @@ Section Config.
       intros ? []. constructor; auto.
   Qed.
 
-  Lemma typing_store' {R} ptr val' (P : Value -> (@Perms (config * specConfig))) (r : R):
+  Lemma typing_store' {R} ptr val' (P : Value -> Perms) (r : R):
     typing
       (write_Perms ptr P)
       (fun _ _ => write_Perms ptr (eq_p val'))
       (store (VPtr ptr) val')
       (Ret r).
   Proof.
-    assert (bottom_Perms ≡ @eq_p config specConfig _ val' val').
+    assert (bottom_Perms ≡ @eq_p Si Ss _ val' val').
     { split; repeat intro; simpl; auto. }
     rewrite <- sep_conj_Perms_bottom_identity. rewrite sep_conj_Perms_commut.
     rewrite H. apply typing_store.

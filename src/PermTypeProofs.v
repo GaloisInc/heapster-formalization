@@ -34,7 +34,18 @@ From Paco Require Import
 Import MonadNotation.
 Import ITreeNotations.
 
-Context (Si Ss:Type).
+Context (Si' Ss:Type).
+Definition Si := prod config Si'.
+
+Program Definition lens_config' : Lens Si config :=
+  {|
+  lget := fst;
+  lput p c := (c, snd p);
+  |}.
+Next Obligation.
+  destruct a; auto.
+Qed.
+Instance lens_config : Lens Si config := lens_config'.
 
 Lemma TrueI (A : Type) P (xi : A) :
   P ⊑ (P * (xi : trueP Si Ss @ tt)).
@@ -234,4 +245,144 @@ Proof.
   eapply Weak. apply ExI with (F := fun n : nat => eqp Si Ss (VNum n)). reflexivity. fold IsNat.
   (* Ret *)
   apply Ret_.
+Qed.
+
+Lemma PtrI A xi yi xs ys rw o (T : VPermType Si Ss A) :
+  xi : ptr _ _ (rw, o, T) @ ys ⊑ xi : ptr _ _ (rw, o, eqp Si Ss yi) @ xs * yi : T @ ys.
+Proof.
+  destruct xi; simpl.
+  - rewrite sep_conj_Perms_top_absorb. reflexivity.
+  - repeat intro. destruct a. rename p into p'.
+    destruct H as (p & t & (P & (v & ?) & Hp) & Hp' & Hlte). subst.
+    destruct Hp as (? & ? & ? & ? & ?). simpl in *. subst.
+    eexists. split; [exists v; reflexivity |].
+    eapply Perms_upwards_closed; eauto.
+    do 2 eexists. split; [| split]; eauto.
+    apply sep_conj_perm_monotone; intuition.
+    etransitivity; eauto. apply lte_l_sep_conj_perm.
+Qed.
+
+Lemma ReadDup o xi yi xs:
+  xi : ptr _ _ (R, o, eqp Si Ss yi) @ xs * xi : ptr _ _ (R, o, eqp _ _ yi) @ xs ⊑
+  xi : ptr _ _ (R, o, eqp _ _ yi) @ xs.
+Proof.
+  repeat intro. simpl in *. destruct xi; [contradiction |].
+  destruct a as [b o']. unfold offset in *.
+  destruct H as (? & (v & ?) & ?). subst.
+  exists (read_perm (b, o' + o) v), (read_perm (b, o' + o) v).
+  destruct H0 as (pread & peq & Hpread & Hpeq & Hlte).
+  simpl in Hpread, Hpeq. subst.
+  assert (read_perm (b, o' + o) v ∈ ptr_Perms _ _ R (VPtr (b, o' + o)) xs (eqp Si Ss v)).
+  {
+    eexists. split; eauto. simpl in *. exists (read_perm (b, o' + o) v), bottom_perm.
+    split; [| split]. 2: reflexivity.
+    - split; intros; auto.
+    - rewrite sep_conj_perm_bottom. reflexivity.
+  }
+  split; [| split]; auto.
+  constructor; intros; eauto.
+  - split; [| split]; auto. 1, 2: apply Hpread; apply Hlte; auto.
+    split; intros; auto; destruct x0, y; simpl in H1; subst; reflexivity.
+  - split; apply Hpread; apply Hlte; auto.
+  - apply Hlte. constructor. left. apply Hpread. induction H0; auto.
+    + destruct H0; auto.
+    + etransitivity; eauto.
+Qed.
+
+Lemma PtrOff A xi xs rw o1 o2 (T : VPermType Si Ss A) :
+  o1 >= o2 ->
+  offset xi o2 : ptr _ _ (rw, o1 - o2, T) @ xs ⊑ xi : ptr _ _ (rw, o1, T) @ xs.
+Proof.
+  destruct xi; [reflexivity | destruct a].
+  intros. simpl. rewrite <- Nat.add_assoc. rewrite (Minus.le_plus_minus_r _ _ H).
+  reflexivity.
+Qed.
+
+Lemma PtrE A B C (P : Perms) rw o (T : VPermType Si Ss A) (xi yi : Value) xs ti ts (U : PermType Si Ss B C) :
+  (forall yi, P * xi : ptr _ _ (rw, o, eqp Si Ss yi) @ tt * yi : T @ xs ⊢ ti ▷ ts ::: U) ->
+  P * xi : ptr _ _ (rw, o, T) @ xs ⊢ ti ▷ ts ::: U.
+Proof.
+  repeat intro. rename p into p''. destruct H0 as (p & p' & Hp & Hptr & Hlte).
+  destruct xi; [contradiction | destruct a].
+  destruct Hptr as (? & (? & ?) & ?). subst.
+  destruct H2 as (pptr & pt & Hptr & Hpt & Hlte').
+  eapply H; eauto. exists (p ** pptr), pt.
+  split; [| split]; eauto.
+  - do 2 eexists. split; [| split]; eauto. 2: reflexivity. eexists.
+    split; eauto.
+    do 2 eexists. split; [| split]; eauto. reflexivity. apply sep_conj_perm_bottom'.
+  - etransitivity; eauto. rewrite sep_conj_perm_assoc.
+    apply sep_conj_perm_monotone; auto; reflexivity.
+Qed.
+
+Lemma Load xi yi xs rw :
+  xi : ptr _ _ (rw, 0, eqp Si Ss yi) @ xs ⊢
+  load xi ▷
+  Ret tt :::
+  eqp _ _ yi ∅ xi : ptr _ _ (rw, 0, eqp _ _ yi) @ xs.
+Proof.
+  repeat intro. pstep. unfold load. rewritebisim @bind_trigger.
+  econstructor; eauto; try reflexivity.
+  destruct xi as [? | [b o]]; try contradiction.
+  simpl in H. unfold ptr_Perms in H.
+  destruct H as (? & (v & ?) & ?); subst.
+  destruct H1 as (? & ? & ? & ? & ?). simpl in H, H1. subst.
+  assert (read (lget c1) (b, o) = Some v).
+  {
+    apply H2 in H0. destruct H0 as (? & _). apply H in H0.
+    rewrite Nat.add_0_r in H0. destruct rw; auto.
+  }
+  rewrite H1. constructor; auto.
+  (* TODO: these exists are kind of weird *)
+  simpl. exists bottom_perm, x. split; [| split]; eauto. eexists. split; eauto.
+  simpl. exists x, bottom_perm. split; [| split]; eauto.
+  rewrite sep_conj_perm_bottom. reflexivity.
+  rewrite sep_conj_perm_commut. rewrite sep_conj_perm_bottom.
+  etransitivity; eauto. apply lte_l_sep_conj_perm.
+Qed.
+
+Lemma Store A xi yi xs (P : VPermType Si Ss A) :
+  xi : ptr _ _ (W, 0, P) @ xs ⊢
+  store xi yi ▷
+  Ret tt :::
+  (trueP Si Ss) ∅ xi : ptr _ _ (W, 0, eqp _ _ yi) @ tt.
+Proof.
+  repeat intro. pstep. unfold store. destruct xi as [| [b o]]; try contradiction.
+  rewritebisim @bind_trigger.
+  rename p into p'. rename H0 into Hpre.
+  destruct H as (? & (v & ?) & Hwrite); subst.
+  destruct Hwrite as (pw & p & Hwritelte & Hp & Hlte).
+  rewrite Nat.add_0_r in Hwritelte.
+  assert (exists val, read (lget c1) (b, o) = Some val).
+  {
+    apply Hlte in Hpre. destruct Hpre as (Hpre & _).
+    apply Hwritelte in Hpre. eexists.
+    apply Hpre.
+  }
+  destruct H as (val & Hread). eapply (read_success_write _ _ _ yi) in Hread.
+  destruct Hread as (c' & Hwrite).
+  assert (Hguar : guar p' (c1, c2) ((lput c1 c'), c2)).
+  {
+    apply Hlte. constructor 1. left. apply Hwritelte. simpl.
+    split; [| split].
+    + eapply write_success_other_ptr; eauto.
+    + eapply write_success_allocation; eauto.
+    + eapply write_success_others; eauto.
+  }
+  econstructor; eauto.
+  3: {
+    rewrite Hwrite. constructor; eauto.
+    2: { simpl. exists bottom_perm. eexists. split; [| split]; auto.
+         - eexists. split; eauto. simpl. eexists. exists bottom_perm.
+           split; [| split]; eauto; try reflexivity.
+         - rewrite sep_conj_perm_bottom. rewrite sep_conj_perm_commut.
+           rewrite sep_conj_perm_bottom. reflexivity.
+    }
+    rewrite Nat.add_0_r. eapply write_read; rewrite lGetPut; eauto.
+  }
+  - rewrite Hwrite. auto.
+  - rewrite Nat.add_0_r. eapply sep_step_lte; eauto.
+    etransitivity.
+    + eapply sep_step_lte; [| reflexivity]. apply lte_l_sep_conj_perm.
+    + simpl in *. eapply sep_step_lte; eauto. intros ? []. constructor; auto.
 Qed.

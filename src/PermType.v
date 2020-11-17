@@ -13,6 +13,7 @@ From Heapster Require Export
      Permissions
      Memory
      SepStep
+     Config
      Functional.
 
 From ITree Require Import
@@ -34,6 +35,8 @@ Import MonadNotation.
 
 Section permType.
   Context (Si Ss:Type).
+  Context `{Lens Si config}.
+
   Record PermType (A B:Type) : Type :=
     { ptApp : A -> B -> @Perms (Si*Ss) }.
   Definition VPermType A := PermType Value A.
@@ -67,13 +70,27 @@ Section permType.
   Definition falseP {A B} : PermType A B :=
     {| ptApp := fun _ _ => top_Perms |}.
 
-  Definition ptr_perm (rw:RW) (v x:Value) : @Perms(Si*Ss) := bottom_Perms.
-  Definition offset (x:Value) (o:nat) : Value := x.
+  Definition offset (v : Value) (o : nat) : Value :=
+    match v with
+    | VNum n => VNum n
+    | VPtr (blk, n) => VPtr (blk, n + o)
+    end.
 
-  Definition ptr {A} '(rw,o,T) : VPermType A :=
-    {| ptApp := fun x a => let p := offset x o in
-                        meet_Perms (fun P => exists v,
-                                        P=ptr_perm rw v p * (p : T @ a) ) |}.
+  Definition ptr_Perms {A} (rw : RW) (p : Value) (a : A) T : @Perms (Si * Ss) :=
+    match p with
+    | VNum _ => top_Perms
+    | VPtr p =>
+      meet_Perms (fun P => exists v, P = singleton_Perms (match rw with
+                                                  | R => read_perm p v
+                                                  | W => write_perm p v
+                                                  end)
+                                 * (v : T @ a))
+    end.
+
+  Definition ptr {A} '(rw, o, T) : VPermType A :=
+    {|
+    ptApp := fun x a => ptr_Perms rw (offset x o) a T;
+    |}.
 
   Fixpoint arr_perm {A} rw o l T
     : VPermType (Vector.t A l) :=
@@ -111,12 +128,6 @@ Section permType.
 
   Program Definition eqp {A} (a:A): PermType A unit :=
     {| ptApp := fun a' _ => {| in_Perms _ := a=a' |} |}.
-
-  Class Lens (A B:Type) : Type :=
-    { lget: A -> B; lput: A -> B -> A;
-      lGetPut: forall a b, lget (lput a b) = b;
-      lPutGet: forall a, lput a (lget a) = a;
-      lPutPut: forall a b b', lput (lput a b) b' = lput a b' }.
 
   Definition vsingle {A} (a:A) : Vector.t A 1 :=
     Vector.cons _ a 0 (Vector.nil _).
