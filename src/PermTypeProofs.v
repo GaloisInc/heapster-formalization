@@ -487,6 +487,18 @@ Proof.
   simpl. rewrite sep_conj_Perms_commut. rewrite sep_conj_Perms_bottom_identity. reflexivity.
 Qed.
 
+Fixpoint trySplitPure {A} l1 (v:Vector.t A l1) : forall l2, option (Vector.t A l2 * Vector.t A (l1 - l2)).
+Proof.
+  induction v; intros; destruct l2.
+  - apply Some; split; apply Vector.nil.
+  - apply None.
+  - apply Some; split; [ apply Vector.nil | apply Vector.cons; assumption ].
+  - destruct (IHv l2) as [ [v1 v2] | ].
+    + apply Some; split; [ apply Vector.cons; assumption | assumption ].
+    + apply None.
+Defined.
+
+(*
 Definition trySplit {A l1 R S} (v : Vector.t A l1) l2 (f : Vector.t A l2 -> Vector.t A (l1 - l2) -> itree (sceE S) R) : itree (sceE S) R.
   destruct (le_lt_dec l2 l1).
   - apply Minus.le_plus_minus in l. rewrite l in v.
@@ -494,7 +506,31 @@ Definition trySplit {A l1 R S} (v : Vector.t A l1) l2 (f : Vector.t A l2 -> Vect
     apply (f (fst X) (snd X)).
   - apply (throw tt).
 Defined.
+Print trySplit.
+*)
 
+Definition trySplit {A l1 R S} (v : Vector.t A l1) l2 (f : Vector.t A l2 -> Vector.t A (l1 - l2) -> itree (sceE S) R) : itree (sceE S) R :=
+  match trySplitPure _ v l2 with
+  | Some (v1,v2) => f v1 v2
+  | None => throw tt
+  end.
+
+Arguments trySplitPure {_} _ !v l2.
+
+Lemma trySplitPureNone A l1 v l2: l1 < l2 -> @trySplitPure A l1 v l2 = None.
+Admitted.
+
+Lemma trySplitPureSome A l1 v l2:
+  le l2 l1 ->
+  exists v1 v2, @trySplitPure A l1 v l2 = Some (v1, v2).
+Admitted.
+
+Lemma ArrCombine_eq A xi rw o l1 l2 xs1 xs2 (P : VPermType Si Ss A) :
+  eq_Perms (xi : arr (rw, o, l1 + l2, P) @ Vector.append xs1 xs2)
+           (xi : arr (rw, o, l1, P) @ xs1 * xi : arr (rw, o + l1, l2, P) @ xs2).
+Admitted.
+
+(*
 Lemma ArrSplit A R1 R2 P l1 l2 xi xs rw o (T : VPermType Si Ss A) U (ti : itree (sceE Si) R1) (fs : _ -> _ -> itree (sceE Ss) R2) :
   (forall xs1 xs2, P *
               xi : arr (rw, o, l2, T) @ xs1 *
@@ -502,7 +538,21 @@ Lemma ArrSplit A R1 R2 P l1 l2 xi xs rw o (T : VPermType Si Ss A) U (ti : itree 
               ti ▷ fs xs1 xs2 ::: U) ->
   P * xi : arr (rw, o, l1, T) @ xs ⊢ ti ▷ trySplit xs l2 fs ::: U.
 Proof.
-  intros. unfold trySplit. destruct (le_lt_dec l2 l1). 2: repeat intro; pstep; constructor.
+  intros. unfold trySplit. destruct (le_lt_dec l2 l1).
+  - destruct (trySplitPureSome _ l1 xs l2 l) as [ v1 [v2 e] ]. rewrite e.
+    apply H.
+(* rewrite trySplitPure -> Some (fst (splitat ...), snd (splitat ...)) *) admit.
+  - (* rewrite trySplitPure -> None *) admit.
+  rewrite (ArrCombine_eq)
+
+revert o l2 fs H. unfold trySplit. induction xs; destruct l2; intros.
+  - simpl. admit.
+  - repeat intro; pstep; constructor.
+  - simpl. destruct (trySplitPure n xs 0).
+    + apply H.
+
+destruct (le_lt_dec l2 l1). 2: repeat intro; pstep; constructor.
+  assert ()
   induction l2.
   - simpl in *.
     setoid_rewrite <- sep_conj_Perms_assoc in H.
@@ -515,6 +565,7 @@ Proof.
     admit.
   - simpl.
 Abort.
+*)
 
 Lemma vector_tl_append A n m (v1 : Vector.t A (S n)) (v2 : Vector.t A m) :
   Vector.tl (Vector.append v1 v2) = Vector.append (Vector.tl v1) v2.
