@@ -4,6 +4,7 @@ From Coq Require Import
      Logic.JMeq
      Lists.List
      Arith.PeanoNat
+     Arith.Compare_dec
      Logic.FunctionalExtensionality.
 
 Require Import ExtLib.Structures.Monads.
@@ -451,4 +452,96 @@ Proof.
       eapply sep_conj_Perms_monotone; [reflexivity |]. (* frame *)
       apply PtrI.
     + apply Frame. apply Frame. apply Store.
+Qed.
+
+Lemma IsNull1 A xi xs rw o (P : VPermType Si Ss A) :
+  xi : ptr _ _ (rw, o, P) @ xs ⊢
+  isNull xi ▷
+  Ret tt :::
+  eqp _ _ false ∅ xi : ptr _ _ (rw, o, P) @ xs.
+Proof.
+  repeat intro. pstep. unfold isNull. destruct xi; [contradiction |].
+  destruct a as [b o']. simpl. constructor; auto.
+  simpl. exists bottom_perm, p. split; [| split]; eauto.
+  rewrite sep_conj_perm_commut. rewrite sep_conj_perm_bottom. reflexivity.
+Qed.
+
+Lemma IsNull2 xi:
+  xi : eqp Si Ss (VNum 0) @ tt ⊢
+  isNull xi ▷
+  Ret tt :::
+  eqp _ _ true.
+Proof.
+  repeat intro. pstep. simpl in *. subst. constructor; simpl; auto.
+Qed.
+
+Lemma ArrPtr A xi xs rw o (P : VPermType Si Ss A) :
+  xi : ptr _ _ (rw, o, P) @ Vector.hd xs ⊑ xi : arr (rw, o, 1, P) @ xs.
+Proof.
+  simpl. rewrite sep_conj_Perms_commut. rewrite sep_conj_Perms_bottom_identity. reflexivity.
+Qed.
+
+Lemma PtrArr A xi xs rw o (P : VPermType Si Ss A) :
+  xi : arr (rw, o, 1, P) @ vsingle xs ⊑ xi : ptr _ _ (rw, o, P) @ xs.
+Proof.
+  simpl. rewrite sep_conj_Perms_commut. rewrite sep_conj_Perms_bottom_identity. reflexivity.
+Qed.
+
+Definition trySplit {A l1 R S} (v : Vector.t A l1) l2 (f : Vector.t A l2 -> Vector.t A (l1 - l2) -> itree (sceE S) R) : itree (sceE S) R.
+  destruct (le_lt_dec l2 l1).
+  - apply Minus.le_plus_minus in l. rewrite l in v.
+    pose proof (Vector.splitat l2 v).
+    apply (f (fst X) (snd X)).
+  - apply (throw tt).
+Defined.
+
+Lemma ArrSplit A R1 R2 P l1 l2 xi xs rw o (T : VPermType Si Ss A) U (ti : itree (sceE Si) R1) (fs : _ -> _ -> itree (sceE Ss) R2) :
+  (forall xs1 xs2, P *
+              xi : arr (rw, o, l2, T) @ xs1 *
+              xi : arr (rw, o + l2, l1 - l2, T) @ xs2 ⊢
+              ti ▷ fs xs1 xs2 ::: U) ->
+  P * xi : arr (rw, o, l1, T) @ xs ⊢ ti ▷ trySplit xs l2 fs ::: U.
+Proof.
+  intros. unfold trySplit. destruct (le_lt_dec l2 l1). 2: repeat intro; pstep; constructor.
+  induction l2.
+  - simpl in *.
+    setoid_rewrite <- sep_conj_Perms_assoc in H.
+    setoid_rewrite sep_conj_Perms_bottom_identity in H.
+    rewrite Nat.add_0_r in H. repeat intro. apply H; auto.
+    destruct H0 as (? & ? & ? & ? & ?).
+    exists x, x0. split; [| split]; auto. simpl.
+    (* rewrite Nat.sub_0_r at 1. *)
+    (* rewrite <- Eqdep.EqdepTheory.eq_rect_eq. *)
+    admit.
+  - simpl.
+Abort.
+
+Lemma vector_tl_append A n m (v1 : Vector.t A (S n)) (v2 : Vector.t A m) :
+  Vector.tl (Vector.append v1 v2) = Vector.append (Vector.tl v1) v2.
+Proof.
+  revert v1. revert n. apply Vector.caseS. intros; auto.
+Qed.
+
+Lemma vector_hd_append A n m (v1 : Vector.t A (S n)) (v2 : Vector.t A m) :
+  Vector.hd (Vector.append v1 v2) = Vector.hd v1.
+Proof.
+  revert v1. revert n. apply Vector.caseS. intros; auto.
+Qed.
+
+Lemma ArrCombine A xi rw o l1 l2 xs1 xs2 (P : VPermType Si Ss A) :
+  xi : arr (rw, o, l1 + l2, P) @ Vector.append xs1 xs2 ⊑
+  xi : arr (rw, o, l1, P) @ xs1 * xi : arr (rw, o + l1, l2, P) @ xs2.
+Proof.
+  repeat intro. destruct H as (p1 & p2 & Hp1 & Hp2 & Hlte).
+  revert Hp1 Hp2. revert o xi l2 xs2. revert Hlte. revert p p1 p2. induction l1; intros.
+  - rewrite Nat.add_0_r in Hp2. simpl in *. revert xs1. apply Vector.case0. simpl.
+    eapply Perms_upwards_closed; eauto. etransitivity; [apply lte_r_sep_conj_perm |]; eauto.
+  - simpl. destruct Hp1 as (? & ? & ? & ? & ?).
+    do 2 eexists. split; [| split].
+    + rewrite vector_hd_append. apply H.
+    + rewrite vector_tl_append. eapply IHl1. reflexivity.
+      * eapply Perms_upwards_closed; eauto. reflexivity.
+      * simpl. rewrite <- plus_n_Sm in Hp2. eauto.
+    + rewrite <- sep_conj_perm_assoc. etransitivity; eauto.
+      apply sep_conj_perm_monotone; eauto; reflexivity.
 Qed.

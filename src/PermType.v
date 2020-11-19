@@ -94,12 +94,14 @@ Section permType.
 
   Fixpoint arr_perm {A} rw o l T
     : VPermType (Vector.t A l) :=
-    match l with 0 => trueP | S l' =>
-                             {| ptApp := fun xi xss =>
-                                           xi:ptr(rw,o,T)@(Vector.hd xss) *
-                                              offset xi 1:arr_perm rw (S o) l' T@(Vector.tl xss)
-                             |} end.
-
+    match l with
+    | 0 => trueP
+    | S l' =>
+      {| ptApp := fun xi xss =>
+                    xi : ptr (rw, o, T) @ Vector.hd xss *
+                    xi : arr_perm rw (S o) l' T @ Vector.tl xss
+      |}
+    end.
   Notation "'arr' ( rw , o , l , T )":=(arr_perm rw o l T).
 
   Definition plusPT {A1 A2 B1 B2}
@@ -130,20 +132,22 @@ Section permType.
     {| ptApp := fun a' _ => {| in_Perms _ := a=a' |} |}.
 
   Definition vsingle {A} (a:A) : Vector.t A 1 :=
-    Vector.cons _ a 0 (Vector.nil _).
+    Vector.cons _ a _ (Vector.nil _).
 
   Definition ifz {A} n (x y:A) : A :=
     if Nat.eqb n 0 then x else y.
 
   Definition getNum {S} v : itree (sceE S) nat :=
     match v with VNum n => Ret n | VPtr _ => throw tt end.
-  Definition addOff v o : Value :=
-    match v with VNum n => VNum (n+o)
-            | VPtr (blk,n) => VPtr (blk,n+o) end.
+  (* Definition addOff v o : Value := *)
+  (*   match v with VNum n => VNum (n+o) *)
+  (*           | VPtr (blk,n) => VPtr (blk,n+o) end. *)
+
   Definition isNull {S} v: itree (sceE S) bool :=
     match v with
     | VNum n => if Nat.eqb n 0 then Ret true else throw tt
-    | VPtr _ => Ret false end.
+    | VPtr _ => Ret false
+    end.
 
   Definition meetF_Perms {A S} (F:A -> @Perms S) : @Perms S :=
     meet_Perms (fun P => exists a, P = F a).
@@ -154,11 +158,12 @@ Section permType.
     {| ptApp := fun a b =>
                   meet_Perms (fun P => exists n, P = a : mapN n G falseP @ b) |}.
   Class FixedPoint (G:Type -> Type) X : Type :=
-    { foldFP : G X -> X; unfoldFP : X -> G X;
+    { foldFP : G X -> X;
+      unfoldFP : X -> G X;
       foldUnfold : forall gx, unfoldFP (foldFP gx) = gx;
       unfoldFold : forall x, foldFP (unfoldFP x) = x; }.
   Definition unmaprPT {A B C} (f:B -> C) (T:PermType A C) : PermType A B :=
-    {| ptApp := fun a b => a:T@(f b) |}.
+    {| ptApp := fun a b => a : T @ (f b) |}.
   Definition mu {A G X} `{FixedPoint G X}
              (F:forall Y, PermType A Y -> PermType A (G Y)) : PermType A X :=
     muPT (fun T => unmaprPT unfoldFP (F X T)).
@@ -170,3 +175,4 @@ Notation "T1 +T+ T2" := (plusPT _ _ T1 T2) (at level 50).
 Notation "T1 *T* T2" := (timesPT _ _ T1 T2) (at level 40).
 (* Notation "'ex' ( x : A ) . T" := (existsPT _ _ (As:=A) (fun x => T)) (at level 70). *)
 Notation "T ∅ P" := (withPerms _ _ T P) (at level 40).
+Notation "'arr' ( rw , o , l , T )" := (arr_perm _ _ rw o l T) (at level 40).
