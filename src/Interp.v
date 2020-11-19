@@ -969,17 +969,181 @@ Proof.
 Qed.
 
 
+(** * `eq_sat_sep_sbuter` for `EG` **)
+
+Inductive EG_gen {S R} (P : TPred S R) EG : TPred S R :=
+| EG_step ts0 ts1 : P ts0 -> step ts0 ts1 -> EG ts1 -> EG_gen P EG ts0
+| EG_Ret r s : P (Ret r, s) -> EG_gen P EG (Ret r, s)
+| EG_Err s : P (throw tt, s) -> EG_gen P EG (throw tt, s).
+Arguments EG_step {S R P EG ts0} ts1.
+Arguments EG_Ret {S R P EG} r s.
+Arguments EG_Err {S R P EG} s.
+
+Definition EG {S R} P := paco1 (@EG_gen S R P) bot1.
+
+Lemma EG_gen_mon {S R P} : monotone1 (@EG_gen S R P).
+Proof. repeat intro; induction IN; subst; solve [econstructor; eauto]. Qed.
+Hint Resolve EG_gen_mon : paco.
+
+Definition EG_gen_pf {S R P EG ts0} : @EG_gen S R P EG ts0 -> P ts0.
+Proof. destruct 1; eauto. Defined.
+
+Definition EG_pf {S R P ts0} : @EG S R P ts0 -> P ts0.
+Proof. intro; punfold H; destruct H; eauto. Defined.
+
+Lemma eq_sat_EG {S1 S2 R1 R2} q (P1 : TPred S1 R1) (P2 : TPred S2 R2) :
+    eq_sat_sep_sbuter q P1 P2 ->
+    eq_sat_sep_sbuter q (EG P1) (EG P2).
+Proof.
+  intro eq_sat_Ps; split; intros.
+  - revert p t1 s1 t2 s2 H H0 H1 H2 H3; pcofix CIH; intros.
+    punfold H2; dependent induction H2.
+    (* sbuter_gen_ret *)
+    + punfold H4; inv H4; [inv H6|].
+      pfold; constructor.
+      eapply eq_sat_Ps; eauto.
+      pfold; constructor; eauto.
+    (* sbuter_gen_err *)
+    + punfold H3; inv H3.
+    (* sbuter_gen_tau_L *)
+    + punfold H4; inv H4; inv H6; pclearbot.
+      apply IHsbuter_gen; eauto.
+    (* sbuter_gen_tau_R *)
+    + pfold; apply (EG_step (t2,c2)).
+      * apply EG_pf in H4.
+        eapply (eq_sat_Ps _ Q); eauto.
+        pfold; econstructor; eauto.
+      * constructor; eauto.
+      * left; apply IHsbuter_gen; eauto.
+        apply no_errors_Tau; eauto.
+    (* sbuter_gen_tau *)
+    + punfold H4; inv H4; inv H6; pclearbot.
+      pfold; apply (EG_step (t2,c2)).
+      * eapply eq_sat_Ps; eauto.
+        pfold; econstructor 5; eauto.
+      * constructor.
+      * right; eapply CIH; eauto.
+        apply no_errors_Tau; eauto.
+    (* sbuter_gen_modify_L *)
+    + punfold H6; inv H6; dependent destruction H8; pclearbot.
+      apply IHsbuter_gen; eauto.
+      respects; eapply sep_r; eauto.
+    (* sbuter_gen_modify_R *)
+    + pfold; apply (EG_step (k c2, f c2)).
+      * apply EG_pf in H6.
+        eapply (eq_sat_Ps p Q); eauto.
+        pfold; econstructor 7; eauto.
+      * constructor; eauto.
+      * left; apply IHsbuter_gen; eauto.
+        -- respects; eapply sep_r; eauto.
+        -- apply no_errors_Modify; eauto.
+    (* sbuter_gen_modify *)
+    + punfold H6; inv H6; dependent destruction H8; pclearbot.
+      pfold; apply (EG_step (k2 c2, f2 c2)).
+      * eapply eq_sat_Ps; eauto.
+        pfold; econstructor 8; eauto.
+      * constructor.
+      * right; eapply (CIH p'); eauto.
+        -- respects; eapply sep_r; eauto.
+        -- apply no_errors_Modify; eauto.
+    (* sbuter_gen_choice_L *)
+    + punfold H6; inv H6; dependent destruction H8; pclearbot.
+      apply (H4 b); eauto.
+    (* sbuter_gen_choice_R *)
+    + pfold; apply (EG_step (k false, c2)).
+      * apply EG_pf in H6.
+        eapply (eq_sat_Ps p Q); eauto.
+        pfold; econstructor 10; eauto.
+      * constructor; eauto.
+      * left; apply (H4 false); eauto.
+        apply no_errors_Choice; eauto.
+    (* sbuter_gen_choice *)
+    + punfold H6; inv H6; dependent destruction H8; pclearbot.
+      pose proof (H3 b); destruct H6 as [b2].
+      pfold; apply (EG_step (k2 b2, c2)).
+      * eapply eq_sat_Ps; eauto.
+        pfold; econstructor 11; eauto.
+      * constructor.
+      * right; eapply (CIH p'); eauto.
+        -- destruct H6; [ eauto | inv H6 ].
+        -- apply no_errors_Choice; eauto.
+  (* The rest is basically identical to the above. *)
+  - revert p t1 s1 t2 s2 H H0 H1 H2 H3; pcofix CIH; intros.
+    punfold H2; dependent induction H2.
+    (* sbuter_gen_ret *)
+    + punfold H4; inv H4; [inv H6|].
+      pfold; constructor.
+      eapply eq_sat_Ps; eauto.
+      pfold; constructor; eauto.
+    (* sbuter_gen_err *)
+    + punfold H3; inv H3.
+    (* sbuter_gen_tau_L *)
+    + pfold; apply (EG_step (t1,c1)).
+      * apply EG_pf in H4.
+        eapply (eq_sat_Ps _ Q); eauto.
+        pfold; econstructor; eauto.
+      * constructor; eauto.
+      * left; apply IHsbuter_gen; eauto.
+    (* sbuter_gen_tau_R *)
+    + punfold H4; inv H4; inv H6; pclearbot.
+      apply IHsbuter_gen; eauto.
+      apply no_errors_Tau; eauto.
+    (* sbuter_gen_tau *)
+    + punfold H4; inv H4; inv H6; pclearbot.
+      pfold; apply (EG_step (t1,c1)).
+      * eapply eq_sat_Ps; eauto.
+        pfold; econstructor 5; eauto.
+      * constructor.
+      * right; eapply CIH; eauto.
+        apply no_errors_Tau; eauto.
+    (* sbuter_gen_modify_L *)
+    + pfold; apply (EG_step (k c1, f c1)).
+      * apply EG_pf in H6.
+        eapply (eq_sat_Ps p Q); eauto.
+        pfold; econstructor 6; eauto.
+      * constructor; eauto.
+      * left; apply IHsbuter_gen; eauto.
+        respects; eapply sep_r; eauto.
+    (* sbuter_gen_modify_R *)
+    + punfold H6; inv H6; dependent destruction H8; pclearbot.
+      apply IHsbuter_gen; eauto.
+      -- respects; eapply sep_r; eauto.
+      -- apply no_errors_Modify; eauto.
+    (* sbuter_gen_modify *)
+    + punfold H6; inv H6; dependent destruction H8; pclearbot.
+      pfold; apply (EG_step (k1 c1, f1 c1)).
+      * eapply eq_sat_Ps; eauto.
+        pfold; econstructor 8; eauto.
+      * constructor.
+      * right; eapply (CIH p'); eauto.
+        -- respects; eapply sep_r; eauto.
+        -- apply no_errors_Modify; eauto.
+    (* sbuter_gen_choice_L *)
+    + pfold; apply (EG_step (k false, c1)).
+      * apply EG_pf in H6.
+        eapply (eq_sat_Ps p Q); eauto.
+        pfold; econstructor 9; eauto.
+      * constructor; eauto.
+      * left; apply (H4 false); eauto.
+    (* sbuter_gen_choice_R *)
+    + punfold H6; inv H6; dependent destruction H8; pclearbot.
+      apply (H4 b); eauto.
+      apply no_errors_Choice; eauto.
+    (* sbuter_gen_choice *)
+    + punfold H6; inv H6; dependent destruction H8; pclearbot.
+      pose proof (H4 b); destruct H6 as [b1].
+      pfold; apply (EG_step (k1 b1, c1)).
+      * eapply eq_sat_Ps; eauto.
+        pfold; econstructor 11; eauto.
+      * constructor.
+      * right; eapply (CIH p' _ _ (k2 b) c2); eauto.
+        -- destruct H6; [ eauto | inv H6 ].
+        -- apply no_errors_Choice; eauto.
+Qed.
 
 
 
 (** * --- random failed progress below --- **)
-
-
-
-
-
-
-
 
 
 Inductive stops_gen {S R} stops : TPred S R :=
