@@ -821,10 +821,15 @@ Definition eq_sat_sep_sbuter {S1 S2 R1 R2} (q:@perm (S1*S2))
     sbuter p Q t1 s1 t2 s2 -> no_errors s2 t2 ->
     (P1 (t1,s1) <-> P2 (t2,s2)).
 
+
+(** * `eq_sat_sep_sbuter` for state predicates **)
 Definition state_pred {S} R P : TPred S R := fun '(_,s) => P s.
 
+Definition q_similar {S1 S2} q (P1 : S1 -> Prop) (P2 : S2 -> Prop): Prop :=
+  forall s1 s2, pre q (s1,s2) -> (P1 s1 <-> P2 s2).
+
 Lemma eq_sat_state_preds {S1 S2 R1 R2} q (P1 : S1 -> Prop) (P2 : S2 -> Prop)
-  : (forall s1 s2, pre q (s1,s2) -> (P1 s1 <-> P2 s2)) ->
+  : q_similar q P1 P2 ->
     eq_sat_sep_sbuter q (state_pred R1 P1) (state_pred R2 P2).
 Proof.
   unfold eq_sat_sep_sbuter; intros.
@@ -1308,3 +1313,28 @@ Proof.
         eapply (H0 b2 q P1 eq_sat_Ps Q (k b2) c2 JMeq_refl p'); pclearbot; eauto.
         apply no_errors_Choice; eauto.
 Qed.
+
+
+(** Definition of our fragment of CTL **)
+
+Inductive CTLformula S : Type :=
+| CTL_st (P:S -> Prop)
+| CTL_and (tp1 tp2:CTLformula S)
+| CTL_or (tp1 tp2:CTLformula S)
+| CTL_impl (tp1 tp2:CTLformula S)
+| CTL_EF (tp:CTLformula S)
+| CTL_EG (tp:CTLformula S)
+| CTL_AF (tp:CTLformula S)
+| CTL_AG (tp:CTLformula S).
+
+Fixpoint TPsats {S R} (tp:CTLformula S): TPred S R :=
+  match tp with
+  | CTL_st _ P => state_pred _ P
+  | CTL_and _ tp1 tp2 => fun ts => TPsats tp1 ts /\ TPsats tp2 ts
+  | CTL_or _ tp1 tp2 => fun ts => TPsats tp1 ts \/ TPsats tp2 ts
+  | CTL_impl _ tp1 tp2 => fun ts => TPsats tp1 ts -> TPsats tp2 ts
+  | CTL_EF _ tp => EF (TPsats tp)
+  | CTL_EG _ tp => EG (TPsats tp)
+  | CTL_AF _ tp => AF (TPsats tp)
+  | CTL_AG _ tp => AG (TPsats tp)
+  end.
