@@ -837,6 +837,39 @@ Proof.
 Qed.
 
 
+(** * `eq_sat_sep_sbuter` for logical connectives **)
+
+Lemma eq_sat_and {S1 S2 R1 R2} q (TP1 TP1' : TPred S1 R1) (TP2 TP2' : TPred S2 R2)
+  : eq_sat_sep_sbuter q TP1 TP2 -> eq_sat_sep_sbuter q TP1' TP2' ->
+    eq_sat_sep_sbuter q (fun ts => TP1 ts /\ TP1' ts) (fun ts => TP2 ts /\ TP2' ts).
+Proof.
+  intros esss esss' p Q t1 s1 t2 s2 pre_q sep sb no_errs.
+  rewrite (esss p Q t1 s1 t2 s2 pre_q sep sb no_errs).
+  rewrite (esss' p Q t1 s1 t2 s2 pre_q sep sb no_errs).
+  reflexivity.
+Qed.
+
+Lemma eq_sat_or {S1 S2 R1 R2} q (TP1 TP1' : TPred S1 R1) (TP2 TP2' : TPred S2 R2)
+  : eq_sat_sep_sbuter q TP1 TP2 -> eq_sat_sep_sbuter q TP1' TP2' ->
+    eq_sat_sep_sbuter q (fun ts => TP1 ts \/ TP1' ts) (fun ts => TP2 ts \/ TP2' ts).
+Proof.
+  intros esss esss' p Q t1 s1 t2 s2 pre_q sep sb no_errs.
+  rewrite (esss p Q t1 s1 t2 s2 pre_q sep sb no_errs).
+  rewrite (esss' p Q t1 s1 t2 s2 pre_q sep sb no_errs).
+  reflexivity.
+Qed.
+
+Lemma eq_sat_impl {S1 S2 R1 R2} q (TP1 TP1' : TPred S1 R1) (TP2 TP2' : TPred S2 R2)
+  : eq_sat_sep_sbuter q TP1 TP2 -> eq_sat_sep_sbuter q TP1' TP2' ->
+    eq_sat_sep_sbuter q (fun ts => TP1 ts -> TP1' ts) (fun ts => TP2 ts -> TP2' ts).
+Proof.
+  intros esss esss' p Q t1 s1 t2 s2 pre_q sep sb no_errs.
+  rewrite (esss p Q t1 s1 t2 s2 pre_q sep sb no_errs).
+  rewrite (esss' p Q t1 s1 t2 s2 pre_q sep sb no_errs).
+  reflexivity.
+Qed.
+
+
 (** * `eq_sat_sep_sbuter` for `EF`  **)
 
 Inductive EF {S R} (P : TPred S R) (ts0 : CompM S R * S) : Prop :=
@@ -1317,24 +1350,61 @@ Qed.
 
 (** Definition of our fragment of CTL **)
 
-Inductive CTLformula S : Type :=
+Inductive CTLformula {S} : Type :=
 | CTL_st (P:S -> Prop)
-| CTL_and (tp1 tp2:CTLformula S)
-| CTL_or (tp1 tp2:CTLformula S)
-| CTL_impl (tp1 tp2:CTLformula S)
-| CTL_EF (tp:CTLformula S)
-| CTL_EG (tp:CTLformula S)
-| CTL_AF (tp:CTLformula S)
-| CTL_AG (tp:CTLformula S).
+| CTL_and (tp1 tp2:CTLformula)
+| CTL_or (tp1 tp2:CTLformula)
+| CTL_impl (tp1 tp2:CTLformula)
+| CTL_EF (tp:CTLformula)
+| CTL_EG (tp:CTLformula)
+| CTL_AF (tp:CTLformula)
+| CTL_AG (tp:CTLformula).
 
-Fixpoint TPsats {S R} (tp:CTLformula S): TPred S R :=
+Fixpoint TPsats {S R} (tp:@CTLformula S): TPred S R :=
   match tp with
-  | CTL_st _ P => state_pred _ P
-  | CTL_and _ tp1 tp2 => fun ts => TPsats tp1 ts /\ TPsats tp2 ts
-  | CTL_or _ tp1 tp2 => fun ts => TPsats tp1 ts \/ TPsats tp2 ts
-  | CTL_impl _ tp1 tp2 => fun ts => TPsats tp1 ts -> TPsats tp2 ts
-  | CTL_EF _ tp => EF (TPsats tp)
-  | CTL_EG _ tp => EG (TPsats tp)
-  | CTL_AF _ tp => AF (TPsats tp)
-  | CTL_AG _ tp => AG (TPsats tp)
+  | CTL_st P => state_pred _ P
+  | CTL_and tp1 tp2 => fun ts => TPsats tp1 ts /\ TPsats tp2 ts
+  | CTL_or tp1 tp2 => fun ts => TPsats tp1 ts \/ TPsats tp2 ts
+  | CTL_impl tp1 tp2 => fun ts => TPsats tp1 ts -> TPsats tp2 ts
+  | CTL_EF tp => EF (TPsats tp)
+  | CTL_EG tp => EG (TPsats tp)
+  | CTL_AF tp => AF (TPsats tp)
+  | CTL_AG tp => AG (TPsats tp)
   end.
+
+Inductive TPsim {S1 S2} q: @CTLformula S1 -> @CTLformula S2 -> Prop :=
+| TPsim_st P1 P2 : q_similar q P1 P2 -> TPsim q (CTL_st P1) (CTL_st P2)
+| TPsim_and tp1 tp2 tp1' tp2' : TPsim q tp1 tp2 -> TPsim q tp1' tp2' ->
+                                TPsim q (CTL_and tp1 tp1') (CTL_and tp2 tp2')
+| TPsim_or tp1 tp2 tp1' tp2' : TPsim q tp1 tp2 -> TPsim q tp1' tp2' ->
+                               TPsim q (CTL_or tp1 tp1') (CTL_or tp2 tp2')
+| TPsim_impl tp1 tp2 tp1' tp2' : TPsim q tp1 tp2 -> TPsim q tp1' tp2' ->
+                                 TPsim q (CTL_impl tp1 tp1') (CTL_impl tp2 tp2')
+| TPsim_EF tp1 tp2 : TPsim q tp1 tp2 -> TPsim q (CTL_EF tp1) (CTL_EF tp2)
+| TPsim_EG tp1 tp2 : TPsim q tp1 tp2 -> TPsim q (CTL_EG tp1) (CTL_EG tp2)
+| TPsim_AF tp1 tp2 : TPsim q tp1 tp2 -> TPsim q (CTL_AF tp1) (CTL_AF tp2)
+| TPsim_AG tp1 tp2 : TPsim q tp1 tp2 -> TPsim q (CTL_AG tp1) (CTL_AG tp2)
+.
+
+Lemma tpsim_implies_eq_sat_sep_sbuter {S1 S2 R1 R2} q TP1 TP2:
+  TPsim q TP1 TP2 -> @eq_sat_sep_sbuter S1 S2 R1 R2 q (TPsats TP1) (TPsats TP2).
+Proof.
+  intro tp_sim; induction tp_sim.
+  - apply eq_sat_state_preds; assumption.
+  - apply eq_sat_and; assumption.
+  - apply eq_sat_or; assumption.
+  - apply eq_sat_impl; assumption.
+  - apply eq_sat_EF; assumption.
+  - apply eq_sat_EG; assumption.
+  - apply eq_sat_AF; assumption.
+  - apply eq_sat_AG; assumption.
+Qed.
+
+Theorem sbuter_preserves_tpreds {S1 R1 S2 R2} p q Q t1 s1 t2 s2 TP1 TP2:
+  @sbuter S1 R1 S2 R2 p Q t1 s1 t2 s2 -> no_errors s2 t2 ->
+  TPsim q TP1 TP2 -> pre (p ** q) (s1, s2) ->
+  TPsats TP1 (t1, s1) <-> TPsats TP2 (t2, s2).
+Proof.
+  intros sb ne tp_sim pre_pq. destruct pre_pq as [ pre_p [ pre_q sep ]].
+  eapply (tpsim_implies_eq_sat_sep_sbuter q TP1 TP2 tp_sim); eassumption.
+Qed.
