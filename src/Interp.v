@@ -1313,3 +1313,28 @@ Proof.
         eapply (H0 b2 q P1 eq_sat_Ps Q (k b2) c2 JMeq_refl p'); pclearbot; eauto.
         apply no_errors_Choice; eauto.
 Qed.
+
+
+(** Definition of our fragment of CTL **)
+
+Inductive CTLformula S : Type :=
+| CTL_st (P:S -> Prop)
+| CTL_and (tp1 tp2:CTLformula S)
+| CTL_or (tp1 tp2:CTLformula S)
+| CTL_impl (tp1 tp2:CTLformula S)
+| CTL_EF (tp:CTLformula S)
+| CTL_EG (tp:CTLformula S)
+| CTL_AF (tp:CTLformula S)
+| CTL_AG (tp:CTLformula S).
+
+Fixpoint TPsats {S R} (tp:CTLformula S): TPred S R :=
+  match tp with
+  | CTL_st _ P => state_pred _ P
+  | CTL_and _ tp1 tp2 => fun ts => TPsats tp1 ts /\ TPsats tp2 ts
+  | CTL_or _ tp1 tp2 => fun ts => TPsats tp1 ts \/ TPsats tp2 ts
+  | CTL_impl _ tp1 tp2 => fun ts => TPsats tp1 ts -> TPsats tp2 ts
+  | CTL_EF _ tp => EF (TPsats tp)
+  | CTL_EG _ tp => EG (TPsats tp)
+  | CTL_AF _ tp => AF (TPsats tp)
+  | CTL_AG _ tp => AG (TPsats tp)
+  end.
