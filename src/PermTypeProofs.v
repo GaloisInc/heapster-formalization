@@ -603,3 +603,24 @@ Proof.
     + rewrite <- sep_conj_perm_assoc. etransitivity; eauto.
       apply sep_conj_perm_monotone; eauto; reflexivity.
 Qed.
+
+Lemma MuFold A G X `{FixedPoint G X} (F:PermType Si Ss A X -> PermType Si Ss A (G X))
+      {prp:Proper (lte_PermType _ _ ==> lte_PermType _ _) F}
+      xi xs :
+  xi : mu _ _ F @ foldFP xs ⊑ xi : F (mu _ _ F) @ xs.
+Proof.
+  (* FIXME: why can't we just rewrite with mu_fixed_point here? *)
+  eapply Proper_eq_Perms_lte_Perms; [ | reflexivity | ].
+  - apply Proper_eq_PermType_ptApp; [ apply mu_fixed_point | | ]; reflexivity.
+  - simpl. rewrite foldUnfold. reflexivity.
+Qed.
+
+Lemma MuUnfold A G X `{FixedPoint G X} (F:PermType Si Ss A X -> PermType Si Ss A (G X))
+      {prp:Proper (lte_PermType _ _ ==> lte_PermType _ _) F}
+      xi xs :
+  xi : F (mu _ _ F) @ unfoldFP xs ⊑ xi : mu _ _ F @ xs.
+Proof.
+  eapply Proper_eq_Perms_lte_Perms; [ reflexivity | | ].
+  - apply Proper_eq_PermType_ptApp; [ apply mu_fixed_point | | ]; reflexivity.
+  - simpl. reflexivity.
+Qed.
