@@ -1360,34 +1360,34 @@ Inductive CTLformula {S} : Type :=
 | CTL_AF (tp:CTLformula)
 | CTL_AG (tp:CTLformula).
 
-Fixpoint TPsats {S R} (tp:@CTLformula S): TPred S R :=
+Fixpoint CTLsats {S R} (tp:@CTLformula S): TPred S R :=
   match tp with
   | CTL_st P => state_pred _ P
-  | CTL_and tp1 tp2 => fun ts => TPsats tp1 ts /\ TPsats tp2 ts
-  | CTL_or tp1 tp2 => fun ts => TPsats tp1 ts \/ TPsats tp2 ts
-  | CTL_impl tp1 tp2 => fun ts => TPsats tp1 ts -> TPsats tp2 ts
-  | CTL_EF tp => EF (TPsats tp)
-  | CTL_EG tp => EG (TPsats tp)
-  | CTL_AF tp => AF (TPsats tp)
-  | CTL_AG tp => AG (TPsats tp)
+  | CTL_and tp1 tp2 => fun ts => CTLsats tp1 ts /\ CTLsats tp2 ts
+  | CTL_or tp1 tp2 => fun ts => CTLsats tp1 ts \/ CTLsats tp2 ts
+  | CTL_impl tp1 tp2 => fun ts => CTLsats tp1 ts -> CTLsats tp2 ts
+  | CTL_EF tp => EF (CTLsats tp)
+  | CTL_EG tp => EG (CTLsats tp)
+  | CTL_AF tp => AF (CTLsats tp)
+  | CTL_AG tp => AG (CTLsats tp)
   end.
 
-Inductive TPsim {S1 S2} q: @CTLformula S1 -> @CTLformula S2 -> Prop :=
-| TPsim_st P1 P2 : q_similar q P1 P2 -> TPsim q (CTL_st P1) (CTL_st P2)
-| TPsim_and tp1 tp2 tp1' tp2' : TPsim q tp1 tp2 -> TPsim q tp1' tp2' ->
-                                TPsim q (CTL_and tp1 tp1') (CTL_and tp2 tp2')
-| TPsim_or tp1 tp2 tp1' tp2' : TPsim q tp1 tp2 -> TPsim q tp1' tp2' ->
-                               TPsim q (CTL_or tp1 tp1') (CTL_or tp2 tp2')
-| TPsim_impl tp1 tp2 tp1' tp2' : TPsim q tp1 tp2 -> TPsim q tp1' tp2' ->
-                                 TPsim q (CTL_impl tp1 tp1') (CTL_impl tp2 tp2')
-| TPsim_EF tp1 tp2 : TPsim q tp1 tp2 -> TPsim q (CTL_EF tp1) (CTL_EF tp2)
-| TPsim_EG tp1 tp2 : TPsim q tp1 tp2 -> TPsim q (CTL_EG tp1) (CTL_EG tp2)
-| TPsim_AF tp1 tp2 : TPsim q tp1 tp2 -> TPsim q (CTL_AF tp1) (CTL_AF tp2)
-| TPsim_AG tp1 tp2 : TPsim q tp1 tp2 -> TPsim q (CTL_AG tp1) (CTL_AG tp2)
+Inductive CTLsim {S1 S2} q: @CTLformula S1 -> @CTLformula S2 -> Prop :=
+| CTLsim_st P1 P2 : q_similar q P1 P2 -> CTLsim q (CTL_st P1) (CTL_st P2)
+| CTLsim_and tp1 tp2 tp1' tp2' : CTLsim q tp1 tp2 -> CTLsim q tp1' tp2' ->
+                                CTLsim q (CTL_and tp1 tp1') (CTL_and tp2 tp2')
+| CTLsim_or tp1 tp2 tp1' tp2' : CTLsim q tp1 tp2 -> CTLsim q tp1' tp2' ->
+                               CTLsim q (CTL_or tp1 tp1') (CTL_or tp2 tp2')
+| CTLsim_impl tp1 tp2 tp1' tp2' : CTLsim q tp1 tp2 -> CTLsim q tp1' tp2' ->
+                                 CTLsim q (CTL_impl tp1 tp1') (CTL_impl tp2 tp2')
+| CTLsim_EF tp1 tp2 : CTLsim q tp1 tp2 -> CTLsim q (CTL_EF tp1) (CTL_EF tp2)
+| CTLsim_EG tp1 tp2 : CTLsim q tp1 tp2 -> CTLsim q (CTL_EG tp1) (CTL_EG tp2)
+| CTLsim_AF tp1 tp2 : CTLsim q tp1 tp2 -> CTLsim q (CTL_AF tp1) (CTL_AF tp2)
+| CTLsim_AG tp1 tp2 : CTLsim q tp1 tp2 -> CTLsim q (CTL_AG tp1) (CTL_AG tp2)
 .
 
 Lemma tpsim_implies_eq_sat_sep_sbuter {S1 S2 R1 R2} q TP1 TP2:
-  TPsim q TP1 TP2 -> @eq_sat_sep_sbuter S1 S2 R1 R2 q (TPsats TP1) (TPsats TP2).
+  CTLsim q TP1 TP2 -> @eq_sat_sep_sbuter S1 S2 R1 R2 q (CTLsats TP1) (CTLsats TP2).
 Proof.
   intro tp_sim; induction tp_sim.
   - apply eq_sat_state_preds; assumption.
@@ -1402,8 +1402,8 @@ Qed.
 
 Theorem sbuter_preserves_tpreds {S1 R1 S2 R2} p q Q t1 s1 t2 s2 TP1 TP2:
   @sbuter S1 R1 S2 R2 p Q t1 s1 t2 s2 -> no_errors s2 t2 ->
-  TPsim q TP1 TP2 -> pre (p ** q) (s1, s2) ->
-  TPsats TP1 (t1, s1) <-> TPsats TP2 (t2, s2).
+  CTLsim q TP1 TP2 -> pre (p ** q) (s1, s2) ->
+  CTLsats TP1 (t1, s1) <-> CTLsats TP2 (t2, s2).
 Proof.
   intros sb ne tp_sim pre_pq. destruct pre_pq as [ pre_p [ pre_q sep ]].
   eapply (tpsim_implies_eq_sat_sep_sbuter q TP1 TP2 tp_sim); eassumption.
