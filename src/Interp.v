@@ -72,9 +72,9 @@ Proof.
     apply no_errors_modify.
     left; assumption.
   - punfold H; inv H; inv H1.
-    + admit. (* Hunh? Why can't I get rid of those `existT`s...? *)
+    + auto_inj_pair2; subst. apply H.
     + inv H.
-Admitted.
+Qed.
 
 Lemma no_errors_Choice {S R} (s : S) (k : bool -> CompM S R) :
   (forall b, no_errors s (k b)) <-> no_errors s (vis Or k).
@@ -86,9 +86,9 @@ Proof.
     left; assumption.
   - punfold H; inv H.
     specialize (H1 b); inv H1.
-    + admit. (* Uh oh, I've got the same problem here... *)
+    + auto_inj_pair2; subst. apply H.
     + inv H.
-Admitted.
+Qed.
 
 Lemma sbuter_tau_L {S1 S2 R1 R2} p Q t1 s1 t2 s2 :
   sbuter p Q (Tau t1) s1 t2 s2 -> @sbuter S1 S2 R1 R2 p Q t1 s1 t2 s2.
