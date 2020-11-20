@@ -149,14 +149,81 @@ Section permType.
     | VPtr _ => Ret false
     end.
 
-  Definition meetF_Perms {A S} (F:A -> @Perms S) : @Perms S :=
-    meet_Perms (fun P => exists a, P = F a).
+  (* The ordering on permission types is just the lifitng of that on Perms *)
+  Definition lte_PermType {A B} (T1 T2:PermType A B): Prop :=
+    forall a b, lte_Perms (ptApp _ _ T1 a b) (ptApp _ _ T2 a b).
 
-  Fixpoint mapN {A} n (f:A -> A) (a:A) : A :=
-    match n with 0 => a | S n' => f (mapN n' f a) end.
-  Definition muPT {A B} (G:PermType A B -> PermType A B) : PermType A B :=
-    {| ptApp := fun a b =>
-                  meet_Perms (fun P => exists n, P = a : mapN n G falseP @ b) |}.
+  (* Equals on PermType is just the symmetric closure of the ordering *)
+  Definition eq_PermType {A B} (T1 T2:PermType A B): Prop :=
+    lte_PermType T1 T2 /\ lte_PermType T2 T1.
+
+  Global Instance PreOrder_lte_PermType A B : PreOrder (@lte_PermType A B).
+  Proof.
+    constructor; intro; intros; intros a b.
+    - reflexivity.
+    - etransitivity; [ apply H0 | apply H1 ].
+  Qed.
+
+  Global Instance Equivalence_eq_PermType A B : Equivalence (@eq_PermType A B).
+  Proof.
+    constructor; intro; intros.
+    - split; reflexivity.
+    - destruct H0; split; assumption.
+    - destruct H0; destruct H1; split; etransitivity; eassumption.
+  Qed.
+
+  Global Instance Proper_eq_PermType_ptApp A B :
+    Proper (eq_PermType ==> eq ==> eq ==> eq_Perms) (ptApp A B).
+  Proof.
+    intros T1 T2 eT a1 a2 ea b1 b2 eb. rewrite ea; rewrite eb.
+    destruct eT. split; [ apply H0 | apply H1 ].
+  Qed.
+
+  (* The meet on permission types is just the lifitng of that on Perms *)
+  Definition meet_PermType {A B} (Ts:PermType A B -> Prop) : PermType A B :=
+    {| ptApp := fun a b => meet_Perms (fun P => exists T, Ts T /\ P = (a : T @ b)) |}.
+
+  (* Meet is a lower bound for PermType *)
+  Lemma lte_meet_PermType {A B} (Ts:PermType A B -> Prop) T:
+    Ts T -> lte_PermType (meet_PermType Ts) T.
+  Proof.
+    intros ts_t a b. simpl. apply lte_meet_Perms. exists T; split; eauto.
+  Qed.
+
+  (* Meet is the greatest lower bound for PermType *)
+  Lemma meet_PermType_max {A B} (Ts:PermType A B -> Prop) T:
+    (forall T', Ts T' -> lte_PermType T T') ->
+    lte_PermType T (meet_PermType Ts).
+  Proof.
+    intros lte_T_Ts a b. apply meet_Perms_max. intros P [ T' [ Ts_T' P_eq ]].
+    rewrite P_eq. apply (lte_T_Ts T' Ts_T' a b).
+  Qed.
+
+  (* The least fixed-point permission type is defined via the standard
+  Knaster-Tarski construction as the meet of all F-closed permission types *)
+  Definition fixPT {A B} (F:PermType A B -> PermType A B)
+             {prp:Proper (lte_PermType ==> lte_PermType) F} : PermType A B :=
+    meet_PermType (fun T => lte_PermType (F T) T).
+
+  (* First we prove that fixPT is itself F-closed *)
+  Lemma fixPT_F_closed {A B} (F:PermType A B -> PermType A B)
+        {prp:Proper (lte_PermType ==> lte_PermType) F} :
+    lte_PermType (F (fixPT F)) (fixPT F).
+  Proof.
+    intros a b. apply meet_PermType_max. intros T' lte_FT'.
+    transitivity (F T'); [ | assumption ]. apply prp.
+    apply lte_meet_PermType. assumption.
+  Qed.
+
+  (* Then we prove that fixPT is a fixed-point *)
+  Lemma fixPT_fixed_point {A B} (F:PermType A B -> PermType A B)
+        {prp:Proper (lte_PermType ==> lte_PermType) F} :
+    eq_PermType (fixPT F) (F (fixPT F)).
+  Proof.
+    split; [ | apply fixPT_F_closed ].
+    apply lte_meet_PermType. apply prp. apply fixPT_F_closed.
+  Qed.
+
   Class FixedPoint (G:Type -> Type) X : Type :=
     { foldFP : G X -> X;
       unfoldFP : X -> G X;
@@ -164,9 +231,23 @@ Section permType.
       unfoldFold : forall x, foldFP (unfoldFP x) = x; }.
   Definition unmaprPT {A B C} (f:B -> C) (T:PermType A C) : PermType A B :=
     {| ptApp := fun a b => a : T @ (f b) |}.
-  Definition mu {A G X} `{FixedPoint G X}
-             (F:forall Y, PermType A Y -> PermType A (G Y)) : PermType A X :=
-    muPT (fun T => unmaprPT unfoldFP (F X T)).
+  Program Definition mu {A G X} `{FixedPoint G X}
+             (F:PermType A X -> PermType A (G X))
+             {prp:Proper (lte_PermType ==> lte_PermType) F}
+    : PermType A X :=
+    @fixPT A X (fun T => unmaprPT unfoldFP (F T)) _.
+  Next Obligation.
+    intros T1 T2 leqT a x. simpl. apply prp. assumption.
+  Defined.
+
+  Lemma mu_fixed_point {A G X} `{FixedPoint G X}
+        (F:PermType A X -> PermType A (G X))
+        {prp:Proper (lte_PermType ==> lte_PermType) F} :
+    eq_PermType (mu F) (unmaprPT unfoldFP (F (mu F))).
+  Proof.
+    apply (fixPT_fixed_point (fun T : PermType A X => unmaprPT unfoldFP (F T))).
+  Qed.
+
 End permType.
 
 Notation "P ⊢ ti ▷ ts ::: U" := (typing P (ptApp _ _ _ _ U) ti ts) (at level 60).
