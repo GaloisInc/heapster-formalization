@@ -1143,7 +1143,190 @@ Qed.
 
 
 
+(** * `eq_sat_sep_sbuter` for `AF` **)
+
+Inductive AF {S R} (P : TPred S R) : TPred S R :=
+| AF_refl t s : P (t,s) -> AF P (t,s)
+| AF_Tau t s : AF P (t, s) -> AF P (Tau t, s)
+| AF_Modify f k s :  AF P (k s, f s) -> AF P (vis (Modify f) k, s)
+| AF_Choice k s : (forall b, AF P (k b, s)) -> AF P (vis Or k, s).
+(* | AF_step : (forall t1 s1, step ts0 (t1,s1) -> AF P (t1,s1)) -> AF P ts0. *)
+
+Lemma eq_sat_AF {S1 S2 R1 R2} q (P1 : TPred S1 R1) (P2 : TPred S2 R2) :
+    eq_sat_sep_sbuter q P1 P2 ->
+    eq_sat_sep_sbuter q (AF P1) (AF P2).
+Proof.
+  intro eq_sat_Ps; split; intros.
+  - revert p t2 s2 H H0 H1 H2; dependent induction H3; intros.
+    (* AF_refl *)
+    + eapply AF_refl, eq_sat_Ps; eauto.
+    (* AF_Tau *)
+    + punfold H1; dependent induction H1; intros.
+      (* sbuter_gen_err *)
+      * punfold H2; inv H2.
+      (* sbuter_gen_tau_L *)
+      * eapply IHAF; eauto.
+        pfold; eauto.
+      (* sbuter_gen_tau_R *)
+      * apply AF_Tau.
+        eapply IHsbuter_gen; eauto.
+        apply no_errors_Tau; eauto.
+      (* sbuter_gen_tau *)
+      * apply AF_Tau.
+        eapply IHAF; pclearbot; eauto.
+        apply no_errors_Tau; eauto.
+      (* sbuter_gen_modify_R *)
+      * apply AF_Modify.
+        eapply IHsbuter_gen; eauto.
+        -- respects; eapply sep_r; eauto.
+        -- apply no_errors_Modify; eauto.
+      (* sbuter_gen_choice_R *)
+      * apply AF_Choice.
+        intro b; specialize (H2 b).
+        eapply H2; eauto.
+        apply no_errors_Choice; eauto.
+    (* AF_Modify *)
+    + punfold H1; dependent induction H1; intros.
+      (* sbuter_gen_err *)
+      * punfold H2; inv H2.
+      (* sbuter_gen_tau_R *)
+      * apply AF_Tau.
+        eapply IHsbuter_gen; eauto.
+        apply no_errors_Tau; eauto.
+      (* sbuter_gen_modify_L *)
+      * eapply (IHAF q P2 eq_sat_Ps Q (k c1) (f c1) JMeq_refl p'); eauto.
+        -- respects; eapply sep_r; eauto.
+        -- pfold; eauto.
+      (* sbuter_gen_modify_R *)
+      * apply AF_Modify.
+        eapply IHsbuter_gen; eauto.
+        -- respects; eapply sep_r; eauto.
+        -- apply no_errors_Modify; eauto.
+      (* sbuter_gen_modify *)
+      * apply AF_Modify.
+        eapply (IHAF q P2 eq_sat_Ps Q (k c1) (f c1) JMeq_refl p'); pclearbot; eauto.
+        -- respects; eapply sep_r; eauto.
+        -- apply no_errors_Modify; eauto.
+      (* sbuter_gen_choice_R *)
+      * apply AF_Choice.
+        intro b; specialize (H2 b).
+        eapply H2; eauto.
+        apply no_errors_Choice; eauto.
+    (* AF_Choice *)
+    + punfold H3; dependent induction H3; intros.
+      (* sbuter_gen_err *)
+      * punfold H4; inv H4.
+      (* sbuter_gen_tau_R *)
+      * apply AF_Tau.
+        eapply IHsbuter_gen; eauto.
+        apply no_errors_Tau; eauto.
+      (* sbuter_gen_modify_R *)
+      * apply AF_Modify.
+        eapply IHsbuter_gen; eauto.
+        -- respects; eapply sep_r; eauto.
+        -- apply no_errors_Modify; eauto.
+      (* sbuter_gen_choice_L *)
+      * eapply (H0 false q P2 eq_sat_Ps Q (k false) c1 JMeq_refl p'); eauto.
+        pfold; apply H5.
+      (* sbuter_gen_choice_R *)
+      * apply AF_Choice.
+        intro b2; specialize (H6 b2).
+        eapply H6; eauto.
+        apply no_errors_Choice; eauto.
+      (* sbuter_gen_choice *)
+      * apply AF_Choice; intro b2.
+        specialize (H6 b2); destruct H6 as [b1].
+        eapply (H0 b1 q P2 eq_sat_Ps Q (k b1) c1 JMeq_refl p'); pclearbot; eauto.
+        apply no_errors_Choice; eauto.
+  - revert p t1 s1 H H0 H1 H2; dependent induction H3; intros.
+    (* AF_refl *)
+    + eapply AF_refl, eq_sat_Ps; eauto.
+    (* AF_Tau *)
+    + punfold H1; dependent induction H1; intros.
+      (* sbuter_gen_tau_L *)
+      * apply AF_Tau.
+        eapply IHsbuter_gen; eauto.
+      (* sbuter_gen_tau_R *)
+      * eapply IHAF; eauto.
+        -- pfold; eauto.
+        -- apply no_errors_Tau; eauto.
+      (* sbuter_gen_tau *)
+      * apply AF_Tau.
+        eapply IHAF; pclearbot; eauto.
+        apply no_errors_Tau; eauto.
+      (* sbuter_gen_modify_L *)
+      * apply AF_Modify.
+        eapply IHsbuter_gen; eauto.
+        respects; eapply sep_r; eauto.
+      (* sbuter_gen_choice_L *)
+      * apply AF_Choice.
+        intro b; specialize (H2 b).
+        eapply H2; eauto.
+    (* AF_Modify *)
+    + punfold H1; dependent induction H1; intros.
+      (* sbuter_gen_tau_L *)
+      * apply AF_Tau.
+        eapply IHsbuter_gen; eauto.
+      (* sbuter_gen_modify_L *)
+      * apply AF_Modify.
+        eapply IHsbuter_gen; eauto.
+        respects; eapply sep_r; eauto.
+      (* sbuter_gen_modify_R *)
+      * eapply (IHAF q P1 eq_sat_Ps Q (k c2) (f c2) JMeq_refl p'); eauto.
+        -- respects; eapply sep_r; eauto.
+        -- pfold; eauto.
+        -- eapply no_errors_Modify; eauto.
+      (* sbuter_gen_modify *)
+      * apply AF_Modify.
+        eapply (IHAF q P1 eq_sat_Ps Q (k c2) (f c2) JMeq_refl p'); pclearbot; eauto.
+        -- respects; eapply sep_r; eauto.
+        -- apply no_errors_Modify; eauto.
+      (* sbuter_gen_choice_R *)
+      * apply AF_Choice.
+        intro b; specialize (H2 b).
+        eapply H2; eauto.
+    (* AF_Choice *)
+    + punfold H3; dependent induction H3; intros.
+      (* sbuter_gen_tau_L *)
+      * apply AF_Tau.
+        eapply IHsbuter_gen; eauto.
+      (* sbuter_gen_modify_L *)
+      * apply AF_Modify.
+        eapply IHsbuter_gen; eauto.
+        respects; eapply sep_r; eauto.
+      (* sbuter_gen_choice_L *)
+      * apply AF_Choice.
+        intro b1; specialize (H6 b1).
+        eapply H6; eauto.
+      (* sbuter_gen_choice_R *)
+      * eapply (H0 false q P1 eq_sat_Ps Q (k false) c2 JMeq_refl p'); eauto.
+        -- pfold; apply H5.
+        -- eapply no_errors_Choice; eauto.
+      (* sbuter_gen_choice *)
+      * apply AF_Choice; intro b1.
+        specialize (H5 b1); destruct H5 as [b2].
+        eapply (H0 b2 q P1 eq_sat_Ps Q (k b2) c2 JMeq_refl p'); pclearbot; eauto.
+        apply no_errors_Choice; eauto.
+Qed.
+
+
+
+
 (** * --- random failed progress below --- **)
+
+
+CoInductive path {S R} (xs0 : CompM S R * S) : Type :=
+| path_step ts0 ts1 : step ts0 ts1 -> path P ts1 -> path P ts0
+| path_Ret r s : path P (Ret r, s)
+| path_Err s : path P (throw tt, s).
+Arguments pathG_step {S R P ts0} ts1.
+Arguments pathG_Ret {S R P} r s.
+Arguments pathG_Err {S R P} s.
+
+Inductive F {S R P'} (P : TPred S R) : forall x0, pathG P' x0 -> Prop :=
+| F_here ts0 h : P ts0 -> F P ts0 h
+| F_there ts0 ts1 pf st h : F P ts1 h -> F P ts0 (pathG_step ts1 pf st h).
+
 
 
 Inductive stops_gen {S R} stops : TPred S R :=
