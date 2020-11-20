@@ -201,8 +201,8 @@ Proof.
   repeat intro. simpl in *. subst. simpl. pstep. constructor; auto. reflexivity.
 Qed.
 
-Lemma Err (A B : Type) P (U : PermType Si Ss A B) :
-  P ⊢ throw tt ▷ throw tt ::: U.
+Lemma Err (A B : Type) P (U : PermType Si Ss A B) t :
+  P ⊢ t ▷ throw tt ::: U.
 Proof.
   repeat intro. pstep. constructor.
 Qed.
@@ -494,50 +494,85 @@ Proof.
   simpl. rewrite sep_conj_Perms_commut. rewrite sep_conj_Perms_bottom_identity. reflexivity.
 Qed.
 
-Fixpoint trySplitPure {A} l1 (v:Vector.t A l1) : forall l2, option (Vector.t A l2 * Vector.t A (l1 - l2)).
+
+Fixpoint split_leq {A} l1 (v:Vector.t A l1) :
+  forall l2, le l2 l1 -> (Vector.t A l2 * Vector.t A (l1 - l2)).
 Proof.
-  induction v; intros; destruct l2.
-  - apply Some; split; apply Vector.nil.
-  - apply None.
-  - apply Some; split; [ apply Vector.nil | apply Vector.cons; assumption ].
-  - destruct (IHv l2) as [ [v1 v2] | ].
-    + apply Some; split; [ apply Vector.cons; assumption | assumption ].
-    + apply None.
+  destruct v; intros; destruct l2.
+  - split; apply Vector.nil.
+  - elimtype False; inversion H.
+  - split; [ apply Vector.nil | apply Vector.cons; assumption ].
+  - edestruct (split_leq _ n v l2) as [v1 v2].
+    + apply le_S_n; assumption.
+    + split; [ apply Vector.cons; assumption | assumption ].
 Defined.
 
+
 (*
-Definition trySplit {A l1 R S} (v : Vector.t A l1) l2 (f : Vector.t A l2 -> Vector.t A (l1 - l2) -> itree (sceE S) R) : itree (sceE S) R.
-  destruct (le_lt_dec l2 l1).
-  - apply Minus.le_plus_minus in l. rewrite l in v.
-    pose proof (Vector.splitat l2 v).
-    apply (f (fst X) (snd X)).
-  - apply (throw tt).
-Defined.
-Print trySplit.
+Fixpoint append_leq {A} l1:
+  forall l2 (l: le l2 l1) (v1:Vector.t A l2) (v2:Vector.t A (l1 - l2)),
+    Vector.t A l1 :=
+  match l1 return (forall l2, le l2 l1 -> Vector.t A l2 -> Vector.t A (l1 - l2) ->
+                              Vector.t A l1) with
+  | 0 => Vector.nil A
+  | S l1' =>
+    fun l2 =>
+      match l2 return (le l2 l1 -> Vector.t A l2 -> Vector.t A (l1 - l2) ->
+                       Vector.t A l1) with
+      | 0 => fun _ v2 => v2
+      | S l2' =>
 *)
 
-Definition trySplit {A l1 R S} (v : Vector.t A l1) l2 (f : Vector.t A l2 -> Vector.t A (l1 - l2) -> itree (sceE S) R) : itree (sceE S) R :=
-  match trySplitPure _ v l2 with
-  | Some (v1,v2) => f v1 v2
-  | None => throw tt
-  end.
 
-Arguments trySplitPure {_} _ !v l2.
+Fixpoint append_leq {A} l1 l2 (l: le l2 l1)
+         (v1:Vector.t A l2) (v2:Vector.t A (l1 - l2)) : Vector.t A l1.
+Proof.
+  revert l2 l v1 v2. destruct l1; intros.
+  - constructor.
+  - destruct l2.
+    + apply v2.
+    + constructor; [ apply (Vector.hd v1) | ]. apply (append_leq _ l1 l2).
+      * apply le_S_n; assumption.
+      * apply (Vector.tl v1).
+      * apply v2.
+Defined.
 
-Lemma trySplitPureNone A l1 v l2: l1 < l2 -> @trySplitPure A l1 v l2 = None.
-Admitted.
+Arguments append_leq {A} !l1.
+Arguments split_leq {A} l1 !v.
 
-Lemma trySplitPureSome A l1 v l2:
-  le l2 l1 ->
-  exists v1 v2, @trySplitPure A l1 v l2 = Some (v1, v2).
-Admitted.
+Lemma split_leq_append_leq A l1 v l2 (l: le l2 l1) :
+  @append_leq A l1 l2 l (fst (split_leq l1 v l2 l)) (snd (split_leq l1 v l2 l)) = v.
+Proof.
+  revert l2 l; induction v; intros.
+  - simpl. reflexivity.
+  - destruct l2.
+    + simpl. reflexivity.
+    + simpl.
+      rewrite (surjective_pairing (split_leq n v l2 (le_S_n l2 n l))). simpl.
+      rewrite IHv. reflexivity.
+Qed.
 
-Lemma ArrCombine_eq A xi rw o l1 l2 xs1 xs2 (P : VPermType Si Ss A) :
-  eq_Perms (xi : arr (rw, o, l1 + l2, P) @ Vector.append xs1 xs2)
-           (xi : arr (rw, o, l1, P) @ xs1 * xi : arr (rw, o + l1, l2, P) @ xs2).
-Admitted.
+Definition trySplit {A l1 R S} (v : Vector.t A l1) l2 (f : Vector.t A l2 -> Vector.t A (l1 - l2) -> itree (sceE S) R) : itree (sceE S) R.
+  destruct (le_lt_dec l2 l1).
+  - exact (f (fst (split_leq l1 v l2 l)) (snd (split_leq l1 v l2 l))).
+  - exact (throw tt).
+Defined.
 
-(*
+Lemma ArrCombine_eq A xi rw o l1 l2 (l:le l2 l1) xs1 xs2 (P : VPermType Si Ss A) :
+  eq_Perms (xi : arr (rw, o, l1, P) @ append_leq l1 l2 l xs1 xs2)
+           (xi : arr (rw, o, l2, P) @ xs1 * xi : arr (rw, o + l2, l1 - l2, P) @ xs2).
+Proof.
+  revert o l2 l xs1 xs2; induction l1; intros.
+  - inversion l. subst. simpl. rewrite sep_conj_Perms_bottom_identity. reflexivity.
+  - destruct l2.
+    + simpl. rewrite sep_conj_Perms_bottom_identity.
+      rewrite Nat.add_0_r. reflexivity.
+    + simpl. rewrite (IHl1 (S o) l2).
+      simpl. rewrite Nat.add_succ_r.
+      rewrite sep_conj_Perms_assoc.
+      reflexivity.
+Qed.
+
 Lemma ArrSplit A R1 R2 P l1 l2 xi xs rw o (T : VPermType Si Ss A) U (ti : itree (sceE Si) R1) (fs : _ -> _ -> itree (sceE Ss) R2) :
   (forall xs1 xs2, P *
               xi : arr (rw, o, l2, T) @ xs1 *
@@ -546,33 +581,12 @@ Lemma ArrSplit A R1 R2 P l1 l2 xi xs rw o (T : VPermType Si Ss A) U (ti : itree 
   P * xi : arr (rw, o, l1, T) @ xs ⊢ ti ▷ trySplit xs l2 fs ::: U.
 Proof.
   intros. unfold trySplit. destruct (le_lt_dec l2 l1).
-  - destruct (trySplitPureSome _ l1 xs l2 l) as [ v1 [v2 e] ]. rewrite e.
+  - rewrite <- (split_leq_append_leq _ l1 xs l2 l).
+    rewrite ArrCombine_eq. repeat rewrite split_leq_append_leq.
+    rewrite sep_conj_Perms_assoc.
     apply H.
-(* rewrite trySplitPure -> Some (fst (splitat ...), snd (splitat ...)) *) admit.
-  - (* rewrite trySplitPure -> None *) admit.
-  rewrite (ArrCombine_eq)
-
-revert o l2 fs H. unfold trySplit. induction xs; destruct l2; intros.
-  - simpl. admit.
-  - repeat intro; pstep; constructor.
-  - simpl. destruct (trySplitPure n xs 0).
-    + apply H.
-
-destruct (le_lt_dec l2 l1). 2: repeat intro; pstep; constructor.
-  assert ()
-  induction l2.
-  - simpl in *.
-    setoid_rewrite <- sep_conj_Perms_assoc in H.
-    setoid_rewrite sep_conj_Perms_bottom_identity in H.
-    rewrite Nat.add_0_r in H. repeat intro. apply H; auto.
-    destruct H0 as (? & ? & ? & ? & ?).
-    exists x, x0. split; [| split]; auto. simpl.
-    (* rewrite Nat.sub_0_r at 1. *)
-    (* rewrite <- Eqdep.EqdepTheory.eq_rect_eq. *)
-    admit.
-  - simpl.
-Abort.
-*)
+  - apply Err.
+Qed.
 
 Lemma vector_tl_append A n m (v1 : Vector.t A (S n)) (v2 : Vector.t A m) :
   Vector.tl (Vector.append v1 v2) = Vector.append (Vector.tl v1) v2.
