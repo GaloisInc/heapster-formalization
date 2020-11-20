@@ -224,7 +224,14 @@ Lemma Iter (A B C D : Type) (T : PermType Si Ss C D) xi xs fi fs (U : PermType S
   (forall yi ys, yi : T @ ys ⊢ fi yi ▷ fs ys ::: T +T+ U) ->
   xi : T @ xs ⊢ iter fi xi ▷ iter fs xs ::: U.
 Proof.
-Abort.
+  revert xi xs fi fs U. pcofix CIH. intros.
+  do 2 rewritebisim @unfold_iter_ktree.
+  eapply sbuter_bind; eauto.
+  - apply H0; auto.
+  - simpl. intros. destruct r1, r2; try contradiction.
+    + repeat intro. pstep. constructor 5; eauto.
+    + pstep. constructor; auto.
+Qed.
 
 Definition ex1i xi : itree (sceE Si) Value :=
   x <- getNum xi;;

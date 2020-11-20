@@ -270,17 +270,19 @@ Section bisim.
   Lemma sbuter_bind {R1 R2 S1 S2} (p : perm) (Q : R1 -> S1 -> Perms) (R : R2 -> S2 -> Perms)
         (t1 : itree (sceE config) R1) (t2 : R1 -> itree (sceE config) R2)
         (s1 : itree (sceE specConfig) S1) (s2 : S1 -> itree (sceE specConfig) S2)
-        c1 c2 :
+        c1 c2 r :
     pre p (c1, c2) ->
     sbuter p Q t1 c1 s1 c2 ->
-    (forall r1 r2, typing (Q r1 r2) R (t2 r1) (s2 r2)) ->
-    sbuter p R (x <- t1 ;; t2 x) c1 (x <- s1 ;; s2 x) c2.
+    (forall r1 r2 p c1 c2, p ∈ (Q r1 r2) ->
+                      pre p (c1, c2) ->
+                      paco6 sbuter_gen r p R (t2 r1) c1 (s2 r2) c2) ->
+    paco6 sbuter_gen r p R (x <- t1 ;; t2 x) c1 (x <- s1 ;; s2 x) c2.
   Proof.
     revert p Q R t1 t2 s1 s2 c1 c2. pcofix CIH.
     intros p Q R t1 t2 s1 s2 c1 c2 Hpre Htyping1 Htyping2.
     punfold Htyping1. induction Htyping1.
     - do 2 rewritebisim @bind_ret_l. specialize (Htyping2 _ _ _ c1 c2 H0 H).
-      eapply paco6_mon_bot; eauto.
+      eapply paco6_mon; eauto.
     - rewrite throw_bind. pstep. constructor.
     - rewritebisim @bind_tau.
       specialize (IHHtyping1 Hpre Htyping2). punfold IHHtyping1.
