@@ -821,10 +821,15 @@ Definition eq_sat_sep_sbuter {S1 S2 R1 R2} (q:@perm (S1*S2))
     sbuter p Q t1 s1 t2 s2 -> no_errors s2 t2 ->
     (P1 (t1,s1) <-> P2 (t2,s2)).
 
+
+(** * `eq_sat_sep_sbuter` for state predicates **)
 Definition state_pred {S} R P : TPred S R := fun '(_,s) => P s.
 
+Definition q_similar {S1 S2} q (P1 : S1 -> Prop) (P2 : S2 -> Prop): Prop :=
+  forall s1 s2, pre q (s1,s2) -> (P1 s1 <-> P2 s2).
+
 Lemma eq_sat_state_preds {S1 S2 R1 R2} q (P1 : S1 -> Prop) (P2 : S2 -> Prop)
-  : (forall s1 s2, pre q (s1,s2) -> (P1 s1 <-> P2 s2)) ->
+  : q_similar q P1 P2 ->
     eq_sat_sep_sbuter q (state_pred R1 P1) (state_pred R2 P2).
 Proof.
   unfold eq_sat_sep_sbuter; intros.
