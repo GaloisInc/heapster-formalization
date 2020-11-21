@@ -38,21 +38,21 @@ Section permType.
   Context `{Lens Si config}.
 
   Record PermType (A B:Type) : Type :=
-    { ptApp : A -> B -> @Perms (Si*Ss) }.
+    { ptApp : A -> B -> @Perms(Si*Ss) }.
   Definition VPermType A := PermType Value A.
-  Notation "xi : T @ xs" := (ptApp _ _ T xi xs) (at level 35).
+  Notation "xi : T ▷ xs" := (ptApp _ _ T xi xs) (at level 35).
 
   Definition withPerms {Ai As} (T: PermType Ai As) (P:@Perms (Si * Ss)) : PermType Ai As:=
-    {| ptApp:= fun ai abs => ai : T @ abs * P|}.
+    {| ptApp:= fun ai abs => ai : T ▷ abs * P|}.
   Notation "T ∅ P" := (withPerms T P) (at level 40).
 
   Definition starPT {Ai As Bs} (T:PermType Ai As) (U:PermType Ai Bs)
     : PermType Ai (As * Bs) :=
-    {| ptApp := fun ai abs => ai : T @ fst abs * ai : U @ snd abs |}.
+    {| ptApp := fun ai abs => ai : T ▷ fst abs * ai : U ▷ snd abs |}.
 
   Definition existsPT {Ai As} {Bs:As -> Type}
              (F : forall a, PermType Ai (Bs a)) : PermType Ai (sigT Bs) :=
-    {| ptApp := fun ai abs => ai : F (projT1 abs) @ (projT2 abs) |}.
+    {| ptApp := fun ai abs => ai : F (projT1 abs) ▷ (projT2 abs) |}.
   Notation "'ex' ( x : A ) . T" := (existsPT (As:=A) (fun x => T)) (at level 70).
 
   Definition either {A B C} (f:A -> C) (g:B -> C) (x:A+B): C :=
@@ -84,7 +84,7 @@ Section permType.
                                                   | R => read_perm p v
                                                   | W => write_perm p v
                                                   end)
-                                 * (v : T @ a))
+                                 * (v : T ▷ a))
     end.
 
   Definition ptr {A} '(rw, o, T) : VPermType A :=
@@ -98,8 +98,8 @@ Section permType.
     | 0 => trueP
     | S l' =>
       {| ptApp := fun xi xss =>
-                    xi : ptr (rw, o, T) @ Vector.hd xss *
-                    xi : arr_perm rw (S o) l' T @ Vector.tl xss
+                    xi : ptr (rw, o, T) ▷ Vector.hd xss *
+                    xi : arr_perm rw (S o) l' T ▷ Vector.tl xss
       |}
     end.
   Notation "'arr' ( rw , o , l , T )":=(arr_perm rw o l T).
@@ -108,15 +108,15 @@ Section permType.
              (T1:PermType A1 B1) (T2:PermType A2 B2) : PermType (A1+A2) (B1+B2) :=
     {| ptApp := fun eithA eithB =>
                   match (eithA,eithB) with
-                  | (inl a1, inl b1) => a1 : T1 @ b1
-                  | (inr a2, inr b2) => a2 : T2 @ b2
+                  | (inl a1, inl b1) => a1 : T1 ▷ b1
+                  | (inr a2, inr b2) => a2 : T2 ▷ b2
                   | _ => top_Perms
                   end |}.
   Notation "T1 +T+ T2" := (plusPT T1 T2) (at level 50).
 
   Definition timesPT {A1 A2 B1 B2}
              (T1:PermType A1 B1) (T2:PermType A2 B2) : PermType (A1*A2) (B1*B2) :=
-    {| ptApp := fun a12 b12 =>  fst a12 : T1 @ fst b12 * snd a12 : T2 @ snd b12 |}.
+    {| ptApp := fun a12 b12 =>  fst a12 : T1 ▷ fst b12 * snd a12 : T2 ▷ snd b12 |}.
   Notation "T1 *T* T2" := (timesPT T1 T2) (at level 40).
 
   Program Definition equals_perm {A} (a1 a2 : A): @perm (Si*Ss) := {|
@@ -181,7 +181,7 @@ Section permType.
 
   (* The meet on permission types is just the lifitng of that on Perms *)
   Definition meet_PermType {A B} (Ts:PermType A B -> Prop) : PermType A B :=
-    {| ptApp := fun a b => meet_Perms (fun P => exists T, Ts T /\ P = (a : T @ b)) |}.
+    {| ptApp := fun a b => meet_Perms (fun P => exists T, Ts T /\ P = (a : T ▷ b)) |}.
 
   (* Meet is a lower bound for PermType *)
   Lemma lte_meet_PermType {A B} (Ts:PermType A B -> Prop) T:
@@ -230,7 +230,7 @@ Section permType.
       foldUnfold : forall gx, unfoldFP (foldFP gx) = gx;
       unfoldFold : forall x, foldFP (unfoldFP x) = x; }.
   Definition unmaprPT {A B C} (f:B -> C) (T:PermType A C) : PermType A B :=
-    {| ptApp := fun a b => a : T @ (f b) |}.
+    {| ptApp := fun a b => a : T ▷ (f b) |}.
   Program Definition mu {A G X} `{FixedPoint G X}
              (F:PermType A X -> PermType A (G X))
              {prp:Proper (lte_PermType ==> lte_PermType) F}
@@ -250,10 +250,10 @@ Section permType.
 
 End permType.
 
-Notation "P ⊢ ti  ts ::: U" := (typing P (ptApp _ _ _ _ U) ti ts) (at level 60).
-Notation "xi : T @ xs" := (ptApp _ _ _ _ T xi xs) (at level 35).
+Notation "P ⊢ ti ⤳ ts ::: U" := (typing P (ptApp _ _ _ _ U) ti ts) (at level 60).
+Notation "xi : T ▷ xs" := (ptApp _ _ _ _ T xi xs) (at level 35).
 Notation "T1 +T+ T2" := (plusPT _ _ T1 T2) (at level 50).
 Notation "T1 *T* T2" := (timesPT _ _ T1 T2) (at level 40).
-(* Notation "'ex' ( x : A ) . T" := (existsPT _ _ (As:=A) (fun x => T)) (at level 70). *)
+Notation "'ex' ( x 'oftype' A ) T" := (existsPT _ _ (As:=A) (fun x => T)) (at level 70).
 Notation "T ∅ P" := (withPerms _ _ T P) (at level 40).
 Notation "'arr' ( rw , o , l , T )" := (arr_perm _ _ rw o l T) (at level 40).
