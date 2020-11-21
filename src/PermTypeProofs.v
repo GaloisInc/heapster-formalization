@@ -48,135 +48,131 @@ Next Obligation.
 Qed.
 Instance lens_config : Lens Si config := lens_config'.
 
-Lemma TrueI (A : Type) P (xi : A) :
-  P * xi : trueP Si Ss ▷ tt ⊑ P.
-Proof.
-  simpl. rewrite sep_conj_Perms_commut. rewrite sep_conj_Perms_bottom_identity. reflexivity.
-Qed.
+Lemma ProdI (A1 A2 B1 B2 : Type) xi yi xs ys (T1 : PermType Si Ss A1 B1) (T2 : PermType Si Ss A2 B2) :
+  xi : T1 ▷ xs * yi : T2 ▷ ys ⊨ (xi, yi) : T1 *T* T2 ▷ (xs, ys).
+Proof. reflexivity. Qed.
+
+Lemma ProdE (A1 A2 B1 B2 : Type) xi xs (T1 : PermType Si Ss A1 B1) (T2 : PermType Si Ss A2 B2) :
+  xi : T1 *T* T2 ▷ xs ⊨ fst xi : T1 ▷ fst xs * snd xi : T2 ▷ snd xs.
+Proof. reflexivity. Qed.
 
 Lemma SumI1 (A1 A2 B1 B2 : Type) (xi : A1) (xs : B1) (T1 : PermType Si Ss A1 B1) (T2 : PermType Si Ss A2 B2) :
-  xi : T1 ▷ xs ⊑ inl xi : T1 +T+ T2 ▷ inl xs.
+  xi : T1 ▷ xs ⊨ inl xi : T1 +T+ T2 ▷ inl xs.
 Proof. reflexivity. Qed.
 
 Lemma SumI2 (A1 A2 B1 B2 : Type) (xi : A2) (xs : B2) (T1 : PermType Si Ss A1 B1) (T2 : PermType Si Ss A2 B2) :
-  xi : T2 ▷ xs ⊑ inr xi : T1 +T+ T2 ▷ inr xs.
+  xi : T2 ▷ xs ⊨ inr xi : T1 +T+ T2 ▷ inr xs.
 Proof. reflexivity. Qed.
 
 Lemma SumE (A1 A2 B1 B2 R1 R2 : Type)
       (xi : A1 + A2) (xs : B1 + B2) ti1 ti2 ts1 ts2
       (T1 : PermType Si Ss A1 B1) (T2 : PermType Si Ss A2 B2) (P : Perms) (U : PermType Si Ss (A1 + A2) (B1 + B2)) :
-  (forall yi ys, P * yi : T1 ▷ ys ⊢ ti1 ⤳ ts1 ::: U) ->
-  (forall yi ys, P * yi : T2 ▷ ys ⊢ ti2 ⤳ ts2 ::: U) ->
-  P * xi : T1 +T+ T2 ▷ xs ⊢ either (fun _ => ti1) (fun _ => ti2) xi ⤳ either (fun _ => ts1) (fun _ => ts2) xs ::: U.
+  (forall yi ys, P * yi : T1 ▷ ys ⊢ ti1 yi ⤳ ts1 ys ::: U) ->
+  (forall yi ys, P * yi : T2 ▷ ys ⊢ ti2 yi ⤳ ts2 ys ::: U) ->
+  P * xi : T1 +T+ T2 ▷ xs ⊢ sum_rect _ ti1 ti2 xi ⤳ sum_rect _ ts1 ts2 xs ::: U.
 Proof.
   intros. simpl.
-  destruct xi, xs; auto;
+  destruct xi, xs; simpl; auto;
     rewrite sep_conj_Perms_commut; rewrite sep_conj_Perms_top_absorb; apply typing_top.
 Qed.
 
-Lemma ProdI (A1 A2 B1 B2 : Type) xi yi xs ys (T1 : PermType Si Ss A1 B1) (T2 : PermType Si Ss A2 B2) :
-  xi : T1 ▷ xs * yi : T2 ▷ ys ⊑ (xi, yi) : T1 *T* T2 ▷ (xs, ys).
-Proof. reflexivity. Qed.
-
-Lemma ProdE (A1 A2 B1 B2 : Type) xi xs (T1 : PermType Si Ss A1 B1) (T2 : PermType Si Ss A2 B2) :
-  xi : T1 *T* T2 ▷ xs ⊑ fst xi : T1 ▷ fst xs * snd xi : T2 ▷ snd xs.
-Proof. reflexivity. Qed.
-
 Lemma StarI (A B1 B2 : Type) xi xs ys (T1 : PermType Si Ss A B1) (T2 : PermType Si Ss A B2) :
-  xi : T1 ▷ xs * xi : T2 ▷ ys ⊑ xi : (starPT _ _ T1 T2) ▷ (xs, ys).
+  xi : T1 ▷ xs * xi : T2 ▷ ys ⊨ xi : starPT _ _ T1 T2 ▷ (xs, ys).
 Proof. reflexivity. Qed.
 
 Lemma StarE (A B1 B2 : Type) xi xs (T1 : PermType Si Ss A B1) (T2 : PermType Si Ss A B2) :
-  xi : (starPT _ _ T1 T2) ▷ xs ⊑ xi : T1 ▷ fst xs * xi : T2 ▷ snd xs.
+  xi : starPT _ _ T1 T2 ▷ xs ⊨ xi : T1 ▷ fst xs * xi : T2 ▷ snd xs.
 Proof. reflexivity. Qed.
 
+Lemma PermsI (A B : Type) (P : Perms) xi xs (T : PermType Si Ss A B) :
+  xi : T ▷ xs * P ⊨ xi : T ∅ P ▷ xs.
+Proof. reflexivity. Qed.
+
+Lemma PermsE (A B : Type) (P : Perms) xi xs (T : PermType Si Ss A B) :
+  xi : T ∅ P ▷ xs ⊨ xi : T ▷ xs * P.
+Proof. reflexivity. Qed.
+
+Lemma Frame (A B : Type) (P1 P2 : Perms) ti ts (T : PermType Si Ss A B) :
+  P1 ⊢ ti ⤳ ts ::: T ->
+  P1 * P2 ⊢ ti ⤳ ts ::: T ∅ P2.
+Proof. apply typing_frame. Qed.
+
 Lemma OrI1 (A B1 B2 : Type) xi xs (T1 : PermType Si Ss A B1) (T2 : PermType Si Ss A B2) :
-  xi : T1 ▷ xs ⊑ xi : (or _ _ T1 T2) ▷ inl xs.
+  xi : T1 ▷ xs ⊨ xi : (or _ _ T1 T2) ▷ inl xs.
 Proof. reflexivity. Qed.
 
 Lemma OrI2 (A B1 B2 : Type) xi xs (T1 : PermType Si Ss A B1) (T2 : PermType Si Ss A B2) :
-  xi : T2 ▷ xs ⊑ xi : (or _ _ T1 T2) ▷ inr xs.
+  xi : T2 ▷ xs ⊨ xi : (or _ _ T1 T2) ▷ inr xs.
 Proof. reflexivity. Qed.
 
 Lemma OrE (A B1 B2 R1 R2 : Type)
       (xi : A) (xs : B1 + B2) ti ts1 ts2
       (T1 : PermType Si Ss A B1) (T2 : PermType Si Ss A B2) (P : Perms) (U : PermType Si Ss A (B1 + B2)) :
-  (forall yi ys, P * yi : T1 ▷ ys ⊢ ti ⤳ ts1 ::: U) ->
-  (forall yi ys, P * yi : T2 ▷ ys ⊢ ti ⤳ ts2 ::: U) ->
-  P * xi : (or _ _ T1 T2) ▷ xs ⊢ ti ⤳ either (fun _ => ts1) (fun _ => ts2) xs ::: U.
+  (forall ys, P * xi : T1 ▷ ys ⊢ ti ⤳ ts1 ys ::: U) ->
+  (forall ys, P * xi : T2 ▷ ys ⊢ ti ⤳ ts2 ys ::: U) ->
+  P * xi : or _ _ T1 T2 ▷ xs ⊢ ti ⤳ sum_rect _ ts1 ts2 xs ::: U.
 Proof.
   intros. destruct xs; simpl; auto.
 Qed.
 
+Lemma TrueI (A : Type) P (xi : A) :
+  P ⊨ P * xi : trueP Si Ss ▷ tt.
+Proof.
+  simpl. rewrite sep_conj_Perms_commut. rewrite sep_conj_Perms_bottom_identity. reflexivity.
+Qed.
+
 Lemma ExI (A B C : Type) (xi : A) (xs : C) ys (F : forall (b : B), PermType Si Ss A C) :
-  xi : ex (z oftype B) (F z) ▷ existT _ ys xs ⊑ xi : F ys ▷ xs.
+  xi : F ys ▷ xs ⊨ xi : ex (z oftype B) (F z) ▷ existT _ ys xs.
 Proof. reflexivity. Qed.
 
 Lemma ExE (A B C : Type) (xi : A) (xs : sigT (fun b : B => C)) (F : forall (b : B), PermType Si Ss A C) :
-   xi : F (projT1 xs) ▷ (projT2 xs) ⊑ xi : ex (z oftype B) (F z) ▷ xs.
+  xi : ex (z oftype B) (F z) ▷ xs ⊨ xi : F (projT1 xs) ▷ (projT2 xs).
 Proof. reflexivity. Qed.
 
-Lemma Frame (A B : Type) (P1 P2 : Perms) ti ts (T : PermType Si Ss A B) :
-  P1 ⊢ ti ⤳ ts ::: T ->
-  (P1 * P2) ⊢ ti ⤳ ts ::: (T ∅ P2).
-Proof. apply typing_frame. Qed.
-
-Lemma PermsI (A B : Type) (P : Perms) xi xs (T : PermType Si Ss A B) :
-  xi : T ▷ xs * P ⊑ xi : T ∅ P ▷ xs.
-Proof. reflexivity. Qed.
-
-Lemma PermsE (A B : Type) (P : Perms) xi xs (T : PermType Si Ss A B) :
-  xi : T ∅ P ▷ xs ⊑ xi : T ▷ xs * P.
-Proof. reflexivity. Qed.
-
-Lemma Cast (A B : Type) (P : PermType Si Ss A B) xi yi xs ys :
-  xi : P ▷ ys ⊑ xi : eqp _ _ yi ▷ xs * yi : P ▷ ys.
-Proof.
-  repeat intro. destruct H as (e & p' & Heq & Hp & Hlte).
-  simpl in Heq. subst.
-  eapply Perms_upwards_closed; eauto. etransitivity. apply lte_r_sep_conj_perm. eauto.
-Qed.
-
-Lemma EqDup (A : Type) (xi yi : A) :
-  xi : eqp Si Ss yi ▷ tt * xi : eqp _ _ yi ▷ tt ⊑ xi : eqp _ _ yi ▷ tt.
-Proof.
-  repeat intro. simpl in *. subst. exists bottom_perm, bottom_perm.
-  split; [| split]; auto. rewrite sep_conj_perm_bottom. apply bottom_perm_is_bottom.
-Qed.
-
-Lemma EqTrans (A : Type) (xi yi zi : A) :
-    xi : eqp Si Ss zi ▷ tt ⊑ xi : eqp _ _ yi ▷ tt * yi : eqp _ _ zi ▷ tt.
-Proof.
-  repeat intro. destruct H as (? & ? & ? & ? & ?). simpl in *; subst. reflexivity.
-Qed.
-
-Lemma EqCtx (A B : Type) (xi yi : A) (f : A -> B) :
-  f xi : eqp Si Ss (f yi) ▷ tt ⊑ xi : eqp _ _ yi ▷ tt.
-Proof.
-  repeat intro. simpl in *. congruence.
-Qed.
+(***********************************************************************)
 
 Lemma EqRefl A P (xi : A) :
-  P * xi : eqp Si Ss xi ▷ tt ⊑ P.
+  P ⊨ P * xi : eqp Si Ss xi ▷ tt.
 Proof.
   repeat intro.
   exists p, bottom_perm. split; [| split]; simpl; eauto. rewrite sep_conj_perm_bottom. reflexivity.
 Qed.
 
 Lemma EqSym (A : Type) (xi yi : A) :
-  yi : eqp Si Ss xi ▷ tt ⊑ xi : eqp _ _ yi ▷ tt.
+  xi : eqp Si Ss yi ▷ tt ⊨ yi : eqp _ _ xi ▷ tt.
 Proof.
   repeat intro; simpl in *; subst; reflexivity.
 Qed.
 
-Lemma Weak (A B : Type) P1 P2 (U1 U2 : PermType Si Ss A B) ts ti :
-  P2 ⊑ P1 ->
-  (forall xi xs, xi : U1 ▷ xs ⊑ xi : U2 ▷ xs) ->
-  P2 ⊢ ts ⤳ ti ::: U2 ->
-  P1 ⊢ ts ⤳ ti ::: U1.
+Lemma EqTrans (A : Type) (xi yi zi : A) :
+   xi : eqp _ _ yi ▷ tt * yi : eqp _ _ zi ▷ tt ⊨ xi : eqp Si Ss zi ▷ tt.
 Proof.
-  intros. eapply typing_lte; eauto.
+  repeat intro. destruct H as (? & ? & ? & ? & ?). simpl in *; subst. reflexivity.
 Qed.
+
+Lemma EqCtx (A B : Type) (xi yi : A) (f : A -> B) :
+  xi : eqp _ _ yi ▷ tt ⊨ f xi : eqp Si Ss (f yi) ▷ tt.
+Proof.
+  repeat intro. simpl in *. congruence.
+Qed.
+
+Lemma EqDup (A : Type) (xi yi : A) :
+  xi : eqp _ _ yi ▷ tt ⊨ xi : eqp Si Ss yi ▷ tt * xi : eqp _ _ yi ▷ tt.
+Proof.
+  repeat intro. simpl in *. subst. exists bottom_perm, bottom_perm.
+  split; [| split]; auto. rewrite sep_conj_perm_bottom. apply bottom_perm_is_bottom.
+Qed.
+
+Lemma Cast (A B : Type) (P : PermType Si Ss A B) xi yi xs ys :
+  xi : eqp _ _ yi ▷ xs * yi : P ▷ ys ⊨ xi : P ▷ ys.
+Proof.
+  repeat intro. destruct H as (e & p' & Heq & Hp & Hlte).
+  simpl in Heq. subst.
+  eapply Perms_upwards_closed; eauto. etransitivity. apply lte_r_sep_conj_perm. eauto.
+Qed.
+
+(***********************************************************************)
+
 
 (* TODO name conflicts with ITree Ret *)
 Lemma Ret_ (A B : Type) xi xs (T : PermType Si Ss A B) :
@@ -199,10 +195,17 @@ Proof.
   repeat intro. simpl in *. subst. simpl. pstep. constructor; auto. reflexivity.
 Qed.
 
-Lemma Err (A B : Type) P (U : PermType Si Ss A B) t :
-  P ⊢ t ⤳ throw tt ::: U.
+Lemma Iter (A B C D : Type) (T : PermType Si Ss C D) xi xs fi fs (U : PermType Si Ss A B) :
+  (forall yi ys, yi : T ▷ ys ⊢ fi yi ⤳ fs ys ::: T +T+ U) ->
+  xi : T ▷ xs ⊢ iter fi xi ⤳ iter fs xs ::: U.
 Proof.
-  repeat intro. pstep. constructor.
+  revert xi xs fi fs U. pcofix CIH. intros.
+  do 2 rewritebisim @unfold_iter_ktree.
+  eapply sbuter_bind; eauto.
+  - apply H0; auto.
+  - simpl. intros. destruct r1, r2; try contradiction.
+    + repeat intro. pstep. constructor 5; eauto.
+    + pstep. constructor; auto.
 Qed.
 
 Lemma If (A B : Type) P ti1 ti2 ts1 ts2 (xi yi : bool) xs (U : PermType Si Ss A B) :
@@ -218,25 +221,29 @@ Proof.
     etransitivity; eauto. apply lte_l_sep_conj_perm.
 Qed.
 
-Lemma Iter (A B C D : Type) (T : PermType Si Ss C D) xi xs fi fs (U : PermType Si Ss A B) :
-  (forall yi ys, yi : T ▷ ys ⊢ fi yi ⤳ fs ys ::: T +T+ U) ->
-  xi : T ▷ xs ⊢ iter fi xi ⤳ iter fs xs ::: U.
+Lemma Err (A B : Type) P (U : PermType Si Ss A B) t :
+  P ⊢ t ⤳ throw tt ::: U.
 Proof.
-  revert xi xs fi fs U. pcofix CIH. intros.
-  do 2 rewritebisim @unfold_iter_ktree.
-  eapply sbuter_bind; eauto.
-  - apply H0; auto.
-  - simpl. intros. destruct r1, r2; try contradiction.
-    + repeat intro. pstep. constructor 5; eauto.
-    + pstep. constructor; auto.
+  repeat intro. pstep. constructor.
 Qed.
+
+Lemma Weak (A B : Type) P1 P2 (U1 U2 : PermType Si Ss A B) ts ti :
+  P1 ⊨ P2 ->
+  (forall xi xs, xi : U2 ▷ xs ⊨ xi : U1 ▷ xs) ->
+  P2 ⊢ ts ⤳ ti ::: U2 ->
+  P1 ⊢ ts ⤳ ti ::: U1.
+Proof.
+  intros. eapply typing_lte; eauto.
+Qed.
+
+(***********************************************************************)
 
 Definition ex1i xi : itree (sceE Si) Value :=
   x <- getNum xi;;
   Ret (VNum (Init.Nat.mul 5 x)).
 
 Definition ex1s (xs : sigT (fun _ : nat => unit)) : itree (sceE Ss) (sigT (fun _ : nat => unit)) :=
-  x <- Ret tt;;
+  Ret tt;;
   Ret (existT _ (Init.Nat.mul 5 (projT1 xs)) tt).
 
 Definition IsNat : VPermType Si Ss (sigT (fun _ : nat => unit)) :=
@@ -255,13 +262,15 @@ Proof.
   intros yi []. clear xi.
   eapply Weak; [apply EqCtx with (f := fun x => VNum (Init.Nat.mul 5 x)) | reflexivity |].
   (* ExI *)
-  eapply Weak. apply ExI with (F := fun n : nat => eqp Si Ss (VNum n)). reflexivity. fold IsNat.
+  eapply Weak; [apply ExI with (F := fun n : nat => eqp Si Ss (VNum n)) | reflexivity |]; fold IsNat.
   (* Ret *)
   apply Ret_.
 Qed.
 
+(***********************************************************************)
+
 Lemma PtrI A xi yi xs ys rw o (T : VPermType Si Ss A) :
-  xi : ptr _ _ (rw, o, T) ▷ ys ⊑ xi : ptr _ _ (rw, o, eqp Si Ss yi) ▷ xs * yi : T ▷ ys.
+  xi : ptr _ _ (rw, o, eqp Si Ss yi) ▷ xs * yi : T ▷ ys ⊨ xi : ptr _ _ (rw, o, T) ▷ ys.
 Proof.
   destruct xi; simpl.
   - rewrite sep_conj_Perms_top_absorb. reflexivity.
@@ -275,9 +284,27 @@ Proof.
     etransitivity; eauto. apply lte_l_sep_conj_perm.
 Qed.
 
-Lemma ReadDup o xi yi xs:
-  xi : ptr _ _ (R, o, eqp Si Ss yi) ▷ xs * xi : ptr _ _ (R, o, eqp _ _ yi) ▷ xs ⊑
-  xi : ptr _ _ (R, o, eqp _ _ yi) ▷ xs.
+Lemma PtrE A B C (P : Perms) rw o (T : VPermType Si Ss A) (xi yi : Value) xs ti ts (U : PermType Si Ss B C) :
+  (forall yi, P * xi : ptr _ _ (rw, o, eqp Si Ss yi) ▷ tt * yi : T ▷ xs ⊢ ti ⤳ ts ::: U) ->
+  P * xi : ptr _ _ (rw, o, T) ▷ xs ⊢ ti ⤳ ts ::: U.
+Proof.
+  repeat intro. rename p into p''. destruct H0 as (p & p' & Hp & Hptr & Hlte).
+  destruct xi; [contradiction | destruct a].
+  destruct Hptr as (? & (? & ?) & ?). subst.
+  destruct H2 as (pptr & pt & Hptr & Hpt & Hlte').
+  eapply H; eauto. exists (p ** pptr), pt.
+  split; [| split]; eauto.
+  - do 2 eexists. split; [| split]; eauto. 2: reflexivity. eexists.
+    split; eauto.
+    do 2 eexists. split; [| split]; eauto. reflexivity. apply sep_conj_perm_bottom'.
+  - etransitivity; eauto. rewrite sep_conj_perm_assoc.
+    apply sep_conj_perm_monotone; auto; reflexivity.
+Qed.
+
+Lemma ReadDup o xi yi :
+  xi : ptr _ _ (R, o, eqp _ _ yi) ▷ tt ⊨
+  xi : ptr _ _ (R, o, eqp Si Ss yi) ▷ tt * xi : ptr _ _ (R, o, eqp _ _ yi) ▷ tt.
+
 Proof.
   repeat intro. simpl in *. destruct xi; [contradiction |].
   destruct a as [b o']. unfold offset in *.
@@ -285,7 +312,7 @@ Proof.
   exists (read_perm (b, o' + o) v), (read_perm (b, o' + o) v).
   destruct H0 as (pread & peq & Hpread & Hpeq & Hlte).
   simpl in Hpread, Hpeq. subst.
-  assert (read_perm (b, o' + o) v ∈ ptr_Perms _ _ R (VPtr (b, o' + o)) xs (eqp Si Ss v)).
+  assert (read_perm (b, o' + o) v ∈ ptr_Perms _ _ R (VPtr (b, o' + o)) tt (eqp Si Ss v)).
   {
     eexists. split; eauto. simpl in *. exists (read_perm (b, o' + o) v), bottom_perm.
     split; [| split]. 2: reflexivity.
@@ -309,23 +336,6 @@ Proof.
   destruct xi; [reflexivity | destruct a].
   intros. simpl. rewrite <- Nat.add_assoc. rewrite (Minus.le_plus_minus_r _ _ H).
   reflexivity.
-Qed.
-
-Lemma PtrE A B C (P : Perms) rw o (T : VPermType Si Ss A) (xi yi : Value) xs ti ts (U : PermType Si Ss B C) :
-  (forall yi, P * xi : ptr _ _ (rw, o, eqp Si Ss yi) ▷ tt * yi : T ▷ xs ⊢ ti ⤳ ts ::: U) ->
-  P * xi : ptr _ _ (rw, o, T) ▷ xs ⊢ ti ⤳ ts ::: U.
-Proof.
-  repeat intro. rename p into p''. destruct H0 as (p & p' & Hp & Hptr & Hlte).
-  destruct xi; [contradiction | destruct a].
-  destruct Hptr as (? & (? & ?) & ?). subst.
-  destruct H2 as (pptr & pt & Hptr & Hpt & Hlte').
-  eapply H; eauto. exists (p ** pptr), pt.
-  split; [| split]; eauto.
-  - do 2 eexists. split; [| split]; eauto. 2: reflexivity. eexists.
-    split; eauto.
-    do 2 eexists. split; [| split]; eauto. reflexivity. apply sep_conj_perm_bottom'.
-  - etransitivity; eauto. rewrite sep_conj_perm_assoc.
-    apply sep_conj_perm_monotone; auto; reflexivity.
 Qed.
 
 Lemma Load xi yi xs rw :
@@ -400,65 +410,6 @@ Proof.
     + simpl in *. eapply sep_step_lte; eauto. intros ? []. constructor; auto.
 Qed.
 
-Definition ex2i xi yi : itree (sceE Si) Si :=
-  x <- load xi;;
-  store yi x.
-
-Definition ex2s : itree (sceE Ss) unit :=
-  Ret tt ;;
-  Ret tt.
-
-Lemma ex2_typing A (xi yi : Value) xs (T : VPermType Si Ss A) :
-  xi : ptr _ _ (R, 0, T) ▷ xs * yi : ptr Si Ss (W, 0, trueP _ _) ▷ tt ⊢
-  ex2i xi yi ⤳
-  ex2s :::
-  (trueP _ _) ∅ yi : ptr _ _ (W, 0, T) ▷ xs ∅ xi : ptr _ _ (R, 0, trueP _ _) ▷ tt.
-Proof.
-  rewrite sep_conj_Perms_commut.
-  eapply PtrE; eauto.
-  intros zi. eapply Bind.
-  - apply Frame. rewrite sep_conj_Perms_commut. apply Frame. apply Load.
-  - intros wi [].
-    eapply Weak with (P2 := yi : ptr _ _ (W, 0, trueP _ _) ▷ tt *
-                            wi : T ▷ xs *
-                            xi : ptr _ _ (R, 0, trueP _ _) ▷ tt)
-                     (U2 := trueP _ _ ∅
-                            yi : ptr _ _ (W, 0, eqp _ _ wi) ▷ tt ∅
-                            wi : T ▷ xs ∅
-                            xi : ptr _ _ (R, 0, trueP _ _) ▷ tt).
-
-    + etransitivity.
-      2: {
-        etransitivity; [| apply PermsI]. rewrite sep_conj_Perms_commut.
-        eapply sep_conj_Perms_monotone; [reflexivity |]. (* frame *)
-        etransitivity; [| apply PermsI]. rewrite sep_conj_Perms_commut.
-        eapply sep_conj_Perms_monotone; [reflexivity |]. (* frame *)
-        etransitivity; [| apply PermsI]. rewrite sep_conj_Perms_commut. reflexivity.
-      }
-      rewrite (sep_conj_Perms_commut (zi : T ▷ xs) _).
-      repeat rewrite <- sep_conj_Perms_assoc.
-      apply sep_conj_Perms_monotone; [reflexivity |].
-      rewrite sep_conj_Perms_commut.
-      eapply sep_conj_Perms_monotone.
-      * etransitivity; [apply PtrI | apply TrueI]. (* Weakening the content type *)
-      * apply Cast.
-    + intros ? [].
-      etransitivity; [| apply PermsI]. rewrite sep_conj_Perms_commut.
-      etransitivity; [apply PermsE |]. rewrite sep_conj_Perms_commut.
-      eapply sep_conj_Perms_monotone; [reflexivity |]. (* frame *)
-      etransitivity; [| apply PermsI].
-      etransitivity; [apply PermsE |].
-      etransitivity.
-      2: {
-        eapply sep_conj_Perms_monotone; [| reflexivity]. (* frame *)
-        apply PermsI.
-      }
-      rewrite <- sep_conj_Perms_assoc.
-      eapply sep_conj_Perms_monotone; [reflexivity |]. (* frame *)
-      apply PtrI.
-    + apply Frame. apply Frame. apply Store.
-Qed.
-
 Lemma IsNull1 A xi xs rw o (P : VPermType Si Ss A) :
   xi : ptr _ _ (rw, o, P) ▷ xs ⊢
   isNull xi ⤳
@@ -478,6 +429,74 @@ Lemma IsNull2 xi:
   eqp _ _ true.
 Proof.
   repeat intro. pstep. simpl in *. subst. constructor; simpl; auto.
+Qed.
+
+(***********************************************************************)
+
+Definition ex2i xi yi : itree (sceE Si) Si :=
+  x <- load xi;;
+  store yi x.
+
+Definition ex2s : itree (sceE Ss) unit :=
+  Ret tt ;;
+  Ret tt.
+
+Lemma ex2_typing A (xi yi : Value) xs (T : VPermType Si Ss A) :
+  xi : ptr _ _ (R, 0, T) ▷ xs * yi : ptr Si Ss (W, 0, trueP _ _) ▷ tt ⊢
+  ex2i xi yi ⤳
+  ex2s :::
+  (trueP _ _) ∅ yi : ptr _ _ (W, 0, T) ▷ xs ∅ xi : ptr _ _ (R, 0, trueP _ _) ▷ tt.
+Proof.
+  (* PtrE *)
+  rewrite sep_conj_Perms_commut.
+  eapply PtrE; eauto; intros zi.
+  (* Bind *)
+  eapply Bind.
+  (* L: Frame and Load *)
+  apply Frame. rewrite sep_conj_Perms_commut. apply Frame. apply Load.
+  (* Weak *)
+  intros wi [].
+  eapply Weak with (P2 := yi : ptr _ _ (W, 0, trueP _ _) ▷ tt *
+                          wi : T ▷ xs *
+                          xi : ptr _ _ (R, 0, trueP _ _) ▷ tt)
+                   (U2 := trueP _ _ ∅
+                          yi : ptr _ _ (W, 0, eqp _ _ wi) ▷ tt ∅
+                          wi : T ▷ xs ∅
+                          xi : ptr _ _ (R, 0, trueP _ _) ▷ tt).
+  - etransitivity.
+    (* PermsE *)
+    2: {
+      rewrite sep_conj_Perms_commut.
+      eapply sep_conj_Perms_monotone; [reflexivity |]. (* frame *)
+      etransitivity; [| apply PermsE]. rewrite sep_conj_Perms_commut.
+      eapply sep_conj_Perms_monotone; [reflexivity |]. (* frame *)
+      reflexivity.
+      etransitivity; [| apply PermsE]. rewrite sep_conj_Perms_commut.
+    }
+    rewrite (sep_conj_Perms_commut (zi : T ▷ xs) _).
+    repeat rewrite <- sep_conj_Perms_assoc.
+    apply sep_conj_Perms_monotone; [reflexivity |].
+    rewrite sep_conj_Perms_commut.
+    eapply sep_conj_Perms_monotone.
+    (* Weakening the content type *)
+    + etransitivity; [apply PtrI | apply TrueI].
+    (* Cast *)
+    + apply Cast.
+  - intros ? [].
+    etransitivity; [| apply PermsE]. rewrite sep_conj_Perms_commut.
+    etransitivity; [apply PermsE |]. rewrite sep_conj_Perms_commut.
+    eapply sep_conj_Perms_monotone; [reflexivity |]. (* frame *)
+    etransitivity; [| apply PermsI].
+    etransitivity; [apply PermsE |].
+    etransitivity.
+    2: {
+      eapply sep_conj_Perms_monotone; [| reflexivity]. (* frame *)
+      apply PermsI.
+    }
+    rewrite <- sep_conj_Perms_assoc.
+    eapply sep_conj_Perms_monotone; [reflexivity |]. (* frame *)
+    apply PtrI.
+  + apply Frame. apply Frame. apply Store.
 Qed.
 
 Lemma ArrPtr A xi xs rw o (P : VPermType Si Ss A) :

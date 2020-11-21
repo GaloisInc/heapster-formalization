@@ -55,12 +55,10 @@ Section permType.
     {| ptApp := fun ai abs => ai : F (projT1 abs) ▷ (projT2 abs) |}.
   Notation "'ex' ( x : A ) . T" := (existsPT (As:=A) (fun x => T)) (at level 70).
 
-  Definition either {A B C} (f:A -> C) (g:B -> C) (x:A+B): C :=
-    match x with inl a => f a | inr b => g b end.
   Definition or {Ai As Bs} (T1:PermType Ai As)
              (T2:PermType Ai Bs) : PermType Ai (As + Bs) :=
     {| ptApp := fun ai abs =>
-                  either (ptApp _ _ T1 ai) (ptApp _ _ T2 ai) abs |}.
+                  sum_rect _ (ptApp _ _ T1 ai) (ptApp _ _ T2 ai) abs |}.
 
 
   Variant RW: Type := R | W.
