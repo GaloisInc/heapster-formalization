@@ -250,7 +250,7 @@ Section permType.
 
 End permType.
 
-Notation "P ⊢ ti ▷ ts ::: U" := (typing P (ptApp _ _ _ _ U) ti ts) (at level 60).
+Notation "P ⊢ ti  ts ::: U" := (typing P (ptApp _ _ _ _ U) ti ts) (at level 60).
 Notation "xi : T @ xs" := (ptApp _ _ _ _ T xi xs) (at level 35).
 Notation "T1 +T+ T2" := (plusPT _ _ T1 T2) (at level 50).
 Notation "T1 *T* T2" := (timesPT _ _ T1 T2) (at level 40).

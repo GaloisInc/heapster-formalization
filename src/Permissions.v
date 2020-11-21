@@ -806,7 +806,7 @@ Qed. *)
   Qed.
 
   Definition entails_Perms P Q := Q ⊑ P.
-  Notation "P ⊦ Q" := (entails_Perms P Q) (at level 60).
+  Notation "P ⊨ Q" := (entails_Perms P Q) (at level 60).
 
   Global Instance entails_Perms_preorder : PreOrder entails_Perms.
   Proof.
@@ -827,9 +827,9 @@ Qed. *)
     - split; eapply sep_conj_Perms_monotone; try eapply H0; try eapply H; reflexivity.
   Qed.
 
-  Definition impl_Perms P Q := meet_Perms (fun R => R * P ⊦ Q).
+  Definition impl_Perms P Q := meet_Perms (fun R => R * P ⊨ Q).
 
-  Lemma adjunction : forall P Q R, P * Q ⊦ R <-> P ⊦ (impl_Perms Q R).
+  Lemma adjunction : forall P Q R, P * Q ⊨ R <-> P ⊨ (impl_Perms Q R).
   Proof.
     intros. split; intros.
     - red. red. intros. simpl. exists P. auto.
@@ -911,7 +911,7 @@ Notation "p ∈ P" := (in_Perms P p) (at level 60).
 Notation "P ⊑ Q" := (lte_Perms P Q) (at level 60).
 Notation "P ≡ Q" := (eq_Perms P Q) (at level 60).
 Notation "P * Q" := (sep_conj_Perms P Q).
-Notation "P ⊦ Q" := (entails_Perms P Q) (at level 60).
+Notation "P ⊨ Q" := (entails_Perms P Q) (at level 60).
 Notation "P -⊑- Q" := (forall a, P a ⊑ Q a) (at level 60).
 Notation "P -≡- Q" := (P -⊑- Q /\ Q -⊑- P) (at level 60).
 

@@ -120,7 +120,7 @@ Section bisim.
 
   Program Definition eq_p {T : Type} (y x : T) : (@Perms (config * specConfig)) :=
   {|
-  in_Perms := fun _ => x = y;
+    in_Perms := fun _ => x = y;
   |}.
 
   Inductive sbuter_gen {R1 R2 : Type} (sbuter : perm -> (R1 -> R2 -> Perms) -> itree (sceE config) R1 -> config -> itree (sceE specConfig) R2 -> specConfig -> Prop)
@@ -202,7 +202,7 @@ Section bisim.
     forall p c1 c2, p ∈ P -> pre p (c1, c2) -> sbuter p Q t c1 s c2.
 
   Lemma sbuter_lte {R1 R2} p Q Q' (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) c1 c2 :
-    sbuter p Q t c1 s c2 -> (forall r1 r2, Q r1 r2 ⊦ Q' r1 r2) -> sbuter p Q' t c1 s c2.
+    sbuter p Q t c1 s c2 -> (forall r1 r2, Q r1 r2 ⊨ Q' r1 r2) -> sbuter p Q' t c1 s c2.
   Proof.
     revert p Q Q' t s c1 c2. pcofix CIH. intros p Q Q' t s c1 c2 Htyping Hlte.
     punfold Htyping. pstep.
@@ -215,8 +215,8 @@ Section bisim.
 
   Lemma typing_lte {R1 R2} P P' Q Q' (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) :
     typing P Q t s ->
-    P' ⊦ P ->
-    (forall r1 r2, Q r1 r2 ⊦ Q' r1 r2) ->
+    P' ⊨ P ->
+    (forall r1 r2, Q r1 r2 ⊨ Q' r1 r2) ->
     typing P' Q' t s.
   Proof.
     repeat intro.
@@ -224,7 +224,7 @@ Section bisim.
   Qed.
 
   Lemma typing_ret {R1 R2} P Q (r1 : R1) (r2 : R2) :
-    P ⊦ Q r1 r2 -> typing P Q (Ret r1) (Ret r2).
+    P ⊨ Q r1 r2 -> typing P Q (Ret r1) (Ret r2).
   Proof.
     repeat intro. pstep. constructor; auto.
   Qed.
