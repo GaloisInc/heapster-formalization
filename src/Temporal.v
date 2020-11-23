@@ -43,12 +43,6 @@ Hint Resolve sbuter_gen_mon : paco.
 
 Definition CompM S R := itree (sceE S) R.
 
-Fixpoint zip {A B : Type} {n : nat} (a : Vector.t A n) (b : Vector.t B n) : Vector.t (A * B) n :=
-match a in Vector.t _ n return Vector.t B n -> Vector.t (A * B) n  with
-| ha :: ta => fun b => (ha, Vector.hd b) :: zip ta (Vector.tl b)
-| [] => fun _ => []
-end b.
-
 
 (** * Basic facts about `no_errors` and `sbuter` **)
 
@@ -144,128 +138,6 @@ Definition sbuter_to_sbuter_ex {S1 S2 R1 R2} p Q t1 s1 t2 s2 :
   sbuter p Q t1 s1 t2 s2 -> @sbuter_ex S1 S2 R1 R2 p Q t1 s1 t2 s2.
 Proof. intro; exists p; split; [ reflexivity | assumption ]. Defined.
 
-Lemma sbuter_ex_tau_L {S1 S2 R1 R2} p Q t1 s1 t2 s2 :
-  sbuter_ex p Q (Tau t1) s1 t2 s2 -> @sbuter_ex S1 S2 R1 R2 p Q t1 s1 t2 s2.
-Proof.
-  intros [p' [? ?]]; exists p'; split; try apply sbuter_tau_L; eauto.
-Qed.
-
-Lemma sbuter_ex_tau_R {S1 S2 R1 R2} p Q t1 s1 t2 s2 :
-  sbuter_ex p Q t1 s1 (Tau t2) s2 -> @sbuter_ex S1 S2 R1 R2 p Q t1 s1 t2 s2.
-Proof.
-  intros [p' [? ?]]; exists p'; split; try apply sbuter_tau_R; eauto.
-Qed.
-
-Lemma sbuter_ex_inv_tau_L {S1 S2 R1 R2} p Q t1 s1 t2 s2 (ne2 : no_errors s2 t2) :
-  sbuter_ex p Q t1 s1 t2 s2 -> @sbuter_ex S1 S2 R1 R2 p Q (Tau t1) s1 t2 s2.
-Proof.
-  intros [p' [? ?]]; exists p'; split; try apply sbuter_inv_tau_L; eauto.
-Qed.
-
-Lemma sbuter_ex_inv_tau_R {S1 S2 R1 R2} p Q t1 s1 t2 s2 (ne2 : no_errors s2 t2) :
-  sbuter_ex p Q t1 s1 t2 s2 -> @sbuter_ex S1 S2 R1 R2 p Q t1 s1 (Tau t2) s2.
-Proof.
-  intros [p' [? ?]]; exists p'; split; try apply sbuter_inv_tau_R; eauto.
-Qed.
-
-
-(* (** * `tau_steps_to` and lemmas **) *)
-
-(* Inductive tau_step {S R} : relation (CompM S R * S) := *)
-(* | tau_step_Tau t s : tau_step (Tau t, s) (t, s). *)
-
-(* Definition tau_steps {S R} := clos_refl_trans_1n (CompM S R * S) tau_step. *)
-
-(* Global Instance tau_steps_refl {S R} : Reflexive (@tau_steps S R). *)
-(* Proof. intro; constructor. Defined. *)
-
-(* Definition tau_steps_Tau {S R} t s : @tau_steps S R (Tau t, s) (t, s). *)
-(* Proof. apply R_rt1n; constructor. Defined. *)
-
-(* Global Instance tau_steps_trans {S R} : Transitive (@tau_steps S R). *)
-(* Proof. *)
-(*   intros x y z H; revert z. *)
-(*   dependent induction H; intros; eauto. *)
-(*   dependent destruction H. *)
-(*   econstructor; try constructor. *)
-(*   apply IHclos_refl_trans_1n; eauto. *)
-(* Defined. *)
-
-(* Lemma pres_tau_steps {S R} (P : CompM S R -> S -> Prop) : *)
-(*   (forall t s, P (Tau t) s -> P t s) -> *)
-(*   forall t1 s1 t2 s2, tau_steps (t1,s1) (t2,s2) -> P t1 s1 -> P t2 s2. *)
-(* Proof. *)
-(*   intro P_Tau; intros. *)
-(*   dependent induction H; eauto. *)
-(*   dependent destruction H. *)
-(*   eapply (IHclos_refl_trans_1n); eauto. *)
-(* Qed. *)
-
-(* Definition tau_steps_no_errors {S R} t1 s1 t2 s2 : *)
-(*   @tau_steps S R (t1,s1) (t2,s2) -> no_errors s1 t1 -> no_errors s2 t2. *)
-(* Proof. *)
-(*   apply (pres_tau_steps (fun t s => no_errors s t)); intros. *)
-(*   apply no_errors_Tau; eauto. *)
-(* Qed. *)
-
-(* Definition sbuter_tau_steps_L {S1 S2 R1 R2} p Q t1 s1 t1' s1' t2 s2 : *)
-(*   tau_steps (t1,s1) (t1',s1') -> *)
-(*   sbuter p Q t1 s1 t2 s2 -> @sbuter S1 S2 R1 R2 p Q t1' s1' t2 s2. *)
-(* Proof. *)
-(*   apply (pres_tau_steps (fun t s => sbuter p Q t s t2 s2)); intros. *)
-(*   apply sbuter_tau_L; eauto. *)
-(* Qed. *)
-
-(* Definition sbuter_tau_steps_R {S1 S2 R1 R2} p Q t1 s1 t2 s2 t2' s2' : *)
-(*   tau_steps (t2,s2) (t2',s2') -> *)
-(*   sbuter p Q t1 s1 t2 s2 -> @sbuter S1 S2 R1 R2 p Q t1 s1 t2' s2'. *)
-(* Proof. *)
-(*   apply (pres_tau_steps (sbuter p Q t1 s1)); intros. *)
-(*   apply sbuter_tau_R; eauto. *)
-(* Qed. *)
-
-(* Definition sbuter_ex_tau_steps_L {S1 S2 R1 R2} p Q t1 s1 t1' s1' t2 s2 : *)
-(*   tau_steps (t1,s1) (t1',s1') -> *)
-(*   sbuter_ex p Q t1 s1 t2 s2 -> @sbuter_ex S1 S2 R1 R2 p Q t1' s1' t2 s2. *)
-(* Proof. *)
-(*   apply (pres_tau_steps (fun t s => sbuter_ex p Q t s t2 s2)); intros. *)
-(*   apply sbuter_ex_tau_L; eauto. *)
-(* Qed. *)
-
-(* Definition sbuter_ex_tau_steps_R {S1 S2 R1 R2} p Q t1 s1 t2 s2 t2' s2' : *)
-(*   tau_steps (t2,s2) (t2',s2') -> *)
-(*   sbuter_ex p Q t1 s1 t2 s2 -> @sbuter_ex S1 S2 R1 R2 p Q t1 s1 t2' s2'. *)
-(* Proof. *)
-(*   apply (pres_tau_steps (sbuter_ex p Q t1 s1)); intros. *)
-(*   apply sbuter_ex_tau_R; eauto. *)
-(* Qed. *)
-
-(* Lemma sbuter_ex_inv_tau_steps_L {S1 S2 R1 R2} t1' s1' p Q t1 s1 t2 s2 : *)
-(*   no_errors s2 t2 -> tau_steps (t1,s1) (t1',s1') -> *)
-(*   sbuter_ex p Q t1' s1' t2 s2 -> @sbuter_ex S1 S2 R1 R2 p Q t1 s1 t2 s2. *)
-(* Proof. *)
-(*   intros. *)
-(*   dependent induction H0; eauto. *)
-(*   dependent destruction H1. *)
-(*   apply sbuter_ex_inv_tau_L; eauto. *)
-(* Qed. *)
-
-(* Lemma sbuter_ex_inv_tau_steps_R {S1 S2 R1 R2} p Q t1 s1 t2 s2 t2' s2' : *)
-(*   no_errors s2 t2 -> tau_steps (t2,s2) (t2',s2') -> *)
-(*   sbuter_ex p Q t1 s1 t2' s2' -> @sbuter_ex S1 S2 R1 R2 p Q t1 s1 t2 s2. *)
-(* Proof. *)
-(*   intros. *)
-(*   dependent induction H0; eauto. *)
-(*   dependent induction H1. *)
-(*   apply sbuter_ex_inv_tau_R. *)
-(*   - apply no_errors_Tau; eauto. *)
-(*   - eapply IHclos_refl_trans_1n; eauto. *)
-(*     apply no_errors_Tau; eauto. *)
-(* Qed. *)
-
-(* Definition tau_steps_snd_eq {S R} t1 s1 t2 s2 : @tau_steps S R (t1,s1) (t2,s2) -> s1 = s2. *)
-(* Proof. intro; dependent induction H; eauto; dependent destruction H; eauto. Qed. *)
-
 
 (** * Definitions of steps and finite paths **)
 
@@ -282,24 +154,6 @@ Inductive step {S R} : relation (CompM S R * S) :=
 | step_Tau t s : step (Tau t, s) (t, s)
 | step_Choice b k s : step (vis Or k, s) (k b, s)
 | step_Modify f k s : step (vis (Modify f) k, s) (k s, f s).
-
-(* Definition step_Tau {S R} t1 s1 t2 s2 : *)
-(*   step (t1,s1) (t2,s2) -> @step S R (Tau t1, s1) (t2, s2). *)
-(* Proof. apply step_tau_steps, tau_steps_Tau. Defined. *)
-
-(* Definition step_Choice {S R} b k s : @step S R (vis Or k, s) (k b, s). *)
-(* Proof. *)
-(*   exists (vis Or k, s); split. *)
-(*   - reflexivity. *)
-(*   - left; constructor. *)
-(* Defined. *)
-
-(* Definition step_Modify {S R} f k s : @step S R (vis (Modify f) k, s) (k s, f s). *)
-(* Proof. *)
-(*   exists (vis (Modify f) k, s); split. *)
-(*   - reflexivity. *)
-(*   - right; constructor. *)
-(* Defined. *)
 
 (* Finite paths with a special case for the length 0 case *)
 Fixpoint is_gen_finite_path0 {A} (r0 r : relation A) n x ys z :=
@@ -401,9 +255,6 @@ Proof.
     + eapply step_no_errors; eauto.
   - eapply step_no_errors; eauto.
 Qed.
-
-(* Definition choice_step_snd_eq {S R} t1 s1 t2 s2 : @choice_step S R (t1,s1) (t2,s2) -> s1 = s2. *)
-(* Proof. intro; dependent induction H; eauto. Qed. *)
 
 
 (** * `sbuter_path_r`, `exists_sbuter_path_r`, and `sbuter_impl_path_r`  **)
@@ -823,6 +674,7 @@ Definition eq_sat_sep_sbuter {S1 S2 R1 R2} (q:@perm (S1*S2))
 
 
 (** * `eq_sat_sep_sbuter` for state predicates **)
+
 Definition state_pred {S} R P : TPred S R := fun '(_,s) => P s.
 
 Definition q_similar {S1 S2} q (P1 : S1 -> Prop) (P2 : S2 -> Prop): Prop :=
@@ -1178,7 +1030,6 @@ Proof.
         -- destruct H6; [ eauto | inv H6 ].
         -- apply no_errors_Choice; eauto.
 Qed.
-
 
 
 (** * `eq_sat_sep_sbuter` for `AF` **)
