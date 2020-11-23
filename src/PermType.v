@@ -14,7 +14,7 @@ From Heapster Require Export
      Memory
      SepStep
      Config
-     Functional.
+     Typing.
 
 From ITree Require Import
      ITree

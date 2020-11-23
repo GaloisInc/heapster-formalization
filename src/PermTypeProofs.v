@@ -14,7 +14,7 @@ From Heapster Require Export
      Permissions
      Memory
      SepStep
-     Functional
+     Typing
      Config
      PermType.
 
@@ -331,7 +331,7 @@ Qed.
 
 Lemma PtrOff A xi xs rw o1 o2 (T : VPermType Si Ss A) :
   o1 >= o2 ->
-  offset xi o2 : ptr _ _ (rw, o1 - o2, T) ▷ xs ⊑ xi : ptr _ _ (rw, o1, T) ▷ xs.
+  xi : ptr _ _ (rw, o1, T) ▷ xs ⊨ offset xi o2 : ptr _ _ (rw, o1 - o2, T) ▷ xs.
 Proof.
   destruct xi; [reflexivity | destruct a].
   intros. simpl. rewrite <- Nat.add_assoc. rewrite (Minus.le_plus_minus_r _ _ H).
@@ -463,15 +463,15 @@ Proof.
                           yi : ptr _ _ (W, 0, eqp _ _ wi) ▷ tt ∅
                           wi : T ▷ xs ∅
                           xi : ptr _ _ (R, 0, trueP _ _) ▷ tt).
+  (* Input type *)
   - etransitivity.
     (* PermsE *)
-    2: {
-      rewrite sep_conj_Perms_commut.
+    {
+      etransitivity; [apply PermsE |]. rewrite sep_conj_Perms_commut.
       eapply sep_conj_Perms_monotone; [reflexivity |]. (* frame *)
       etransitivity; [| apply PermsE]. rewrite sep_conj_Perms_commut.
       eapply sep_conj_Perms_monotone; [reflexivity |]. (* frame *)
-      reflexivity.
-      etransitivity; [| apply PermsE]. rewrite sep_conj_Perms_commut.
+      etransitivity; [| apply PermsE]. rewrite sep_conj_Perms_commut. reflexivity.
     }
     rewrite (sep_conj_Perms_commut (zi : T ▷ xs) _).
     repeat rewrite <- sep_conj_Perms_assoc.
@@ -482,35 +482,27 @@ Proof.
     + etransitivity; [apply PtrI | apply TrueI].
     (* Cast *)
     + apply Cast.
+  (* Output type *)
   - intros ? [].
-    etransitivity; [| apply PermsE]. rewrite sep_conj_Perms_commut.
-    etransitivity; [apply PermsE |]. rewrite sep_conj_Perms_commut.
-    eapply sep_conj_Perms_monotone; [reflexivity |]. (* frame *)
-    etransitivity; [| apply PermsI].
     etransitivity; [apply PermsE |].
+    etransitivity; [| apply PermsI].
+    eapply sep_conj_Perms_monotone; [| reflexivity]. (* frame *)
+    etransitivity; [| apply PermsE].
+    etransitivity; [apply PermsI |].
     etransitivity.
     2: {
       eapply sep_conj_Perms_monotone; [| reflexivity]. (* frame *)
-      apply PermsI.
+      apply PermsE.
     }
     rewrite <- sep_conj_Perms_assoc.
     eapply sep_conj_Perms_monotone; [reflexivity |]. (* frame *)
+    (* PtrI *)
     apply PtrI.
-  + apply Frame. apply Frame. apply Store.
+    (* Frame and Store *)
+  - apply Frame. apply Frame. apply Store.
 Qed.
 
-Lemma ArrPtr A xi xs rw o (P : VPermType Si Ss A) :
-  xi : ptr _ _ (rw, o, P) ▷ Vector.hd xs ⊑ xi : arr (rw, o, 1, P) ▷ xs.
-Proof.
-  simpl. rewrite sep_conj_Perms_commut. rewrite sep_conj_Perms_bottom_identity. reflexivity.
-Qed.
-
-Lemma PtrArr A xi xs rw o (P : VPermType Si Ss A) :
-  xi : arr (rw, o, 1, P) ▷ vsingle xs ⊑ xi : ptr _ _ (rw, o, P) ▷ xs.
-Proof.
-  simpl. rewrite sep_conj_Perms_commut. rewrite sep_conj_Perms_bottom_identity. reflexivity.
-Qed.
-
+(***********************************************************************)
 
 Fixpoint split_leq {A} l1 (v:Vector.t A l1) :
   forall l2, le l2 l1 -> (Vector.t A l2 * Vector.t A (l1 - l2)).
@@ -523,23 +515,6 @@ Proof.
     + apply le_S_n; assumption.
     + split; [ apply Vector.cons; assumption | assumption ].
 Defined.
-
-
-(*
-Fixpoint append_leq {A} l1:
-  forall l2 (l: le l2 l1) (v1:Vector.t A l2) (v2:Vector.t A (l1 - l2)),
-    Vector.t A l1 :=
-  match l1 return (forall l2, le l2 l1 -> Vector.t A l2 -> Vector.t A (l1 - l2) ->
-                              Vector.t A l1) with
-  | 0 => Vector.nil A
-  | S l1' =>
-    fun l2 =>
-      match l2 return (le l2 l1 -> Vector.t A l2 -> Vector.t A (l1 - l2) ->
-                       Vector.t A l1) with
-      | 0 => fun _ v2 => v2
-      | S l2' =>
-*)
-
 
 Fixpoint append_leq {A} l1 l2 (l: le l2 l1)
          (v1:Vector.t A l2) (v2:Vector.t A (l1 - l2)) : Vector.t A l1.
@@ -618,8 +593,8 @@ Proof.
 Qed.
 
 Lemma ArrCombine A xi rw o l1 l2 xs1 xs2 (P : VPermType Si Ss A) :
-  xi : arr (rw, o, l1 + l2, P) ▷ Vector.append xs1 xs2 ⊑
-  xi : arr (rw, o, l1, P) ▷ xs1 * xi : arr (rw, o + l1, l2, P) ▷ xs2.
+  xi : arr (rw, o, l1, P) ▷ xs1 * xi : arr (rw, o + l1, l2, P) ▷ xs2 ⊨
+  xi : arr (rw, o, l1 + l2, P) ▷ Vector.append xs1 xs2 .
 Proof.
   repeat intro. destruct H as (p1 & p2 & Hp1 & Hp2 & Hlte).
   revert Hp1 Hp2. revert o xi l2 xs2. revert Hlte. revert p p1 p2. induction l1; intros.
@@ -635,10 +610,24 @@ Proof.
       apply sep_conj_perm_monotone; eauto; reflexivity.
 Qed.
 
+Lemma ArrPtr A xi xs rw o (P : VPermType Si Ss A) :
+  xi : arr (rw, o, 1, P) ▷ xs ⊨ xi : ptr _ _ (rw, o, P) ▷ Vector.hd xs.
+Proof.
+  simpl. rewrite sep_conj_Perms_commut. rewrite sep_conj_Perms_bottom_identity. reflexivity.
+Qed.
+
+Lemma PtrArr A xi xs rw o (P : VPermType Si Ss A) :
+  xi : ptr _ _ (rw, o, P) ▷ xs ⊨ xi : arr (rw, o, 1, P) ▷ vsingle xs.
+Proof.
+  simpl. rewrite sep_conj_Perms_commut. rewrite sep_conj_Perms_bottom_identity. reflexivity.
+Qed.
+
+(***********************************************************************)
+
 Lemma MuFold A G X `{FixedPoint G X} (F:PermType Si Ss A X -> PermType Si Ss A (G X))
       {prp:Proper (lte_PermType _ _ ==> lte_PermType _ _) F}
       xi xs :
-  xi : mu _ _ F ▷ foldFP xs ⊑ xi : F (mu _ _ F) ▷ xs.
+  xi : F (mu _ _ F) ▷ xs ⊨ xi : mu _ _ F ▷ foldFP xs.
 Proof.
   (* FIXME: why can't we just rewrite with mu_fixed_point here? *)
   eapply Proper_eq_Perms_lte_Perms; [ | reflexivity | ].
@@ -649,7 +638,7 @@ Qed.
 Lemma MuUnfold A G X `{FixedPoint G X} (F:PermType Si Ss A X -> PermType Si Ss A (G X))
       {prp:Proper (lte_PermType _ _ ==> lte_PermType _ _) F}
       xi xs :
-  xi : F (mu _ _ F) ▷ unfoldFP xs ⊑ xi : mu _ _ F ▷ xs.
+   xi : mu _ _ F ▷ xs ⊨ xi : F (mu _ _ F) ▷ unfoldFP xs.
 Proof.
   eapply Proper_eq_Perms_lte_Perms; [ reflexivity | | ].
   - apply Proper_eq_PermType_ptApp; [ apply mu_fixed_point | | ]; reflexivity.

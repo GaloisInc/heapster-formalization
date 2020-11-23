@@ -13,7 +13,7 @@ From Heapster Require Export
      Permissions
      Memory
      SepStep
-     Functional.
+     Typing.
 
 From ITree Require Import
      ITree

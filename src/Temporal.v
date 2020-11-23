@@ -2,7 +2,7 @@ From Heapster Require Import
      Permissions
      Config
      NoEvent
-     Functional.
+     Typing.
 
 From Coq Require Import
      Program
