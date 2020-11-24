@@ -720,54 +720,74 @@ Proof.
 Qed.
 
 
+(** * `eq_sat_sep_sbuter` for `EU`  **)
+
+Inductive EU {S R} (P P' : TPred S R) (ts0 : CompM S R * S) : Prop :=
+| EU_here : P' ts0 -> EU P P' ts0
+| EU_step ts1 : P ts0 -> step ts0 ts1 -> EU P P' ts1 -> EU P P' ts0.
+
+Lemma EU_path {S1 R1} (P P' : TPred S1 R1) n ts0 (ts : Vector.t _ n) tsf :
+  P ts0 -> (forall i, P (ts [@i])) ->
+  is_finite_path n ts0 ts tsf -> EU P P' tsf -> EU P P' ts0.
+Proof.
+  intros; revert ts0 H H0 H1.
+  induction ts; intros.
+  - destruct H1.
+    + destruct ts0, tsf; injection H1; intros; subst; eauto.
+    + eapply EU_step; eauto.
+  - destruct H1.
+    eapply EU_step, IHts; eauto.
+    + apply (H0 Fin.F1).
+    + intro i; apply (H0 (Fin.FS i)).
+Qed.
+
+Lemma eq_sat_EU {S1 S2 R1 R2} q (P1 P1' : TPred S1 R1) (P2 P2' : TPred S2 R2) :
+    eq_sat_sep_sbuter q P1 P2 -> eq_sat_sep_sbuter q P1' P2' ->
+    eq_sat_sep_sbuter q (EU P1 P1') (EU P2 P2').
+Proof.
+  intros eq_sat_Ps eq_sat_P's; split; intros.
+  - revert p t2 s2 H H0 H1 H2; dependent induction H3; intros.
+    + eapply EU_here, eq_sat_P's; eauto.
+    + destruct ts1.
+      pose proof (sbuter_to_sbuter_ex _ _ _ _ _ _ H4).
+      pose proof (sbuter_step_l _ _ _ _ _ _ _ _ H5 H0 H6).
+      destruct H7 as [t4 [s4 ?]]; dependent destruction H7.
+      destruct H9 as [p' [? ?]].
+      unshelve eapply EU_path, (IHEU q _ _ _ _ Q c s JMeq_refl p'); eauto.
+      * eapply eq_sat_Ps; eauto.
+      * intro i; specialize (H8 i); destruct H8 as [[p'' [? ?]] ?].
+        pose proof (is_finite_path_no_errors_mid _ _ _ _ _ _ H7 H5 i).
+        destruct (ts[@i]).
+        eapply (eq_sat_Ps p''); eauto.
+        respects; eapply sep_r; eauto.
+      * respects; eapply sep_r; eauto.
+      * eapply is_finite_path_no_errors_end; eauto.
+  - revert p t1 s1 H H0 H1 H2; dependent induction H3; intros.
+    + eapply EU_here, eq_sat_P's; eauto.
+    + destruct ts1.
+      pose proof (sbuter_to_sbuter_ex _ _ _ _ _ _ H4).
+      pose proof (sbuter_step_r _ _ _ _ _ _ _ _ H0 H6).
+      destruct H7 as [t3 [s3 ?]]; dependent destruction H7.
+      destruct H9 as [p' [? ?]].
+      unshelve eapply EU_path, (IHEU q _ _ _ _ Q c s JMeq_refl p'); eauto.
+      * eapply eq_sat_Ps; eauto.
+      * intro i; specialize (H8 i); destruct H8 as [[p'' [? ?]] ?].
+        destruct (ts[@i]).
+        eapply (eq_sat_Ps p''); eauto.
+        respects; eapply sep_r; eauto.
+      * respects; eapply sep_r; eauto.
+      * eapply step_no_errors; eauto.
+Qed.
+
+
 (** * `eq_sat_sep_sbuter` for `EF`  **)
 
-Inductive EF {S R} (P : TPred S R) (ts0 : CompM S R * S) : Prop :=
-| EF_refl : P ts0 -> EF P ts0
-| EF_step ts1 : step ts0 ts1 -> EF P ts1 -> EF P ts0.
-Arguments EF_refl {S R P ts0}.
-Arguments EF_step {S R P ts0} ts1.
-
-Lemma EF_path {S1 R1} (P : TPred S1 R1) n ts0 (ts : Vector.t _ n) tsf :
-  is_finite_path n ts0 ts tsf -> EF P tsf -> EF P ts0.
-Proof.
-  intros; revert ts0 H.
-  induction ts; intros.
-  - destruct H.
-    + destruct ts0, tsf; injection H; intros; subst; eauto.
-    + eapply EF_step; eauto.
-  - destruct H.
-    eapply EF_step; eauto.
-Qed.
+Definition EF {S R} := @EU S R (fun _ => True).
 
 Lemma eq_sat_EF {S1 S2 R1 R2} q (P1 : TPred S1 R1) (P2 : TPred S2 R2) :
     eq_sat_sep_sbuter q P1 P2 ->
     eq_sat_sep_sbuter q (EF P1) (EF P2).
-Proof.
-  split; intros.
-  - revert p t2 s2 H0 H1 H2 H3; dependent induction H4; intros.
-    + eapply EF_refl, H; eauto.
-    + destruct ts1.
-      apply sbuter_to_sbuter_ex in H3.
-      pose proof (sbuter_step_l _ _ _ _ _ _ _ _ H5 H0 H3).
-      destruct H6 as [t4 [s4 ?]]; dependent destruction H6.
-      destruct H8 as [p' [? ?]].
-      specialize (IHEF q P2 H Q c s JMeq_refl).
-      eapply EF_path, (IHEF p'); eauto.
-      * respects; eapply sep_r; eauto.
-      * eapply is_finite_path_no_errors_end; eauto.
-  - revert p t1 s1 H0 H1 H2 H3; dependent induction H4; intros.
-    + eapply EF_refl, H; eauto.
-    + destruct ts1.
-      apply sbuter_to_sbuter_ex in H3.
-      pose proof (sbuter_step_r _ _ _ _ _ _ _ _ H0 H3).
-      destruct H6 as [t3 [s3 ?]]; dependent destruction H6.
-      destruct H8 as [p' [? ?]].
-      specialize (IHEF q P1 H Q c s JMeq_refl).
-      eapply EF_path, (IHEF p'); eauto.
-      * respects; eapply sep_r; eauto.
-      * eapply step_no_errors; eauto.
-Qed.
+Proof. eapply eq_sat_EU; easy. Qed.
 
 
 (** * `eq_sat_sep_sbuter` for `AF`  **)
@@ -809,51 +829,51 @@ Lemma eq_sat_AG {S1 S2 R1 R2} q (P1 : TPred S1 R1) (P2 : TPred S2 R2) :
     eq_sat_sep_sbuter q P1 P2 ->
     eq_sat_sep_sbuter q (AG P1) (AG P2).
 Proof.
-  split; intros.
-  - revert p t1 s1 t2 s2 H0 H1 H2 H3 H4; pcofix CIH; intros.
+  intro eq_sat_Ps; split; intros.
+  - revert p t1 s1 t2 s2 H H0 H1 H2 H3; pcofix CIH; intros.
     pfold; split.
-    + punfold H5; destruct H5; eauto.
-      eapply H; eauto.
+    + punfold H4; destruct H4; eauto.
+      eapply eq_sat_Ps; eauto.
     + intros; destruct ts1.
-      apply sbuter_to_sbuter_ex in H3.
-      pose proof (sbuter_step_r _ _ _ _ _ _ _ _ H0 H3).
-      destruct H6 as [t3 [s3 ?]]; dependent destruction H6.
-      destruct H8 as [p' [? ?]].
+      apply sbuter_to_sbuter_ex in H2.
+      pose proof (sbuter_step_r _ _ _ _ _ _ _ _ H H2).
+      destruct H5 as [t3 [s3 ?]]; dependent destruction H5.
+      destruct H7 as [p' [? ?]].
       right; eapply (CIH p' t3 s3 c s); eauto.
       * respects; eapply sep_r; eauto.
       * eapply step_no_errors; eauto.
       * eapply AG_path; eauto; intro.
-        specialize (H7 i); destruct H7.
-        destruct H7 as [p'' [? ?]].
+        specialize (H6 i); destruct H6.
+        destruct H6 as [p'' [? ?]].
         destruct (ts[@i]); unfold fst, snd in *.
-        eapply (H p'' Q); eauto.
+        eapply (eq_sat_Ps p'' Q); eauto.
         -- respects; apply (sep_r p q); eauto.
-        -- punfold H5; destruct H5.
-           destruct H3 as [p''' [? ?]].
-           eapply (H p''' Q); eauto.
-  - revert p t1 s1 t2 s2 H0 H1 H2 H3 H4; pcofix CIH; intros.
+        -- punfold H4; destruct H4.
+           destruct H2 as [p''' [? ?]].
+           eapply (eq_sat_Ps p''' Q); eauto.
+  - revert p t1 s1 t2 s2 H H0 H1 H2 H3; pcofix CIH; intros.
     pfold; split.
-    + punfold H5; destruct H5; eauto.
-      eapply H; eauto.
+    + punfold H4; destruct H4; eauto.
+      eapply eq_sat_Ps; eauto.
     + intros; destruct ts1.
-      apply sbuter_to_sbuter_ex in H3.
-      pose proof (sbuter_step_l _ _ _ _ _ _ _ _ H4 H0 H3).
-      destruct H6 as [t4 [s4 ?]]; dependent destruction H6.
-      destruct H8 as [p' [? ?]].
+      apply sbuter_to_sbuter_ex in H2.
+      pose proof (sbuter_step_l _ _ _ _ _ _ _ _ H3 H H2).
+      destruct H5 as [t4 [s4 ?]]; dependent destruction H5.
+      destruct H7 as [p' [? ?]].
       right; eapply (CIH p' c s t4 s4); eauto.
       * respects; eapply sep_r; eauto.
       * eapply is_finite_path_no_errors_end; eauto.
-      * pose proof (is_finite_path_no_errors_mid _ _ _ _ _ _ H6 H4).
+      * pose proof (is_finite_path_no_errors_mid _ _ _ _ _ _ H5 H3).
         eapply AG_path; eauto; intro.
-        specialize (H7 i); destruct H7.
-        specialize (H11 i).
-        destruct H7 as [p'' [? ?]].
+        specialize (H6 i); destruct H6.
+        specialize (H10 i).
+        destruct H6 as [p'' [? ?]].
         destruct (ts[@i]); unfold fst, snd in *.
-        eapply (H p'' Q); eauto.
+        eapply (eq_sat_Ps p'' Q); eauto.
         -- respects; apply (sep_r p q); eauto.
-        -- punfold H5; destruct H5.
-           destruct H3 as [p''' [? ?]].
-           eapply (H p''' Q); eauto.
+        -- punfold H4; destruct H4.
+           destruct H2 as [p''' [? ?]].
+           eapply (eq_sat_Ps p''' Q); eauto.
 Qed.
 
 
@@ -1055,125 +1075,157 @@ Proof.
 Qed.
 
 
+(** * `eq_sat_sep_sbuter` for `AU` **)
+
+Inductive AU {S R} (P P' : TPred S R) ts0 : Prop :=
+| AU_here : P' ts0 -> AU P P' ts0
+| AU_step : P ts0 -> steps ts0 ->
+            (forall t1 s1, step ts0 (t1,s1) -> AU P P' (t1,s1)) ->
+            AU P P' ts0.
+
+Lemma eq_sat_AU {S1 S2 R1 R2} q (P1 P1' : TPred S1 R1) (P2 P2' : TPred S2 R2) :
+    eq_sat_sep_sbuter q P1 P2 -> eq_sat_sep_sbuter q P1' P2' ->
+    eq_sat_sep_sbuter q (AU P1 P1') (AU P2 P2').
+Proof.
+  intros eq_sat_Ps eq_sat_P's; split; intros.
+  - revert p t2 s2 H H0 H1 H2; dependent induction H3; intros.
+    eapply AU_here, eq_sat_P's; eauto.
+    punfold H5; dependent induction H5; intros.
+    (* sbuter_gen_ret *)
+    + inv H0.
+    (* sbuter_gen_err *)
+    + punfold H6; inv H6.
+    (* sbuter_gen_tau_L *)
+    + eapply (H2 t1 c1); eauto.
+      pfold; eauto.
+    (* sbuter_gen_tau_R *)
+    + apply AU_step; eauto.
+      * eapply eq_sat_Ps; eauto.
+        pfold; econstructor; eauto.
+      * intros; inv H8.
+        eapply IHsbuter_gen; eauto.
+        apply no_errors_Tau; eauto.
+    (* sbuter_gen_tau *)
+    + apply AU_step; eauto; pclearbot.
+      * eapply eq_sat_Ps; eauto.
+        pfold; econstructor 5; eauto.
+      * intros; inv H9.
+        eapply (H2 t1 c1); eauto.
+        apply no_errors_Tau; eauto.
+    (* sbuter_gen_modify_L *)
+    + unshelve eapply (H2 (k c1) (f c1) _ q _ _ _ _ _ _ _ JMeq_refl p'); eauto.
+      * respects; eapply sep_r; eauto.
+      * pfold; eauto.
+    (* sbuter_gen_modify_R *)
+    + apply AU_step; eauto.
+      * eapply eq_sat_Ps; eauto.
+        pfold; econstructor; eauto.
+      * intros; inv H10; auto_inj_pair2; subst.
+        eapply IHsbuter_gen; eauto.
+        -- respects; eapply sep_r; eauto.
+        -- apply no_errors_Modify; eauto.
+    (* sbuter_gen_modify *)
+    + apply AU_step; eauto; pclearbot.
+      * eapply eq_sat_Ps; eauto.
+        pfold; econstructor 8; eauto.
+      * intros; inv H11; auto_inj_pair2; subst.
+        unshelve eapply (H2 (k1 c1) (f1 c1) _ q _ _ _ _ _ _ _ JMeq_refl p'); eauto.
+        -- respects; eapply sep_r; eauto.
+        -- apply no_errors_Modify; eauto.
+    (* sbuter_gen_choice_L *)
+    + unshelve eapply (H2 (k false) c1 _ q _ _ _ _ _ _ _ JMeq_refl p'); eauto.
+      pfold; apply H7.
+    (* sbuter_gen_choice_R *)
+    + apply AU_step; eauto.
+      * eapply eq_sat_Ps; eauto.
+        pfold; econstructor; eauto.
+      * intros; inv H10; auto_inj_pair2; subst.
+        eapply H8; eauto.
+        apply no_errors_Choice; eauto.
+    (* sbuter_gen_choice *)
+    + apply AU_step; eauto.
+      * eapply eq_sat_Ps; eauto.
+        pfold; econstructor 11; eauto.
+      * intros; inv H10; auto_inj_pair2; subst.
+        specialize (H8 b); destruct H8 as [b1].
+        pclearbot.
+        unshelve eapply (H2 (k1 b1) c1 _ q _ _ _ _ _ _ _ JMeq_refl p'); eauto.
+        apply no_errors_Choice; eauto.
+  (* The rest is basically identical to the above. *)
+  - revert p t1 s1 H H0 H1 H2; dependent induction H3; intros.
+    eapply AU_here, eq_sat_P's; eauto.
+    punfold H5; dependent induction H5; intros.
+    (* sbuter_gen_ret *)
+    + inv H0.
+    (* sbuter_gen_err *)
+    + punfold H6; inv H6.
+    (* sbuter_gen_tau_L *)
+    + apply AU_step; eauto.
+      * eapply eq_sat_Ps; eauto.
+        pfold; econstructor; eauto.
+      * intros; inv H8.
+        eapply IHsbuter_gen; eauto.
+    (* sbuter_gen_tau_R *)
+    + eapply (H2 t2 c2); eauto.
+      * pfold; eauto.
+      * apply no_errors_Tau; eauto.
+    (* sbuter_gen_tau *)
+    + apply AU_step; eauto; pclearbot.
+      * eapply eq_sat_Ps; eauto.
+        pfold; econstructor 5; eauto.
+      * intros; inv H9.
+        eapply (H2 t2 c2); eauto.
+        apply no_errors_Tau; eauto.
+    (* sbuter_gen_modify_L *)
+    + apply AU_step; eauto.
+      * eapply eq_sat_Ps; eauto.
+        pfold; econstructor; eauto.
+      * intros; inv H10; auto_inj_pair2; subst.
+        eapply IHsbuter_gen; eauto.
+        respects; eapply sep_r; eauto.
+    (* sbuter_gen_modify_R *)
+    + unshelve eapply (H2 (k c2) (f c2) _ q _ _ _ _ _ _ _ JMeq_refl p'); eauto.
+      * respects; eapply sep_r; eauto.
+      * pfold; eauto.
+      * apply no_errors_Modify; eauto.
+    (* sbuter_gen_modify *)
+    + apply AU_step; eauto; pclearbot.
+      * eapply eq_sat_Ps; eauto.
+        pfold; econstructor 8; eauto.
+      * intros; inv H11; auto_inj_pair2; subst.
+        unshelve eapply (H2 (k2 c2) (f2 c2) _ q _ _ _ _ _ _ _ JMeq_refl p'); eauto.
+        -- respects; eapply sep_r; eauto.
+        -- apply no_errors_Modify; eauto.
+    (* sbuter_gen_choice_L *)
+    + apply AU_step; eauto.
+      * eapply eq_sat_Ps; eauto.
+        pfold; econstructor; eauto.
+      * intros; inv H10; auto_inj_pair2; subst.
+        eapply H8; eauto.
+    (* sbuter_gen_choice_R *)
+    + unshelve eapply (H2 (k false) c2 _ q _ _ _ _ _ _ _ JMeq_refl p'); eauto.
+      * pfold; apply H7.
+      * apply no_errors_Choice; eauto.
+    (* sbuter_gen_choice *)
+    + apply AU_step; eauto.
+      * eapply eq_sat_Ps; eauto.
+        pfold; econstructor 11; eauto.
+      * intros; inv H10; auto_inj_pair2; subst.
+        specialize (H7 b); destruct H7 as [b2].
+        pclearbot.
+        unshelve eapply (H2 (k2 b2) c2 _ q _ _ _ _ _ _ _ JMeq_refl p'); eauto.
+        apply no_errors_Choice; eauto.
+Qed.
+
+
 (** * `eq_sat_sep_sbuter` for `AF` **)
 
-Inductive AF {S R} (P : TPred S R) ts0 : Prop :=
-| AF_refl : P ts0 -> AF P ts0
-| AF_step : steps ts0 -> (forall t1 s1, step ts0 (t1,s1) -> AF P (t1,s1)) -> AF P ts0.
+Definition AF {S R} := @AU S R (fun _ => True).
 
 Lemma eq_sat_AF {S1 S2 R1 R2} q (P1 : TPred S1 R1) (P2 : TPred S2 R2) :
     eq_sat_sep_sbuter q P1 P2 ->
     eq_sat_sep_sbuter q (AF P1) (AF P2).
-Proof.
-  intro eq_sat_Ps; split; intros.
-  - revert p t2 s2 H H0 H1 H2; dependent induction H3; intros.
-    eapply AF_refl, eq_sat_Ps; eauto.
-    punfold H4; dependent induction H4; intros.
-    (* sbuter_gen_ret *)
-    + inv H.
-    (* sbuter_gen_err *)
-    + punfold H5; inv H5.
-    (* sbuter_gen_tau_L *)
-    + eapply (H1 t1 c1); eauto.
-      pfold; eauto.
-    (* sbuter_gen_tau_R *)
-    + apply AF_step; eauto.
-      intros; inv H7.
-      eapply IHsbuter_gen; eauto.
-      apply no_errors_Tau; eauto.
-    (* sbuter_gen_tau *)
-    + apply AF_step; eauto.
-      intros; inv H7.
-      pclearbot.
-      eapply (H1 t1 c1); eauto.
-      apply no_errors_Tau; eauto.
-    (* sbuter_gen_modify_L *)
-    + unshelve eapply (H1 (k c1) (f c1) _ q _ _ _ _ _ JMeq_refl p'); eauto.
-      * respects; eapply sep_r; eauto.
-      * pfold; eauto.
-    (* sbuter_gen_modify_R *)
-    + apply AF_step; eauto.
-      intros; inv H9; auto_inj_pair2; subst.
-      eapply IHsbuter_gen; eauto.
-      * respects; eapply sep_r; eauto.
-      * apply no_errors_Modify; eauto.
-    (* sbuter_gen_modify *)
-    + apply AF_step; eauto.
-      intros; inv H9; auto_inj_pair2; subst.
-      pclearbot.
-      unshelve eapply (H1 (k1 c1) (f1 c1) _ q _ _ _ _ _ JMeq_refl p'); eauto.
-      * respects; eapply sep_r; eauto.
-      * apply no_errors_Modify; eauto.
-    (* sbuter_gen_choice_L *)
-    + unshelve eapply (H1 (k false) c1 _ q _ _ _ _ _ JMeq_refl p'); eauto.
-      pfold; apply H6.
-    (* sbuter_gen_choice_R *)
-    + apply AF_step; eauto.
-      intros; inv H9; auto_inj_pair2; subst.
-      eapply H7; eauto.
-      apply no_errors_Choice; eauto.
-    (* sbuter_gen_choice *)
-    + apply AF_step; eauto.
-      intros; inv H9; auto_inj_pair2; subst.
-      specialize (H7 b); destruct H7 as [b1].
-      pclearbot.
-      unshelve eapply (H1 (k1 b1) c1 _ q _ _ _ _ _ JMeq_refl p'); eauto.
-      apply no_errors_Choice; eauto.
-  (* The rest is basically identical to the above. *)
-  - revert p t1 s1 H H0 H1 H2; dependent induction H3; intros.
-    eapply AF_refl, eq_sat_Ps; eauto.
-    punfold H4; dependent induction H4; intros.
-    (* sbuter_gen_ret *)
-    + inv H.
-    (* sbuter_gen_err *)
-    + punfold H5; inv H5.
-    (* sbuter_gen_tau_L *)
-    + apply AF_step; eauto.
-      intros; inv H7.
-      eapply IHsbuter_gen; eauto.
-    (* sbuter_gen_tau_R *)
-    + eapply (H1 t2 c2); eauto.
-      * pfold; eauto.
-      * apply no_errors_Tau; eauto.
-    (* sbuter_gen_tau *)
-    + apply AF_step; eauto.
-      intros; inv H7.
-      pclearbot.
-      eapply (H1 t2 c2); eauto.
-      apply no_errors_Tau; eauto.
-    (* sbuter_gen_modify_L *)
-    + apply AF_step; eauto.
-      intros; inv H9; auto_inj_pair2; subst.
-      eapply IHsbuter_gen; eauto.
-      respects; eapply sep_r; eauto.
-    (* sbuter_gen_modify_R *)
-    + unshelve eapply (H1 (k c2) (f c2) _ q _ _ _ _ _ JMeq_refl p'); eauto.
-      * respects; eapply sep_r; eauto.
-      * pfold; eauto.
-      * apply no_errors_Modify; eauto.
-    (* sbuter_gen_modify *)
-    + apply AF_step; eauto.
-      intros; inv H9; auto_inj_pair2; subst.
-      pclearbot.
-      unshelve eapply (H1 (k2 c2) (f2 c2) _ q _ _ _ _ _ JMeq_refl p'); eauto.
-      * respects; eapply sep_r; eauto.
-      * apply no_errors_Modify; eauto.
-    (* sbuter_gen_choice_L *)
-    + apply AF_step; eauto.
-      intros; inv H9; auto_inj_pair2; subst.
-      eapply H7; eauto.
-    (* sbuter_gen_choice_R *)
-    + unshelve eapply (H1 (k false) c2 _ q _ _ _ _ _ JMeq_refl p'); eauto.
-      * pfold; apply H6.
-      * apply no_errors_Choice; eauto.
-    (* sbuter_gen_choice *)
-    + apply AF_step; eauto.
-      intros; inv H9; auto_inj_pair2; subst.
-      specialize (H6 b); destruct H6 as [b2].
-      pclearbot.
-      unshelve eapply (H1 (k2 b2) c2 _ q _ _ _ _ _ JMeq_refl p'); eauto.
-      apply no_errors_Choice; eauto.
-Qed.
+Proof. apply eq_sat_AU; easy. Qed.
 
 
 (** * Definition of our fragment of CTL **)
@@ -1186,7 +1238,9 @@ Inductive CTLformula {S} : Type :=
 | CTL_EF (tp:CTLformula)
 | CTL_EG (tp:CTLformula)
 | CTL_AF (tp:CTLformula)
-| CTL_AG (tp:CTLformula).
+| CTL_AG (tp:CTLformula)
+| CTL_EU (tp1 tp1:CTLformula)
+| CTL_AU (tp1 tp1:CTLformula).
 
 Fixpoint CTLsats {S R} (tp:@CTLformula S): TPred S R :=
   match tp with
@@ -1198,6 +1252,8 @@ Fixpoint CTLsats {S R} (tp:@CTLformula S): TPred S R :=
   | CTL_EG tp => EG (CTLsats tp)
   | CTL_AF tp => AF (CTLsats tp)
   | CTL_AG tp => AG (CTLsats tp)
+  | CTL_EU tp1 tp2 => EU (CTLsats tp1) (CTLsats tp2)
+  | CTL_AU tp1 tp2 => AU (CTLsats tp1) (CTLsats tp2)
   end.
 
 Inductive CTLsim {S1 S2} q: @CTLformula S1 -> @CTLformula S2 -> Prop :=
@@ -1212,6 +1268,10 @@ Inductive CTLsim {S1 S2} q: @CTLformula S1 -> @CTLformula S2 -> Prop :=
 | CTLsim_EG tp1 tp2 : CTLsim q tp1 tp2 -> CTLsim q (CTL_EG tp1) (CTL_EG tp2)
 | CTLsim_AF tp1 tp2 : CTLsim q tp1 tp2 -> CTLsim q (CTL_AF tp1) (CTL_AF tp2)
 | CTLsim_AG tp1 tp2 : CTLsim q tp1 tp2 -> CTLsim q (CTL_AG tp1) (CTL_AG tp2)
+| CTLsim_EU tp1 tp2 tp1' tp2' : CTLsim q tp1 tp2 -> CTLsim q tp1' tp2' ->
+                               CTLsim q (CTL_EU tp1 tp1') (CTL_EU tp2 tp2')
+| CTLsim_AU tp1 tp2 tp1' tp2' : CTLsim q tp1 tp2 -> CTLsim q tp1' tp2' ->
+                               CTLsim q (CTL_AU tp1 tp1') (CTL_AU tp2 tp2')
 .
 
 Lemma tpsim_implies_eq_sat_sep_sbuter {S1 S2 R1 R2} q TP1 TP2:
@@ -1226,6 +1286,8 @@ Proof.
   - apply eq_sat_EG; assumption.
   - apply eq_sat_AF; assumption.
   - apply eq_sat_AG; assumption.
+  - apply eq_sat_EU; assumption.
+  - apply eq_sat_AU; assumption.
 Qed.
 
 Theorem sbuter_preserves_tpreds {S1 R1 S2 R2} p q Q t1 s1 t2 s2 TP1 TP2:
