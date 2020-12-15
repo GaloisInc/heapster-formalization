@@ -107,12 +107,12 @@ Section bisim.
       auto_inj_pair2; subst; eauto.
   Qed.
 
-  (** * `steps` and `stops` **)
+  (** * `steps` and `step` **)
 
   (* The proposition that an itree has a next step *)
 
   Inductive stepsF {S R} : TPred' S R :=
-  | steps_tau t s : stepsF (observe t) s -> stepsF (TauF t) s
+  | steps_tau t s : stepsF (TauF t) s
   | steps_modify f k s : stepsF (VisF (subevent _ (Modify f)) k) s
   | steps_choice k s : stepsF (VisF (subevent _ Or) k) s.
   Hint Constructors stepsF : core.
@@ -121,30 +121,10 @@ Section bisim.
     fun t s => @stepsF S R (observe t) s.
   Hint Unfold steps : core.
 
-  (* The proposition that an itree has no next step *)
-
-  Inductive stops_genF {S R} stops : TPred' S R :=
-  | stops_gen_tau t s : stops t s -> stops_genF stops (TauF t) s
-  | stops_gen_ret r s : stops_genF stops (RetF r) s
-  | stops_gen_err k s : stops_genF stops (VisF (subevent _ (Throw tt)) k) s.
-  Hint Constructors stops_genF : core.
-
-  Definition stops_gen {S R} stops t s := @stops_genF S R stops (observe t) s.
-  Hint Unfold stops_gen : core.
-
-  Definition stops {S R} : TPred S R := paco2 stops_gen bot2.
-
-  Lemma stops_gen_mon {S R} : monotone2 (@stops_gen S R).
-  Proof.
-    repeat intro. unfold stops_gen in *.
-    inversion IN; subst; try solve [constructor; auto].
-  Qed.
-  Hint Resolve stops_gen_mon : paco.
-
-  (** * `step` **)
+  (* A single step from an itree *)
 
   Inductive stepF {S R} : CompM' S R -> S -> CompM' S R -> S -> Type :=
-  | step_tau t s t' s' : stepF (observe t) s t' s' -> stepF (TauF t) s t' s'
+  | step_tau t s : stepF (TauF t) s (observe t) s
   | step_modify f k s : stepF (VisF (subevent _ (Modify f)) k) s (observe (k s)) (f s)
   | step_choice b k s : stepF (VisF (subevent _ Or) k) s (observe (k b)) s.
 
@@ -157,24 +137,8 @@ Section bisim.
     steps t s -> exists t' s', inhabited (step t s t' s').
   Proof.
     intro; unfold steps, step in *.
-    induction H.
-    - destruct IHstepsF as [t' [s' []]].
-      exists t', s'.
-      apply inhabits; constructor; eauto.
-    - exists (k s), (f s).
-      apply inhabits; constructor.
-    - exists (k false), s.
-      apply inhabits; constructor.
-  Qed.
-
-  (* If `stops t s` then there exist no steps from `(t,s)` *)
-  Lemma stops_impl_no_step {S R} (t : CompM S R) s :
-    stops t s -> forall t' s', step t s t' s' -> False.
-  Proof.
-    intros; punfold H; unfold stops_gen, step in *.
-    induction X; inv H.
-    apply IHX.
-    pclearbot; punfold H1.
+    destruct H; repeat econstructor.
+    Unshelve. exact false.
   Qed.
 
   (* If there exists a step from `(t,s)` then `steps t s` *)
@@ -182,46 +146,20 @@ Section bisim.
     step t s t' s' -> steps t s.
   Proof.
     intro; unfold step, steps in *.
-    induction X; constructor; eauto.
-  Qed.
-
-  (* If there exists a step from `(t,s)` then `stops t s` does not hold *)
-  Lemma step_impl_not_stops {S R} (t : CompM S R) s t' s' :
-    step t s t' s' -> (stops t s -> False).
-  Proof.
-    intros; punfold H; unfold step, stops_gen in *.
-    induction X; inv H.
-    apply IHX.
-    pclearbot; punfold H1.
+    destruct X; constructor.
   Qed.
 
   (** * `sbuter` **)
 
-  Definition eutt' {E R} r (t : itree' E R) (t' : itree' E R) :=
-    eqitF r true true id (eutt r) t t'.
-
-  Lemma eutt_iff_eutt' {E R} r t t' :
-    eutt r t t' <-> @eutt' E R r (observe t) (observe t').
-  Proof.
-    split; intro.
-    - punfold H; induction H; pclearbot; constructor; eauto.
-    - pfold; unfold eqit_; induction H; constructor; eauto.
-      intro; specialize (REL v).
-      unfold id in *; eauto.
-   Qed.
-
-  Inductive sbuter_genF {S1 S2 R1 R2 : Type} sbuter (p : perm)
-            (Q : R1 -> R2 -> Perms) (t1 : CompM' S1 R1) s1 (t2 : CompM' S2 R2) s2 : Prop :=
-  | sbuter_gen_ret r1 r2 :
+  Inductive sbuter_genF {S1 S2 R1 R2 : Type} sbuter (p : perm) (Q : R1 -> R2 -> Perms)
+                        : CompM' S1 R1 -> S1 -> CompM' S2 R2 -> S2 -> Prop :=
+  | sbuter_gen_ret r1 s1 r2 s2 :
       pre p (s1, s2) ->
       p ∈ Q r1 r2 ->
-      eutt' eq t1 (RetF r1) ->
-      eutt' eq t2 (RetF r2) ->
-      sbuter_genF sbuter p Q t1 s1 t2 s2
-  | sbuter_gen_err k :
-      eutt' eq t2 (VisF (subevent _ (Throw tt)) k) ->
-      sbuter_genF sbuter p Q t1 s1 t2 s2
-  | sbuter_gen_step_l p' :
+      sbuter_genF sbuter p Q (RetF r1) s1 (RetF r2) s2
+  | sbuter_gen_err t1 s1 k s2 :
+      sbuter_genF sbuter p Q t1 s1 (VisF (subevent _ (Throw tt)) k) s2
+  | sbuter_gen_step_l t1 s1 t2 s2 p' :
       pre p (s1, s2) -> sep_step p p' ->
       stepsF t1 s1 ->
       (forall t1' s1', stepF t1 s1 (observe t1') s1' ->
@@ -229,7 +167,7 @@ Section bisim.
       (forall t1' s1', stepF t1 s1 (observe t1') s1' ->
          sbuter_genF sbuter p' Q (observe t1') s1' t2 s2) ->
       sbuter_genF sbuter p Q t1 s1 t2 s2
-  | sbuter_gen_step_r p' :
+  | sbuter_gen_step_r t1 s1 t2 s2 p' :
       pre p (s1, s2) -> sep_step p p' ->
       stepsF t2 s2 ->
       (forall t2' s2', stepF t2 s2 (observe t2') s2' ->
@@ -237,7 +175,7 @@ Section bisim.
       (forall t2' s2', stepF t2 s2 (observe t2') s2' ->
          sbuter_genF sbuter p' Q t1 s1 (observe t2') s2') ->
       sbuter_genF sbuter p Q t1 s1 t2 s2
-  | sbuter_gen_step p' :
+  | sbuter_gen_step t1 s1 t2 s2 p' :
       pre p (s1, s2) -> sep_step p p' ->
       stepsF t1 s1 -> stepsF t2 s2 ->
       (forall t1' s1', stepF t1 s1 (observe t1') s1' ->
