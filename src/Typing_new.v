@@ -46,13 +46,10 @@ Section bisim.
   Definition CompM S R := itree (sceE S) R.
   Definition CompM' S R := itree' (sceE S) R.
 
-  Definition TPred S R := CompM S R -> S -> Prop.
-  Definition TPred' S R := CompM' S R -> S -> Prop.
-
 
   (** * `no_errors` **)
 
-  Inductive no_errors_genF {S R : Type} no_errors : TPred' S R :=
+  Inductive no_errors_genF {S R : Type} no_errors : CompM' S R -> S -> Prop :=
   | no_errors_gen_ret r s : no_errors_genF no_errors (RetF r) s
   | no_errors_gen_tau t s : no_errors t s -> no_errors_genF no_errors (TauF t) s
   | no_errors_gen_modify f k s :
@@ -67,7 +64,7 @@ Section bisim.
     @no_errors_genF S R no_errors (observe t) s.
   Hint Unfold no_errors_gen : core.
 
-  Definition no_errors {S R} : TPred S R := paco2 no_errors_gen bot2.
+  Definition no_errors {S R} : CompM S R -> S -> Prop := paco2 no_errors_gen bot2.
 
   Lemma no_errors_gen_mon {S R} : monotone2 (@no_errors_gen S R).
   Proof.
@@ -75,6 +72,18 @@ Section bisim.
     inversion IN; subst; try solve [constructor; auto].
   Qed.
   Hint Resolve no_errors_gen_mon : paco.
+
+  Instance Proper_observing_paco2_no_errors_gen {S R} r :
+    Proper (observing eq ==> eq ==> iff) (paco2 (@no_errors_gen S R) r).
+  Proof.
+    repeat intro; destruct H, H0.
+    split; intro; punfold H0; pfold; unfold no_errors_gen in *;
+      [ rewrite <- H | rewrite H ]; eauto.
+  Qed.
+
+  Instance Proper_observing_no_errors {S R} :
+    Proper (observing eq ==> eq ==> iff) (@no_errors S R).
+  Proof. apply Proper_observing_paco2_no_errors_gen. Qed.
 
   Lemma no_errors_Tau {S R} (t : CompM S R) s :
     no_errors t s <-> no_errors (Tau t) s.
@@ -114,13 +123,13 @@ Section bisim.
 
   (* The proposition that an itree has a next step *)
 
-  Inductive stepsF {S R} : TPred' S R :=
+  Inductive stepsF {S R} : CompM' S R -> S -> Prop :=
   | steps_tau t s : stepsF (TauF t) s
   | steps_modify f k s : stepsF (VisF (|Modify f|) k) s
   | steps_choice k s : stepsF (VisF (||Or) k) s.
   Hint Constructors stepsF : core.
 
-  Definition steps {S R} : TPred S R :=
+  Definition steps {S R} : CompM S R -> S -> Prop :=
     fun t s => @stepsF S R (observe t) s.
   Hint Unfold steps : core.
 
@@ -135,6 +144,18 @@ Section bisim.
   Definition step {S R} : CompM S R -> S -> CompM S R -> S -> Type :=
     fun t s t' s' => stepF (observe t) s (observe t') s'.
   Hint Unfold step : core.
+
+  Definition step_no_errors {S R} t1 s1 t2 s2 :
+    @step S R t1 s1 t2 s2 -> no_errors t1 s1 -> no_errors t2 s2.
+  Proof.
+    intro; unfold step in X; dependent destruction X.
+    - rewrite <- (observing_intros _ (Tau t) _ x0), <- (observing_intros _ _ _ x).
+      apply no_errors_Tau.
+    - rewrite <- (observing_intros _ (vis (Modify f) k) _ x0), <- (observing_intros _ _ _ x).
+      apply no_errors_Modify.
+    - rewrite <- (observing_intros _ (vis Or k) _ x0), <- (observing_intros _ _ _ x).
+      rewrite <- no_errors_Choice; eauto.
+  Qed.
 
   (* If `steps t s` then there exists a step from `(t,s)` *)
 
@@ -256,7 +277,7 @@ Section bisim.
   Qed.
   Hint Resolve sbuter_gen_mon : paco.
 
-  Instance Proper_observing_paco2_sbuter_gen {S1 S2 R1 R2} r p Q :
+  Instance Proper_observing_paco6_sbuter_gen {S1 S2 R1 R2} r p Q :
     Proper (observing eq ==> eq ==> observing eq ==> eq ==> iff)
            (paco6 (@sbuter_gen S1 S2 R1 R2) r p Q).
   Proof.
@@ -268,7 +289,7 @@ Section bisim.
   Instance Proper_observing_sbuter {S1 S2 R1 R2} p Q :
     Proper (observing eq ==> eq ==> observing eq ==> eq ==> iff)
            (@sbuter S1 S2 R1 R2 p Q).
-  Proof. apply Proper_observing_paco2_sbuter_gen. Qed.
+  Proof. apply Proper_observing_paco6_sbuter_gen. Qed.
 
 
   (** * alternate constructors for `sbuter` **)
