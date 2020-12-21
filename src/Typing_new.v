@@ -269,6 +269,7 @@ Section bisim.
   Hint Unfold sbuter_gen : core.
 
   Definition sbuter {S1 S2 R1 R2} := paco6 (@sbuter_gen S1 S2 R1 R2) bot6.
+  Hint Unfold sbuter : paco.
 
   Lemma sbuter_gen_mon {S1 S2 R1 R2} : monotone6 (@sbuter_gen S1 S2 R1 R2).
   Proof.
@@ -277,16 +278,15 @@ Section bisim.
   Qed.
   Hint Resolve sbuter_gen_mon : paco.
 
-  Instance Proper_observing_paco6_sbuter_gen {S1 S2 R1 R2} r p Q :
+  Instance Proper_observing_paco6_sbuter_gen {S1 S2 R1 R2 r p Q} :
     Proper (observing eq ==> eq ==> observing eq ==> eq ==> iff)
            (paco6 (@sbuter_gen S1 S2 R1 R2) r p Q).
   Proof.
-    repeat intro; destruct H, H1.
-    split; intro; punfold H3; pfold; unfold sbuter_gen in *;
-      [ rewrite <- H, <- H0, <- H1, <- H2 | rewrite H, H0, H1, H2 ]; eauto.
+    repeat intro; destruct H, H0, H1, H2.
+    split; intro; pfold; red; punfold H1; red in H1; destruct H, H0; eauto.
   Qed.
 
-  Instance Proper_observing_sbuter {S1 S2 R1 R2} p Q :
+  Instance Proper_observing_sbuter {S1 S2 R1 R2 p Q} :
     Proper (observing eq ==> eq ==> observing eq ==> eq ==> iff)
            (@sbuter S1 S2 R1 R2 p Q).
   Proof. apply Proper_observing_paco6_sbuter_gen. Qed.
@@ -396,17 +396,27 @@ Section bisim.
   Qed.
 
   Lemma sbuter_genF_pre {S1 R1 S2 R2 r p Q t1 s1 t2 s2} :
-    @sbuter_genF S1 R1 S2 R2 r p Q t1 s1 t2 s2 ->
-    pre p (s1, s2) \/ exists k, VisF (Throw tt|) k = t2.
-  Proof.
-    inversion 1; eauto.
-  Qed.
+    @sbuter_genF S1 R1 S2 R2 r p Q t1 s1 t2 s2 -> pre p (s1, s2).
+  Proof. inversion 1; eauto. Qed.
 
   Lemma sbuter_pre {S1 R1 S2 R2 p Q t1 s1 t2 s2} :
-    @sbuter S1 R1 S2 R2 p Q t1 s1 t2 s2 ->
-    pre p (s1, s2) \/ exists k, vis (Throw tt) k = t2.
+    @sbuter S1 R1 S2 R2 p Q t1 s1 t2 s2 -> pre p (s1, s2).
+  Proof. intro; punfold H; red in H; inversion H; eauto. Qed.
+
+  Lemma sbuter_genF_inv_tau_l {S1 S2 R1 R2} p Q t1 s1 t2 s2 :
+    @sbuter_genF S1 S2 R1 R2 (upaco6 sbuter_gen bot6) p Q (TauF t1) s1 t2 s2 ->
+    @sbuter_genF S1 S2 R1 R2 (upaco6 sbuter_gen bot6) p Q (observe t1) s1 t2 s2.
   Proof.
-    intro; punfold H; red in H; inversion H; eauto.
+    intro; dependent induction H.
+    - econstructor 2; eauto.
+    - eapply sep_step_sbuter_genF; eauto.
+    - econstructor 4; eauto.
+    - econstructor 4; eauto; intros.
+      + specialize (H4 _ _ X); destruct H4 as [?t1' [?s1' [? []]]].
+        inv x; eauto.
+      + specialize (H4 _ _ X); destruct H4 as [?t1' [?s1' [? []]]].
+        inv x; rewrite H9.
+        destruct H5; [|inv H5]; punfold H5; red in H5.
   Qed.
 
   Lemma sbuter_inv_tau_l {S1 S2 R1 R2} p Q t1 s1 t2 s2 :
@@ -414,18 +424,7 @@ Section bisim.
     @sbuter S1 S2 R1 R2 p Q t1 s1 t2 s2.
   Proof.
     intro; pfold; red; punfold H; red in H.
-    dependent induction H.
-    - destruct x; econstructor 2; eauto.
-    - eapply sep_step_sbuter_genF; eauto.
-      eapply H3; constructor.
-    - econstructor 4; eauto.
-    - econstructor 4; eauto; intros.
-      + specialize (H4 _ _ X); destruct H4 as [?t1' [?s1' [? []]]].
-        inv x; eauto.
-      + specialize (H4 _ _ X); destruct H4 as [?t1' [?s1' [? []]]].
-        inv x; rewrite H9.
-        destruct H5; [|inv H5].
-        pfold_reverse; eauto.
+    apply sbuter_genF_inv_tau_l; eauto.
   Qed.
 
   Lemma sbuter_inv_tau_r {S1 S2 R1 R2} p Q t1 s1 t2 s2 :
@@ -453,16 +452,12 @@ Section bisim.
     revert p Q t1 t1' s1 t2 s2; pcofix CIH; intros.
     pfold; red; punfold H1; red in H1.
     revert t1' H0; dependent induction H1; intros.
-    5: punfold H5; red in H5; dependent destruction H1; destruct x.
-    (* sbuter_gen_ret *)
     - punfold H2; red in H2.
       destruct x0, x.
       dependent induction H2.
       + destruct x; econstructor; eauto.
       + destruct x; apply sbuter_gen_tau_l; eauto.
-    (* sbuter_gen_err *)
     - destruct x; econstructor 2; eauto.
-    (* sbuter_gen_step_l *)
     - punfold H5; red in H5; dependent induction H5; pclearbot.
       all: destruct x; try destruct x0; eauto.
       3: destruct e as [e | [e | e]]; destruct e; inversion H1.
@@ -473,31 +468,34 @@ Section bisim.
       + eapply sbuter_gen_choice_l; eauto.
       + eapply sep_step_sbuter_genF; eauto.
       + apply sbuter_gen_tau_l; eauto.
-    (* sbuter_gen_step_r *)
     - econstructor 4; eauto.
-    (* sbuter_gen_step, step_tau *)
-    - dependent induction H5; pclearbot; try destruct x.
-      + econstructor 5; eauto; intros.
+    - revert r p p' Q s1 t2 s2 H H0 H1 H2 H3 H4 CIH.
+      punfold H5; red in H5; dependent induction H5; intros; pclearbot.
+      + destruct x0; inv H1.
+      + destruct x0, x.
+        econstructor 5; eauto; intros.
         * inv X.
           specialize (H3 _ _ (step_tau _ _)); destruct H3 as [?t1' [?s1' [? []]]].
           exists t1'1, s1'0, x; split; eauto.
-          destruct H3; [|inv H3].
+          destruct H5; [|inv H5].
           right; eapply CIH; eauto.
-          rewrite <- (observing_intros _ _ _ H7); eauto.
+          rewrite <- (observing_intros _ _ _ H8); eauto.
         * specialize (H4 _ _ X); destruct H4 as [?t2' [?s2' [? []]]].
           inv x.
           exists m2, s2'0, (step_tau _ _); split; eauto.
-          destruct H4; [|inv H4].
+          destruct H5; [|inv H5].
           right; eapply (CIH _ _ t2'0); eauto.
-          rewrite <- (observing_intros _ _ _ H8); eauto.
-      + eapply IHeqitF; eauto.
-        admit. (* Hunh? Why?? *)
-      + eapply sbuter_gen_tau_l; eauto.
-    (* sbuter_gen_step, step_modify *)
-    - dependent induction H5; pclearbot; try destruct x.
-      + econstructor 5; eauto; intros.
+          rewrite <- (observing_intros _ _ _ H9); eauto.
+      + destruct x0, x.
+        econstructor 5; eauto; intros; dependent destruction H1; eauto.
         * apply stepF_modify_inv in X; destruct X; subst.
           specialize (H3 _ _ (step_modify _ _ _)); destruct H3 as [?t2' [?s2' [? []]]].
+          exists t2', s2', x; split; eauto.
+          destruct H5; [|inv H5].
+          right; eapply CIH; eauto.
+          rewrite (observing_intros _ _ _ H1); eauto.
+        * apply stepF_choice_inv in X; destruct X as [b []]; subst.
+          specialize (H3 _ _ (step_choice b _ _)); destruct H3 as [?t2' [?s2' [? []]]].
           exists t2', s2', x; split; eauto.
           destruct H5; [|inv H5].
           right; eapply CIH; eauto.
@@ -508,22 +506,15 @@ Section bisim.
           destruct H4; [|inv H4].
           right; eapply (CIH _ _ t1'0); eauto.
           rewrite (observing_intros _ _ _ H5); eauto.
-      + eapply sbuter_gen_tau_l; eauto.
-    (* sbuter_gen_step, step_choice *)
-    - dependent induction H5; pclearbot; try destruct x.
-      + econstructor 5; eauto; intros.
-        * apply stepF_choice_inv in X; destruct X as [b []]; subst.
-          specialize (H3 _ _ (step_choice b _ _)); destruct H3 as [?t2' [?s2' [? []]]].
-          exists t2', s2', x; split; eauto.
-          destruct H5; [|inv H5].
-          right; eapply CIH; eauto.
-          rewrite (observing_intros _ _ _ H1); eauto.
         * specialize (H4 _ _ X); destruct H4 as [?t1' [?s1' [? []]]].
           apply stepF_choice_inv in x; destruct x as [b []]; subst.
           exists (k2 b), s, (step_choice b _ _); split; eauto.
           destruct H4; [|inv H4].
           right; eapply (CIH _ _ t1'0); eauto.
           rewrite (observing_intros _ _ _ H5); eauto.
+      + admit. (* uh oh, I don't know if this is right... *)
+      + destruct x.
+        eapply sbuter_gen_tau_l; eauto.
   Admitted.
 
   Lemma Proper_eutt_sbuter_r {S1 S2 R1 R2} p Q t1 s1 t2 t2' s2 :
@@ -533,21 +524,16 @@ Section bisim.
     revert p Q t1 s1 t2 t2' s2; pcofix CIH; intros.
     pfold; red; punfold H1; red in H1.
     revert t2' H0; dependent induction H1; intros.
-    5: punfold H5; red in H5; dependent destruction H2; destruct x.
-    (* sbuter_gen_ret *)
     - punfold H2; red in H2.
       destruct x0, x.
       dependent induction H2.
       + destruct x; econstructor; eauto.
       + destruct x; apply sbuter_gen_tau_r; eauto.
-    (* sbuter_gen_err *)
     - rewrite <- (observing_intros eq (vis (Throw tt) k) _ x) in H0.
       punfold H0; red in H0; dependent induction H0; intros.
       + destruct x; econstructor 2; eauto.
       + destruct x; eapply sbuter_gen_tau_r; eauto.
-    (* sbuter_gen_step_l *)
     - econstructor 3; eauto.
-    (* sbuter_gen_step_r *)
     - punfold H5; red in H5; dependent induction H5; pclearbot.
       all: destruct x; try destruct x0; eauto.
       3: destruct e as [e | [e | e]]; destruct e; inversion H1.
@@ -558,30 +544,34 @@ Section bisim.
       + eapply sbuter_gen_choice_r; eauto.
       + eapply sep_step_sbuter_genF; eauto.
       + apply sbuter_gen_tau_r; eauto.
-    (* sbuter_gen_step, step_tau *)
-    - dependent induction H5; pclearbot; try destruct x.
-      + econstructor 5; eauto; intros.
+    - revert r p p' Q t1 s1 s2 H H0 H1 H2 H3 H4 CIH.
+      punfold H5; red in H5; dependent induction H5; intros; pclearbot.
+      + destruct x0; inv H2.
+      + destruct x0, x.
+        econstructor 5; eauto; intros.
         * specialize (H3 _ _ X); destruct H3 as [?t2' [?s2' [? []]]].
           inv x.
           exists m2, s2', (step_tau _ _); split; eauto.
-          destruct H3; [|inv H3].
+          destruct H5; [|inv H5].
           right; eapply (CIH _ _ _ _ t2'0); eauto.
-          rewrite <- (observing_intros _ _ _ H8); eauto.
+          rewrite <- (observing_intros _ _ _ H9); eauto.
         * inv X.
           specialize (H4 _ _ (step_tau _ _)); destruct H4 as [?t2' [?s2' [? []]]].
           exists t2'1, s2'0, x; split; eauto.
-          destruct H4; [|inv H4].
+          destruct H5; [|inv H5].
           right; eapply CIH; eauto.
-          rewrite <- (observing_intros _ _ _ H7); eauto.
-      + eapply IHeqitF; eauto.
-        admit. (* Hunh? Why?? *)
-      + eapply sbuter_gen_tau_r; eauto.
-    (* sbuter_gen_step, step_modify *)
-    - dependent induction H5; pclearbot; try destruct x.
-      + econstructor 5; eauto; intros.
+          rewrite <- (observing_intros _ _ _ H8); eauto.
+      + destruct x0, x.
+        econstructor 5; eauto; intros; dependent destruction H2; eauto.
         * specialize (H3 _ _ X); destruct H3 as [?t2' [?s2' [? []]]].
           apply stepF_modify_inv in x; destruct x; subst.
           exists (k2 s), (f s), (step_modify _ _ _); split; eauto.
+          destruct H3; [|inv H3].
+          right; eapply (CIH _ _ _ _ t2'0); eauto.
+          rewrite (observing_intros _ _ _ H5); eauto.
+        * specialize (H3 _ _ X); destruct H3 as [?t2' [?s2' [? []]]].
+          apply stepF_choice_inv in x; destruct x as [b []]; subst.
+          exists (k2 b), s, (step_choice b _ _); split; eauto.
           destruct H3; [|inv H3].
           right; eapply (CIH _ _ _ _ t2'0); eauto.
           rewrite (observing_intros _ _ _ H5); eauto.
@@ -591,22 +581,15 @@ Section bisim.
           destruct H5; [|inv H5].
           right; eapply CIH; eauto.
           rewrite (observing_intros _ _ _ H2); eauto.
-      + eapply sbuter_gen_tau_r; eauto.
-    (* sbuter_gen_step, step_choice *)
-    - dependent induction H5; pclearbot; try destruct x.
-      + econstructor 5; eauto; intros.
-        * specialize (H3 _ _ X); destruct H3 as [?t2' [?s2' [? []]]].
-          apply stepF_choice_inv in x; destruct x as [b []]; subst.
-          exists (k2 b), s, (step_choice b _ _); split; eauto.
-          destruct H3; [|inv H3].
-          right; eapply (CIH _ _ _ _ t2'0); eauto.
-          rewrite (observing_intros _ _ _ H5); eauto.
         * apply stepF_choice_inv in X; destruct X as [b []]; subst.
           specialize (H4 _ _ (step_choice b _ _)); destruct H4 as [?t1' [?s1' [? []]]].
           exists t1', s1', x; split; eauto.
           destruct H5; [|inv H5].
           right; eapply CIH; eauto.
           rewrite (observing_intros _ _ _ H2); eauto.
+      + admit.
+      + destruct x.
+        eapply sbuter_gen_tau_r; eauto.
   Admitted.
 
   Instance Proper_eutt_sbuter {S1 S2 R1 R2} p Q :
