@@ -12,3 +12,4 @@ src/PermTypeProofs.v
 src/Temporal.v
 
 src/Typing_new.v
+src/Temporal_new.v
