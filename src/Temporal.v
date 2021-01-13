@@ -1,7 +1,6 @@
 From Heapster Require Import
      Permissions
      Config
-     NoEvent
      Typing.
 
 From Coq Require Import

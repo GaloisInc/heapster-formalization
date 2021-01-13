@@ -8,7 +8,6 @@ From Coq Require Import
 
 From Heapster Require Import
      Permissions
-     NoEvent
      SepStep.
 
 From ExtLib Require Import
