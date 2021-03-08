@@ -3,7 +3,8 @@ From Coq Require Import
      Classes.Morphisms
      Classes.RelationClasses
      Relations.Relation_Operators
-     Relations.Operators_Properties.
+     Relations.Operators_Properties
+     ProofIrrelevance.
 
 From Heapster Require Import
      Permissions
@@ -517,12 +518,15 @@ Section bisim.
     punfold Htyping.
     induction Htyping;
       try solve [constructor; eauto];
-      pinversion Hs; auto_inj_pair2; subst; eauto;
+      pinversion Hs;
+      try (match goal with
+           | [H : existT _ _ _ = existT _ _ _ |- _] => apply inj_pair2 in H
+           end); subst; eauto;
         try solve [constructor; eauto].
-    - apply (H2 true). apply H4.
+    - subst. apply (H2 true). apply H4.
     - constructor. intros. right. destruct (H1 b). eapply CIH.
       + destruct H3; eauto. inversion b0.
-      + inversion Hs; auto_inj_pair2; subst.
+      + inversion Hs. apply inj_pair2 in H5; subst.
         specialize (H6 x). pclearbot. eauto.
   Qed.
 

@@ -65,7 +65,7 @@ Proof.
     apply no_errors_modify.
     left; assumption.
   - punfold H; inv H; inv H1.
-    + auto_inj_pair2; subst. apply H.
+    + apply inj_pair2 in H2; subst. apply H.
     + inv H.
 Qed.
 
@@ -79,7 +79,7 @@ Proof.
     left; assumption.
   - punfold H; inv H.
     specialize (H1 b); inv H1.
-    + auto_inj_pair2; subst. apply H.
+    + apply inj_pair2 in H0; subst. apply H.
     + inv H.
 Qed.
 
@@ -1119,7 +1119,7 @@ Proof.
     + apply AU_step; eauto.
       * eapply eq_sat_Ps; eauto.
         pfold; econstructor; eauto.
-      * intros; inv H10; auto_inj_pair2; subst.
+      * intros; inv H10; apply inj_pair2 in H13; subst.
         eapply IHsbuter_gen; eauto.
         -- respects; eapply sep_r; eauto.
         -- apply no_errors_Modify; eauto.
@@ -1127,7 +1127,7 @@ Proof.
     + apply AU_step; eauto; pclearbot.
       * eapply eq_sat_Ps; eauto.
         pfold; econstructor 8; eauto.
-      * intros; inv H11; auto_inj_pair2; subst.
+      * intros; inv H11; apply inj_pair2 in H13; subst.
         unshelve eapply (H2 (k1 c1) (f1 c1) _ q _ _ _ _ _ _ _ JMeq_refl p'); eauto.
         -- respects; eapply sep_r; eauto.
         -- apply no_errors_Modify; eauto.
@@ -1138,14 +1138,14 @@ Proof.
     + apply AU_step; eauto.
       * eapply eq_sat_Ps; eauto.
         pfold; econstructor; eauto.
-      * intros; inv H10; auto_inj_pair2; subst.
+      * intros; inv H10; apply inj_pair2 in H12; subst.
         eapply H8; eauto.
         apply no_errors_Choice; eauto.
     (* sbuter_gen_choice *)
     + apply AU_step; eauto.
       * eapply eq_sat_Ps; eauto.
         pfold; econstructor 11; eauto.
-      * intros; inv H10; auto_inj_pair2; subst.
+      * intros; inv H10; apply inj_pair2 in H12; subst.
         specialize (H8 b); destruct H8 as [b1].
         pclearbot.
         unshelve eapply (H2 (k1 b1) c1 _ q _ _ _ _ _ _ _ JMeq_refl p'); eauto.
@@ -1179,7 +1179,7 @@ Proof.
     + apply AU_step; eauto.
       * eapply eq_sat_Ps; eauto.
         pfold; econstructor; eauto.
-      * intros; inv H10; auto_inj_pair2; subst.
+      * intros; inv H10; apply inj_pair2 in H13; subst.
         eapply IHsbuter_gen; eauto.
         respects; eapply sep_r; eauto.
     (* sbuter_gen_modify_R *)
@@ -1191,7 +1191,7 @@ Proof.
     + apply AU_step; eauto; pclearbot.
       * eapply eq_sat_Ps; eauto.
         pfold; econstructor 8; eauto.
-      * intros; inv H11; auto_inj_pair2; subst.
+      * intros; inv H11; apply inj_pair2 in H13; subst.
         unshelve eapply (H2 (k2 c2) (f2 c2) _ q _ _ _ _ _ _ _ JMeq_refl p'); eauto.
         -- respects; eapply sep_r; eauto.
         -- apply no_errors_Modify; eauto.
@@ -1199,7 +1199,7 @@ Proof.
     + apply AU_step; eauto.
       * eapply eq_sat_Ps; eauto.
         pfold; econstructor; eauto.
-      * intros; inv H10; auto_inj_pair2; subst.
+      * intros; inv H10; apply inj_pair2 in H12; subst.
         eapply H8; eauto.
     (* sbuter_gen_choice_R *)
     + unshelve eapply (H2 (k false) c2 _ q _ _ _ _ _ _ _ JMeq_refl p'); eauto.
@@ -1209,7 +1209,7 @@ Proof.
     + apply AU_step; eauto.
       * eapply eq_sat_Ps; eauto.
         pfold; econstructor 11; eauto.
-      * intros; inv H10; auto_inj_pair2; subst.
+      * intros; inv H10; apply inj_pair2 in H12; subst.
         specialize (H7 b); destruct H7 as [b2].
         pclearbot.
         unshelve eapply (H2 (k2 b2) c2 _ q _ _ _ _ _ _ _ JMeq_refl p'); eauto.

@@ -4,7 +4,8 @@ From Coq Require Import
      Classes.RelationClasses
      Relations.Relation_Operators
      Relations.Operators_Properties
-     Program.Equality.
+     Program.Equality
+     ProofIrrelevance.
 
 From Heapster Require Import
      Permissions
@@ -102,7 +103,7 @@ Section bisim.
       constructor; left; eauto.
     - punfold H; cbn in H.
       inv H; pclearbot.
-      auto_inj_pair2; subst; eauto.
+      apply inj_pair2 in H2; subst; eauto.
   Qed.
 
   Lemma no_errors_Choice {S R} (k : bool -> CompM S R) s :
@@ -114,7 +115,7 @@ Section bisim.
       apply H.
     - punfold H; cbn in H.
       inv H; pclearbot.
-      auto_inj_pair2; subst; eauto.
+      apply inj_pair2 in H0; subst; eauto.
   Qed.
 
 
