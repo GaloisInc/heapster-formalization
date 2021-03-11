@@ -121,11 +121,11 @@ Proof.
   simpl. rewrite sep_conj_Perms_commut. rewrite sep_conj_Perms_bottom_identity. reflexivity.
 Qed.
 
-Lemma ExI (A B C : Type) (xi : A) (xs : C) ys (F : forall (b : B), PermType Si Ss A C) :
-  xi : F ys ▷ xs ⊨ xi : ex (z oftype B) (F z) ▷ existT _ ys xs.
+Lemma ExI (A B : Type) (C : B -> Type) (xi : A) (ys : B) (xs : C ys) (F : forall (b : B), PermType Si Ss A (C b)) :
+  xi : F ys ▷ xs ⊨ xi : ex (z oftype B) (F z) ▷ existT (fun b : B => C b) ys xs.
 Proof. reflexivity. Qed.
 
-Lemma ExE (A B C : Type) (xi : A) (xs : sigT (fun b : B => C)) (F : forall (b : B), PermType Si Ss A C) :
+Lemma ExE (A B : Type) (C : B -> Type) (xi : A) (xs : sigT (fun b : B => C b)) (F : forall (b : B), PermType Si Ss A (C b)) :
   xi : ex (z oftype B) (F z) ▷ xs ⊨ xi : F (projT1 xs) ▷ (projT2 xs).
 Proof. reflexivity. Qed.
 
