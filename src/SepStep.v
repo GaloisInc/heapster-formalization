@@ -31,7 +31,9 @@ Section step.
     repeat intro. symmetry. eapply separate_antimonotone; eauto. symmetry; auto.
   Qed.
 
-  Lemma sep_step_rely : forall p q x y, sep_step p q -> rely p x y -> rely q x y.
+  Lemma sep_step_rely : forall p q x y, sep_step p q ->
+                                   rely p x y ->
+                                   rely q x y.
   Proof.
     intros. specialize (H (sym_guar_perm p) (separate_self_sym _)).
     apply H; auto.
@@ -43,6 +45,16 @@ Section step.
   Proof.
     intros. specialize (H (sym_guar_perm p) (separate_self_sym _)).
     apply H; auto.
+  Qed.
+
+  Lemma sep_step_rg : forall p q,
+      (forall x y, guar q x y -> guar p x y) ->
+      (forall x y, rely p x y -> rely q x y) ->
+      sep_step p q.
+  Proof.
+    repeat intro. split; intros.
+    - apply H0. apply H1. auto.
+    - apply H1. apply H. auto.
   Qed.
 
   Lemma sep_step_sep_conj_l : forall p1 p2 q, p1 ⊥ q -> sep_step p1 p2 -> sep_step (p1 ** q) (p2 ** q).
