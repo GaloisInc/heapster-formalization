@@ -53,7 +53,7 @@ Section permType.
   Definition existsPT {Ai As} {Bs:As -> Type}
              (F : forall a, PermType Ai (Bs a)) : PermType Ai (sigT Bs) :=
     {| ptApp := fun ai abs => ai : F (projT1 abs) ▷ (projT2 abs) |}.
-  Notation "'ex' ( x : A ) . T" := (existsPT (As:=A) (fun x => T)) (at level 70).
+  Notation "'ex' ( x 'oftype' A ) T" := (existsPT (As:=A) (fun x => T)) (at level 70).
 
   Definition or {Ai As Bs} (T1:PermType Ai As)
              (T2:PermType Ai Bs) : PermType Ai (As + Bs) :=
@@ -147,7 +147,9 @@ Section permType.
     | VPtr _ => Ret false
     end.
 
-  (* The ordering on permission types is just the lifitng of that on Perms *)
+  Definition isNat := ex (n oftype nat) (eqp (VNum n)).
+
+  (* The ordering on permission types is just the lifting of that on Perms *)
   Definition lte_PermType {A B} (T1 T2:PermType A B): Prop :=
     forall a b, lte_Perms (ptApp _ _ T1 a b) (ptApp _ _ T2 a b).
 
@@ -229,6 +231,7 @@ Section permType.
       unfoldFold : forall x, foldFP (unfoldFP x) = x; }.
   Definition unmaprPT {A B C} (f:B -> C) (T:PermType A C) : PermType A B :=
     {| ptApp := fun a b => a : T ▷ (f b) |}.
+
   Program Definition mu {A G X} `{FixedPoint G X}
              (F:PermType A X -> PermType A (G X))
              {prp:Proper (lte_PermType ==> lte_PermType) F}
@@ -246,10 +249,42 @@ Section permType.
     apply (fixPT_fixed_point (fun T : PermType A X => unmaprPT unfoldFP (F T))).
   Qed.
 
+  Definition mu_list A := fun R => sum unit (A * R).
+  Global Program Instance fixed_point_test A : FixedPoint (mu_list A) (list A)
+   :=
+    {
+    foldFP := fun s => match s with
+                    | inl _ => @nil A
+                    | inr (h, t) => (cons h t)
+                    end;
+    unfoldFP := fun l => match l with
+                      | nil => inl tt
+                      | cons h t => inr _ (h, t)
+                      end;
+    }.
+  Next Obligation.
+    destruct gx.
+    - destruct u. auto.
+    - destruct p. auto.
+  Defined.
+  Next Obligation.
+    destruct x; auto.
+  Defined.
+
+  Program Definition list_perm rw A (T : VPermType A) : VPermType (list A) :=
+    @mu _ (mu_list A) _ (fixed_point_test _) (fun U => or (eqp (VNum 0)) (starPT (ptr (rw, 0, T)) (ptr (rw, 1, U)))) _.
+  Next Obligation.
+    repeat intro. simpl. induction b; simpl in *; auto.
+    destruct H1 as (? & ? & ? & ? & ?). exists x0, x1. split; auto. split; auto.
+    clear H1. unfold ptr_Perms in *. destruct (offset a 1); auto.
+    destruct H2. destruct H1. destruct H1. subst. destruct H2 as (? & ? & ? & ? & ?).
+    eexists. split; eauto. do 2 eexists. split; eauto. split; eauto. apply H0. auto.
+  Qed.
+
 End permType.
 
 Notation "P ⊢ ti ⤳ ts ::: U" := (typing P (ptApp _ _ _ _ U) ti ts) (at level 60).
-Notation "xi : T ▷ xs" := (ptApp _ _ _ _ T xi xs) (at level 35).
+Notation "xi :: T ▷ xs" := (ptApp _ _ _ _ T xi xs) (at level 35).
 Notation "T1 +T+ T2" := (plusPT _ _ T1 T2) (at level 50).
 Notation "T1 *T* T2" := (timesPT _ _ T1 T2) (at level 40).
 Notation "'ex' ( x 'oftype' A ) T" := (existsPT _ _ (As:=A) (fun x => T)) (at level 70).
