@@ -40,19 +40,19 @@ Section permType.
   Record PermType (A B:Type) : Type :=
     { ptApp : A -> B -> @Perms(Si*Ss) }.
   Definition VPermType A := PermType Value A.
-  Notation "xi : T ▷ xs" := (ptApp _ _ T xi xs) (at level 35).
+  Notation "xi :: T ▷ xs" := (ptApp _ _ T xi xs) (at level 35).
 
   Definition withPerms {Ai As} (T: PermType Ai As) (P:@Perms (Si * Ss)) : PermType Ai As:=
-    {| ptApp:= fun ai abs => ai : T ▷ abs * P|}.
+    {| ptApp:= fun ai abs => ai :: T ▷ abs * P|}.
   Notation "T ∅ P" := (withPerms T P) (at level 40).
 
   Definition starPT {Ai As Bs} (T:PermType Ai As) (U:PermType Ai Bs)
     : PermType Ai (As * Bs) :=
-    {| ptApp := fun ai abs => ai : T ▷ fst abs * ai : U ▷ snd abs |}.
+    {| ptApp := fun ai abs => ai :: T ▷ fst abs * ai :: U ▷ snd abs |}.
 
   Definition existsPT {Ai As} {Bs:As -> Type}
              (F : forall a, PermType Ai (Bs a)) : PermType Ai (sigT Bs) :=
-    {| ptApp := fun ai abs => ai : F (projT1 abs) ▷ (projT2 abs) |}.
+    {| ptApp := fun ai abs => ai :: F (projT1 abs) ▷ (projT2 abs) |}.
   Notation "'ex' ( x 'oftype' A ) T" := (existsPT (As:=A) (fun x => T)) (at level 70).
 
   Definition or {Ai As Bs} (T1:PermType Ai As)
@@ -82,7 +82,7 @@ Section permType.
                                                   | R => read_perm p v
                                                   | W => write_perm p v
                                                   end)
-                                 * (v : T ▷ a))
+                                 * (v :: T ▷ a))
     end.
 
   Definition ptr {A} '(rw, o, T) : VPermType A :=
@@ -96,8 +96,8 @@ Section permType.
     | 0 => trueP
     | S l' =>
       {| ptApp := fun xi xss =>
-                    xi : ptr (rw, o, T) ▷ Vector.hd xss *
-                    xi : arr_perm rw (S o) l' T ▷ Vector.tl xss
+                    xi :: ptr (rw, o, T) ▷ Vector.hd xss *
+                    xi :: arr_perm rw (S o) l' T ▷ Vector.tl xss
       |}
     end.
   Notation "'arr' ( rw , o , l , T )":=(arr_perm rw o l T).
@@ -106,15 +106,15 @@ Section permType.
              (T1:PermType A1 B1) (T2:PermType A2 B2) : PermType (A1+A2) (B1+B2) :=
     {| ptApp := fun eithA eithB =>
                   match (eithA,eithB) with
-                  | (inl a1, inl b1) => a1 : T1 ▷ b1
-                  | (inr a2, inr b2) => a2 : T2 ▷ b2
+                  | (inl a1, inl b1) => a1 :: T1 ▷ b1
+                  | (inr a2, inr b2) => a2 :: T2 ▷ b2
                   | _ => top_Perms
                   end |}.
   Notation "T1 +T+ T2" := (plusPT T1 T2) (at level 50).
 
   Definition timesPT {A1 A2 B1 B2}
              (T1:PermType A1 B1) (T2:PermType A2 B2) : PermType (A1*A2) (B1*B2) :=
-    {| ptApp := fun a12 b12 =>  fst a12 : T1 ▷ fst b12 * snd a12 : T2 ▷ snd b12 |}.
+    {| ptApp := fun a12 b12 =>  fst a12 :: T1 ▷ fst b12 * snd a12 :: T2 ▷ snd b12 |}.
   Notation "T1 *T* T2" := (timesPT T1 T2) (at level 40).
 
   Program Definition equals_perm {A} (a1 a2 : A): @perm (Si*Ss) := {|
@@ -181,7 +181,7 @@ Section permType.
 
   (* The meet on permission types is just the lifitng of that on Perms *)
   Definition meet_PermType {A B} (Ts:PermType A B -> Prop) : PermType A B :=
-    {| ptApp := fun a b => meet_Perms (fun P => exists T, Ts T /\ P = (a : T ▷ b)) |}.
+    {| ptApp := fun a b => meet_Perms (fun P => exists T, Ts T /\ P = (a :: T ▷ b)) |}.
 
   (* Meet is a lower bound for PermType *)
   Lemma lte_meet_PermType {A B} (Ts:PermType A B -> Prop) T:
@@ -230,7 +230,7 @@ Section permType.
       foldUnfold : forall gx, unfoldFP (foldFP gx) = gx;
       unfoldFold : forall x, foldFP (unfoldFP x) = x; }.
   Definition unmaprPT {A B C} (f:B -> C) (T:PermType A C) : PermType A B :=
-    {| ptApp := fun a b => a : T ▷ (f b) |}.
+    {| ptApp := fun a b => a :: T ▷ (f b) |}.
 
   Program Definition mu {A G X} `{FixedPoint G X}
              (F:PermType A X -> PermType A (G X))
@@ -249,8 +249,16 @@ Section permType.
     apply (fixPT_fixed_point (fun T : PermType A X => unmaprPT unfoldFP (F T))).
   Qed.
 
+  Lemma mu_fixed_point' {A G X} `{FixedPoint G X}
+        (F:PermType A X -> PermType A (G X))
+        {prp:Proper (lte_PermType ==> lte_PermType) F} :
+    lte_PermType (unmaprPT unfoldFP (F (mu F))) (mu F).
+  Proof.
+    apply (fixPT_fixed_point (fun T : PermType A X => unmaprPT unfoldFP (F T))).
+  Qed.
+
   Definition mu_list A := fun R => sum unit (A * R).
-  Global Program Instance fixed_point_test A : FixedPoint (mu_list A) (list A)
+  Global Program Instance fixed_point_list A : FixedPoint (mu_list A) (list A)
    :=
     {
     foldFP := fun s => match s with
@@ -271,8 +279,26 @@ Section permType.
     destruct x; auto.
   Defined.
 
+  Program Definition reach_perm {A}
+          (r : Value) (rw : RW) (o : nat)
+          (T : VPermType A)
+    : VPermType (list A) :=
+    @mu _ (mu_list A) _ (fixed_point_list _)
+        (fun U => or (eqp r) (starPT T (ptr (rw, o, U)))) _.
+  Next Obligation.
+    intros T1 T2 Hlte v l p Hp. simpl.
+    destruct l as [| ?]; simpl in *; auto.
+    destruct Hp as (pt & pptr & Hpt & Hpptr & Hlte').
+    exists pt, pptr. split; [| split]; auto.
+    clear Hpt. unfold ptr_Perms in *.
+    destruct (offset v o) as [? | l]; auto.
+    destruct Hpptr as (? & (v' & ?) & Hpptr); subst.
+    destruct Hpptr as (? & ? & ? & ? & ?).
+    eexists. split; eauto. do 2 eexists. split; [| split]; eauto. apply Hlte. auto.
+  Qed.
+
   Program Definition list_perm rw A (T : VPermType A) : VPermType (list A) :=
-    @mu _ (mu_list A) _ (fixed_point_test _) (fun U => or (eqp (VNum 0)) (starPT (ptr (rw, 0, T)) (ptr (rw, 1, U)))) _.
+    @mu _ (mu_list A) _ (fixed_point_list _) (fun U => or (eqp (VNum 0)) (starPT (ptr (rw, 0, T)) (ptr (rw, 1, U)))) _.
   Next Obligation.
     repeat intro. simpl. induction b; simpl in *; auto.
     destruct H1 as (? & ? & ? & ? & ?). exists x0, x1. split; auto. split; auto.
@@ -281,6 +307,52 @@ Section permType.
     eexists. split; eauto. do 2 eexists. split; eauto. split; eauto. apply H0. auto.
   Qed.
 
+  Definition list_reach_perm {A} r rw (T : VPermType A) : VPermType (list A) :=
+    reach_perm r rw 1 (ptr (rw, 0, T)).
+
+  Lemma reach_refl {A} x rw o (T : VPermType A) :
+    x :: trueP ▷ tt ⊨ x :: reach_perm x rw o T ▷ nil.
+  Proof.
+    repeat intro. apply mu_fixed_point. reflexivity.
+  Qed.
+
+  Lemma reach_trans {A} x y z rw o (T : VPermType A) xs ys :
+    x :: reach_perm y rw o T ▷ xs * y :: reach_perm z rw o T ▷ ys ⊨
+    x :: reach_perm z rw o T ▷ (xs ++ ys).
+  Proof.
+    revert x.
+    induction xs.
+    - intros x p (p1 & p2 & Hp1 & Hp2 & Hlte).
+      destruct Hp1 as (? & (U & HU & ?) & Hp1); subst.
+      apply HU in Hp1. simpl in Hp1. subst. eapply Perms_upwards_closed; eauto.
+      etransitivity; eauto. apply lte_r_sep_conj_perm.
+    - intros x p (px' & py & Hpx' & Hpy & Hlte).
+      eapply mu_fixed_point in Hpx'.
+      destruct Hpx' as (pa & px & Hpa & Hpx & Hlte').
+      (* x must be a pointer *)
+      destruct x; try contradiction. destruct a0 as [b o'].
+      destruct Hpx as (? & (v & ?) & Hpx); subst.
+      destruct Hpx as (px'' & pv & Hpx'' & Hpv & Hlte'').
+
+      apply mu_fixed_point.
+      simpl.
+      exists pa. exists (px'' ** (pv ** py)). split; [apply Hpa | split].
+      2: { repeat rewrite <- sep_conj_perm_assoc.
+           etransitivity; eauto.
+           eapply sep_conj_perm_monotone; intuition.
+           repeat rewrite sep_conj_perm_assoc.
+           etransitivity; eauto.
+           eapply sep_conj_perm_monotone; intuition.
+      }
+      eexists; split; [eexists; reflexivity |].
+      apply sep_conj_Perms_perm; [apply Hpx'' |].
+      simpl. exists (v :: reach_perm z rw o T ▷ (xs ++ ys)). split.
+      2: { apply IHxs. apply sep_conj_Perms_perm; auto. }
+      eexists; split; eauto.
+      repeat intro. eapply mu_fixed_point in H0; auto.
+      (* TODO: figure out why this didn't work automatically *)
+      Unshelve. all: apply reach_perm_obligation_1.
+  Qed.
 End permType.
 
 Notation "P ⊢ ti ⤳ ts ::: U" := (typing P (ptApp _ _ _ _ U) ti ts) (at level 60).
