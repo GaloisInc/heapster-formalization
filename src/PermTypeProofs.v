@@ -395,9 +395,9 @@ Proof.
   assert (Hguar : guar p' (c1, c2) ((lput c1 c'), c2)).
   {
     apply Hlte. constructor 1. left. apply Hwritelte. simpl.
-    split; [| split].
+    split.
     + eapply write_success_other_ptr; eauto.
-    + eapply write_success_allocation; eauto.
+    (* + eapply write_success_allocation; eauto. *)
     + eapply write_success_others; eauto.
   }
   econstructor; eauto.
@@ -654,6 +654,17 @@ Proof.
   - simpl. reflexivity.
 Qed.
 
+  Program Definition list_reach_perm r rw A (T : VPermType Si Ss A) : VPermType Si Ss (list A) :=
+    @mu _ _ _ (mu_list A) _ (fixed_point_list _)
+        (fun U => or _ _ (eqp Si Ss r) (starPT _ _ (ptr _ _ (rw, 0, T)) (ptr _ _ (rw, 1, U)))) _.
+  Next Obligation.
+    repeat intro. simpl. induction b; simpl in *; auto.
+    destruct H0 as (? & ? & ? & ? & ?). exists x0, x1. split; [| split]; auto.
+    clear H0. unfold ptr_Perms in *. destruct (offset a 1); auto.
+    destruct H1. destruct H0. destruct H0. subst. destruct H1 as (? & ? & ? & ? & ?).
+    eexists. split; eauto. do 2 eexists. split; eauto. split; eauto. apply H. auto.
+  Qed.
+
 Definition ex3i' : Value -> itree (sceE Si) Value :=
   iter (C := Kleisli _)
        (fun v => v' <- load (offset v 1);; (* continue with *(v + 1) *)
@@ -672,7 +683,7 @@ Lemma ex3'_typing A xi xs (T : VPermType _ _ A) :
   xi :: list_perm _ _ R _ T ▷ xs ⊢
   ex3i' xi ⤳
   ex3s' xs :::
-  (trueP _ _).
+  (falseP _ _).
 Proof.
   unfold ex3i', ex3s'. apply Iter.
   intros. unfold list_perm. eapply Weak; [| reflexivity |].
