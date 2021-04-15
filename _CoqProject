@@ -11,8 +11,5 @@ src/PermType.v
 src/PermTypeProofs.v
 src/Temporal.v
 
-src/Memory2.v
-src/Config3.v
-
 src/Typing_new.v
 src/Temporal_new.v

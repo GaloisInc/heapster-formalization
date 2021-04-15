@@ -129,6 +129,12 @@ Section permType.
   Program Definition eqp {A} (a:A): PermType A unit :=
     {| ptApp := fun a' _ => {| in_Perms _ := a=a' |} |}.
 
+  Definition blockPT l : VPermType unit :=
+    {| ptApp := fun a _ => match a with
+                        | VPtr ptr => singleton_Perms (block_perm l ptr)
+                        | _ => top_Perms
+                        end |}.
+
   Definition vsingle {A} (a:A) : Vector.t A 1 :=
     Vector.cons _ a _ (Vector.nil _).
 
@@ -279,13 +285,10 @@ Section permType.
     destruct x; auto.
   Defined.
 
-  Program Definition reach_perm {A}
-          (r : Value) (rw : RW) (o : nat)
-          (T : VPermType A)
-    : VPermType (list A) :=
-    @mu _ (mu_list A) _ (fixed_point_list _)
-        (fun U => or (eqp r) (starPT T (ptr (rw, o, U)))) _.
-  Next Obligation.
+  Lemma reach_perm_proper {A} r (T : VPermType A) rw o :
+    Proper (lte_PermType ==> lte_PermType)
+           (fun U : VPermType (list A) => or (eqp r) (starPT T (ptr (rw, o, U)))).
+  Proof.
     intros T1 T2 Hlte v l p Hp. simpl.
     destruct l as [| ?]; simpl in *; auto.
     destruct Hp as (pt & pptr & Hpt & Hpptr & Hlte').
@@ -296,6 +299,14 @@ Section permType.
     destruct Hpptr as (? & ? & ? & ? & ?).
     eexists. split; eauto. do 2 eexists. split; [| split]; eauto. apply Hlte. auto.
   Qed.
+
+  Program Definition reach_perm {A}
+          (r : Value) (rw : RW) (o : nat)
+          (T : VPermType A)
+    : VPermType (list A) :=
+    @mu _ (mu_list A) _ (fixed_point_list _)
+        (fun U => or (eqp r) (starPT T (ptr (rw, o, U))))
+        (reach_perm_proper _ _ _ _).
 
   Program Definition list_perm rw A (T : VPermType A) : VPermType (list A) :=
     @mu _ (mu_list A) _ (fixed_point_list _) (fun U => or (eqp (VNum 0)) (starPT (ptr (rw, 0, T)) (ptr (rw, 1, U)))) _.
@@ -350,8 +361,7 @@ Section permType.
       2: { apply IHxs. apply sep_conj_Perms_perm; auto. }
       eexists; split; eauto.
       repeat intro. eapply mu_fixed_point in H0; auto.
-      (* TODO: figure out why this didn't work automatically *)
-      Unshelve. all: apply reach_perm_obligation_1.
+      Unshelve. all: apply reach_perm_proper.
   Qed.
 End permType.
 

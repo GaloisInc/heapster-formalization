@@ -48,4 +48,4 @@ Definition mem_block := nat -> option Value.
 Variant logical_block :=
 | LBlock (size : nat) (bytes : mem_block) : logical_block.
 
-Definition memory := nat -> option logical_block.
+Definition memory := list (option logical_block).
