@@ -80,6 +80,17 @@ Section Config.
     m := m c;
     |}.
 
+  Lemma replace_list_index_length A (l : list A) n (a : A) :
+    n < length l ->
+    length l = length (replace_list_index l n a).
+  Proof.
+    revert l. induction n; intros l Hl.
+    - destruct l; auto. inversion Hl.
+    - destruct l.
+      + inversion Hl.
+      + simpl in Hl. apply Lt.lt_S_n in Hl. simpl. f_equal. auto.
+  Qed.
+
   Lemma replace_lifetime_same c n l :
     lifetime c n = Some l -> replace_lifetime c n l = c.
   Proof.
@@ -314,7 +325,7 @@ Section Config.
   (*       rewrite H in Heqb0. inversion Heqb0. *)
   (*     + destruct (o <? size); auto. *)
     (* Qed. *)
-    Admitted.
+  Abort.
 
   (* write val to c at memory location ptr. ptr must be allocated. *)
   Definition write (c : config) (ptr : addr) (val : Value)
@@ -377,30 +388,52 @@ Qed.
   (*   destruct (o <? size) eqn:?, (is_some (bytes o)) eqn:?; simpl in *; inversion H; simpl in *. *)
   (*   repeat rewrite Nat.eqb_refl. rewrite Heqb0. auto. *)
   (* Qed. *)
-  Admitted.
+  Abort.
+
+  Lemma nth_error_replace_list_index_neq A n n' (l : list A) (a : A) :
+    n' < length l ->
+    n <> n' ->
+    nth_error l n = nth_error (replace_list_index l n' a) n.
+  Proof.
+    revert l n'.
+    induction n; intros l n' Hl Hn; (destruct l; [inversion Hl |]);
+      simpl; destruct n'; intuition.
+  Qed.
+
+  Lemma nth_error_replace_list_index_eq A n (l : list A) (a : A) :
+    n < length l ->
+   nth_error (replace_list_index l n a) n = Some a.
+  Proof.
+    revert l. induction n; intros l Hl; (destruct l; [inversion Hl |]); simpl; auto.
+    simpl in Hl. apply Lt.lt_S_n in Hl. apply IHn; auto.
+  Qed.
 
   Lemma write_success_other_ptr c c' ptr val :
     write c ptr val = Some c' ->
     forall ptr', ptr <> ptr' -> read c ptr' = read c' ptr'.
   Proof.
-  (*   destruct ptr as [b o]. *)
-  (*   unfold write. unfold read. simpl. intros. *)
-  (*   destruct (m c b) eqn:?; try solve [inversion H]. destruct l0. *)
-  (*   destruct (o <? size) eqn:?; try solve [inversion H]. *)
-  (*   destruct (is_some (bytes o)) eqn:?; try solve [inversion H]. *)
-  (*   inversion H; subst; clear H. destruct ptr' as [b' o']. simpl. *)
-  (*   destruct (addr_neq_cases b b' o o' H0). *)
-  (*   - rewrite (Bool.reflect_iff _ _ (Nat.eqb_spec _ _)) in H. *)
-  (*     apply Bool.not_true_is_false in H. rewrite Nat.eqb_sym. *)
-  (*     rewrite H. reflexivity. *)
-  (*   - destruct (b' =? b) eqn:?; auto. *)
-  (*     rewrite <- (Bool.reflect_iff _ _ (Nat.eqb_spec _ _)) in Heqb2. subst. *)
+    destruct ptr as [b o].
+    unfold write. unfold read. simpl. intros.
+    destruct (allocated c (b, o)) eqn:?; try solve [inversion H].
+    destruct (nth_error (m c) b) eqn:?; try solve [inversion H].
+    destruct (o0) eqn:?; try solve [inversion H].
+    destruct l0.
+    inversion H; subst; clear H. destruct ptr' as [b' o']. simpl.
+    destruct (addr_neq_cases _ _ _ _ H0).
+    - unfold allocated. simpl. erewrite nth_error_replace_list_index_neq; eauto.
+      admit.
+    - destruct (b' =? b) eqn:?; auto.
+      2: {
+  (*       rewrite <- (Bool.reflect_iff _ _ (Nat.eqb_spec _ _)) in Heqb1. subst. *)
+
+
+  (*     rewrite <- (Bool.reflect_iff _ _ (Nat.eqb_spec _ _)) in Heqb1. subst. *)
   (*     rewrite Heqo0. *)
   (*     rewrite (Bool.reflect_iff _ _ (Nat.eqb_spec _ _)) in H. *)
   (*     apply Bool.not_true_is_false in H. rewrite Nat.eqb_sym. *)
   (*     rewrite H. reflexivity. *)
   (* Qed. *)
-  Admitted.
+  Abort.
 
   Lemma write_success_others c c' ptr val :
     write c ptr val = Some c' ->
@@ -412,7 +445,7 @@ Qed.
   (*   destruct l0. destruct ((o <? size) && is_some (bytes o))%bool; try solve [inversion H]. *)
   (*   inversion H; subst; simpl. split; auto. *)
   (* Qed. *)
-  Admitted.
+  Abort.
 
   Lemma write_read : forall c c' ptr val,
       write c ptr val = Some c' ->
@@ -711,10 +744,8 @@ Qed.
     constructor; [intros [] | intros [] [] [] ? ?]; subst; auto.
   Qed.
 
-  Definition write_guar s1 s2 ptr v : Prop :=
-    read s2 ptr = Some v ->
-    write s1 ptr v = Some s2.
-
+  Definition write_guar s1 s2 ptr : Prop :=
+    exists v, write s1 ptr v = Some s2.
 
   Program Definition write_perm (ptr : addr) (v : Value) : (@perm (Si * Ss)) :=
     {|
@@ -782,7 +813,8 @@ Qed.
     guar_PO := guar_PO (malloc_perm (n + 1) ** block_perm size (n, 0) ** write_perm (n, 0) (VNum 0));
     |}.
 
-  Lemma sep_step_malloc n size : sep_step (malloc_perm n) (post_malloc_perm n size).
+  Lemma sep_step_malloc n size : sep_step (malloc_perm n)
+                                          (post_malloc_perm n size).
   Proof.
     apply sep_step_rg.
     - intros [si ss] [si' ss'] ?. induction H; try solve [etransitivity; eauto].
@@ -877,15 +909,24 @@ Qed.
   Definition free (ptr : Value) : itree (sceE Si) unit :=
     match ptr with
     | VNum _ => throw tt
-    | VPtr ptr => trigger (Modify (fun s =>
-                                    (lput s {|
-                                            l := l (lget s);
-                                            m := replace_list_index
-                                                   (m (lget s))
-                                                   (fst ptr)
-                                                   None
-                                          |})));;
-                 Ret tt
+    | VPtr ptr =>
+      if snd ptr =? 0
+      then
+        s <- trigger (Modify id);;
+        match nth_error (m (lget s)) (fst ptr) with
+        | Some (Some (LBlock size _)) =>
+          trigger (Modify (fun s =>
+                             (lput s {|
+                                     l := l (lget s);
+                                     m := replace_list_index
+                                            (m (lget s))
+                                            (fst ptr)
+                                            (Some (LBlock size (fun _ => None)));
+                                   |})));;
+          Ret tt
+        | _ => throw tt
+        end
+      else throw tt
     end.
 
   Example no_error_load s : no_errors (lput s (config_mem (0, 0) (VNum 1)))
@@ -905,17 +946,26 @@ Qed.
     length l = n ->
     nth_error (l ++ [a]) n = Some a.
   Proof.
-    intros. revert H. revert l. induction n; intros l Hl.
-    - destruct l; inversion Hl. reflexivity.
-    - destruct l; inversion Hl. simpl. remember (length l0).
-      subst. apply IHn; auto.
+    revert l. induction n; intros [| l] Hl; inversion Hl; auto.
+    simpl. remember (length l0). subst. apply IHn; auto.
   Qed.
 
-  Lemma typing_malloc n :
+  Lemma nth_error_app_early A n (l : list A) (a : A) :
+    n < length l ->
+    nth_error (l ++ [a]) n = nth_error l n.
+  Proof.
+    revert l. induction n; intros l Hl.
+    - destruct l; auto; inversion Hl.
+    - destruct l; auto.
+      + inversion Hl.
+      + simpl in Hl. apply Lt.lt_S_n in Hl. apply IHn; auto.
+  Qed.
+
+  Lemma typing_malloc :
     typing
-      (singleton_Perms (malloc_perm n))
+      malloc_Perms
       (fun v _ => match v with
-               | VPtr addr => singleton_Perms (malloc_perm (n + 1)) *
+               | VPtr addr => malloc_Perms *
                              singleton_Perms (block_perm 1 addr) *
                              write_Perms addr (fun _ => bottom_Perms)
                | _ => top_Perms
@@ -924,14 +974,15 @@ Qed.
       (Ret tt).
   Proof.
     intros p si ss Hp Hpre. pstep. unfold malloc.
+    destruct Hp as (? & (n & ?) & Hp); subst.
     (* read step *)
     rewritebisim @bind_trigger. econstructor; eauto; try reflexivity.
     (* write step *)
     rewritebisim @bind_trigger. unfold id. econstructor; eauto.
     { apply Hp in Hpre. apply Hp. simpl in *. rewrite lGetPut. split; auto.
       intros ptr Hn. split.
-      - admit.
-      - admit.
+      - unfold read, allocated. simpl. subst. rewrite nth_error_app_early; auto.
+      - unfold sizeof. simpl. subst. rewrite nth_error_app_early; auto.
     }
     (* return *)
     { eapply sep_step_lte. apply Hp. apply sep_step_malloc. }
@@ -945,7 +996,10 @@ Qed.
       - simpl. apply Hp in Hpre. simpl in Hpre. rewrite Hpre.
         eexists. exists (write_perm (n, 0) (VNum 0)).
         split; [| split].
-        + do 2 eexists. split; [| split]; auto; reflexivity.
+        + do 2 eexists. split; [| split]; try reflexivity.
+          eexists. split.
+          * exists (n + 1). reflexivity.
+          * simpl. reflexivity.
         + eexists. split; [exists (VNum 0); reflexivity |].
           do 2 eexists. split; [simpl; reflexivity | split]; simpl; auto.
           apply sep_conj_perm_bottom.
@@ -958,27 +1012,47 @@ Qed.
               + apply write_block.
               + apply malloc_block; simpl; lia.
           }
-  Admitted.
+    }
+  Qed.
 
-  Lemma typing_free ptr (Q : Value -> Perms):
+  Lemma typing_free ptr (Q : Value -> Perms) :
+    snd ptr = 0 ->
     typing
       (write_Perms ptr Q * singleton_Perms (block_perm 1 ptr))
       (fun _ _ => bottom_Perms)
       (free (VPtr ptr))
       (Ret tt).
   Proof.
-    repeat intro. pstep. unfold free. rewritebisim @bind_trigger.
-    econstructor; eauto. 2: { apply sep_step_lte'. apply bottom_perm_is_bottom. }
-    2: { constructor; simpl; auto. }
-    destruct H as (? & ? & (? & (? & ?) & ?) & ? & ?). subst.
-    destruct H1 as (? & ? & ? & ? & ?). simpl in *.
-    apply H3. constructor. left.
-    apply H4. constructor. left.
-    apply H. split.
-    - intros. apply H3 in H0. destruct H0 as (_ & ? & _). apply H2 in H0.
-      simpl in H0.
-      rewrite lGetPut. (* todo *)
-  Abort.
+    intro Hoffset.
+    intros p si ss Hp Hpre. pstep. unfold free.
+    destruct Hp as (pwrite' & pblock & (? & (v & ?) & Hpwrite) & Hpblock & Hlte); subst.
+    destruct Hpwrite as (pwrite & pv & Hpwrite & Hpv & Hlte').
+    setoid_rewrite Hoffset. simpl.
+    (* read step *)
+    rewritebisim @bind_trigger. econstructor; auto; try reflexivity.
+    pose proof Hpre as Hpre'. apply Hlte in Hpre'.
+    destruct Hpre' as (Hprewrite & Hpreblock & Hsep).
+    apply Hpblock in Hpreblock. simpl in Hpreblock.
+    unfold sizeof in Hpreblock. setoid_rewrite Hoffset in Hpreblock. simpl in Hpreblock.
+    unfold offset in *. (* TODO: define coercions *)
+    destruct (nth_error (m (lget si)) (fst ptr)) eqn:?; try solve [inversion Hpreblock].
+    destruct o; try solve [inversion Hpreblock].
+    destruct l0. inversion Hpreblock; clear Hpreblock; subst.
+    (* write step *)
+    rewritebisim @bind_trigger. unfold id. econstructor; auto.
+    - apply Hlte. constructor 1. left.
+      apply Hlte'. constructor 1. left.
+      apply Hpwrite. simpl.
+      split; [| split; [| split]]; rewrite lGetPut; simpl; auto.
+      + intros.
+        admit. (* break up the <> into cases, then use nth_error_replace_list_index_eq/neq *)
+      + admit.
+      + assert (fst ptr < length (m (lget si))).
+        { apply nth_error_Some. intro. rewrite H in Heqo. inversion Heqo. }
+        apply replace_list_index_length; auto.
+    - apply sep_step_lte'. apply bottom_perm_is_bottom.
+    - constructor; simpl; auto.
+  Admitted.
 
   Lemma typing_load {R} ptr (Q : Value -> Perms) (r : R) :
     typing
@@ -1014,7 +1088,7 @@ Qed.
     {
       apply Hlte in Hpre. destruct Hpre as (Hpre & _).
       apply Hlte' in Hpre. destruct Hpre as (Hpre & _).
-      apply Hwritelte in Hpre. eexists. apply Hpre.
+      apply Hwritelte in Hpre. eexists. symmetry. apply Hpre.
     }
     destruct H as (val & Hread). eapply (read_success_write _ _ _ val') in Hread.
     destruct Hread as (c' & Hwrite).
