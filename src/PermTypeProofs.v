@@ -801,6 +801,166 @@ Proof.
       - admit.
 Admitted.
 
+Fixpoint rely_post_malloc n b size x y : Prop :=
+  match n with
+  | 0 => rely (block_perm size (b, 0) ** malloc_perm (b + 1)) x y
+  | S n => rely (@write_perm Si Ss _ (b, n) (VNum 0)) x y /\ rely_post_malloc n b size x y
+  end.
+Lemma PO_rely_post_malloc n b size :
+  PreOrder (rely_post_malloc n b size).
+Proof.
+  constructor.
+  - intros []; induction n; simpl; auto.
+  - intros [] [] [] ? ?. induction n.
+    + split; [| split]; try solve [etransitivity; [apply H | apply H0]].
+      intros; split; (etransitivity; [apply H | apply H0]); auto.
+    + split; try solve [etransitivity; [apply H | apply H0]].
+      apply IHn; [apply H | apply H0].
+Qed.
+
+Fixpoint guar_post_malloc n b size x y : Prop :=
+  match n with
+  | 0 => guar (block_perm size (b, 0) ** malloc_perm (b + 1)) x y
+  | S n => clos_trans _ (fun x y =>
+                          guar (@write_perm Si Ss _ (b, n) (VNum 0)) x y \/
+                          guar_post_malloc n b size x y) x y
+  end.
+Instance PO_guar_post_malloc n b size :
+  PreOrder (guar_post_malloc n b size).
+Proof.
+  constructor.
+  - intros []. induction n; simpl; intuition.
+  - intros [] [] [] ? ?.
+    destruct n; econstructor 2; eauto.
+Qed.
+
+Definition pre_post_malloc b size : Si * Ss -> Prop :=
+  fun '(x, _) =>
+    b + 1 = length (m (lget x)) /\
+    Some size = sizeof (lget x) (b, 0) /\
+    Some (VNum 0) = read (lget x) (b, 0).
+Lemma pre_respects_post_malloc n b size :
+  forall x y, rely_post_malloc (S n) b size x y -> (* we need the fact that n > 0 here *)
+         pre_post_malloc b size x ->
+         pre_post_malloc b size y.
+Proof.
+  intros [] [] Hrely (Hlen & Hsizeof & Hread).
+  simpl in *.
+  induction n; simpl in *.
+  - destruct Hrely as (Hread' & Hsizeof' & Hlen' & Hptr).
+    split; [rewrite <- Hlen' | split; [rewrite <- Hsizeof' | rewrite <- Hread']]; auto.
+  - apply IHn; auto. split; apply Hrely.
+Qed.
+
+(* n is the number of unfoldings to do for the rely/guar. size is the size of the block.
+   when we use this n = size, but we need them separate to do induction on n *)
+Program Definition post_malloc_perm' n b size : @perm (Si * Ss) :=
+  {|
+  rely := rely_post_malloc (S n) b (S size);
+  rely_PO := PO_rely_post_malloc (S n) b (S size);
+  guar := guar_post_malloc (S n) b (S size);
+  guar_PO := PO_guar_post_malloc (S n) b (S size);
+  pre := pre_post_malloc b (S size);
+  pre_respects := pre_respects_post_malloc n b (S size); (* S is applied inside this defn *)
+  |}.
+
+Lemma guar_malloc_post_malloc n b size x y :
+  guar_post_malloc n b (S size) x y -> guar (malloc_perm b) x y.
+Proof.
+  revert x y. induction n; intros.
+  - induction H; try solve [etransitivity; eauto]. destruct H.
+    + destruct x, y. simpl in *. subst; auto.
+    + destruct x, y. destruct H as (? & ?). split; auto. intros.
+      split; apply H; lia.
+  - induction H; auto.
+    + destruct H.
+      * destruct x, y. destruct H as (? & ? & ? & ?). split; auto. intros.
+        split; auto.
+        apply H. destruct ptr. intro. inversion H4. simpl in *. lia.
+      * apply IHn; auto.
+    + etransitivity; eauto.
+Qed.
+
+Lemma rely_malloc_post_malloc n b size x y :
+  rely (malloc_perm b) x y -> rely_post_malloc n b (S size) x y.
+Proof.
+  destruct x, y. induction n; intros.
+  - destruct H as (Hlen & Hptr).
+    split; [| split]; simpl; auto.
+    + apply Hptr; simpl; auto.
+    + intros. apply Hptr; lia.
+  - split; auto. simpl in *. apply H. auto.
+Qed.
+
+Lemma sep_step_malloc' n b size : sep_step (malloc_perm b)
+                                           (post_malloc_perm' n b size).
+Proof.
+  apply sep_step_rg.
+  - apply guar_malloc_post_malloc.
+  - apply rely_malloc_post_malloc.
+Qed.
+
+Lemma post_malloc_perm_ok {A} n b size (xs : Vector.t A (S n)) :
+  post_malloc_perm' n b size (* the perm applies S to n and size inside *) ∈
+  VPtr (b, 0) :: arr_perm Si Ss W 0 (S n) (trueP Si Ss) ▷ xs *
+  singleton_Perms (block_perm (S size) (b, 0)) *
+  malloc_Perms.
+Proof.
+  (* rewrite <- sep_conj_Perms_assoc. *)
+  (* rewrite sep_conj_Perms_commut. *)
+  (* simpl. exists (block_perm (S size) (b, 0) ** malloc_perm (b + 1)). *)
+  (* induction size. *)
+  (* - eexists. split; [| split]. *)
+  (*   + do 2 eexists. split; [| split]; try reflexivity. *)
+  (*     eexists. split; [exists (b + 1); reflexivity | simpl; reflexivity]. *)
+  (*   + eexists. exists bottom_perm. split; [| split]; try reflexivity. *)
+  (*     eexists. split; [exists (VNum 0); reflexivity |]. *)
+  (*     simpl. eexists. exists bottom_perm. split; [| split]; reflexivity. *)
+  (*   + repeat rewrite sep_conj_perm_bottom. constructor; auto. *)
+  (*     { intros [] (? & ? & ?). simpl in *. split; split; auto. *)
+  (*       - split; auto. symmetry. apply malloc_block; auto; simpl; lia. *)
+  (*       - symmetry. apply separate_sep_conj_perm; symmetry. *)
+  (*         + apply write_block. *)
+  (*         + apply malloc_write. simpl. lia. *)
+  (*         + symmetry. apply malloc_block; simpl; lia. *)
+  (*     } *)
+  (*     { intros [] [] (? & ? & ?). simpl in *. auto. } *)
+  (*     { *)
+  (*       intros [] [] H. *)
+  (*       rewrite sep_conj_perm_commut in H. *)
+  (*       apply H. *)
+  (*     } *)
+  simpl.
+  induction n.
+  - simpl. do 2 eexists. split; [| split].
+    + do 2 eexists. split; [| split; reflexivity].
+      eexists. exists bottom_perm. split; [| split; reflexivity].
+      eexists. split; [exists (VNum 0); reflexivity |].
+      eexists. exists bottom_perm. split; [| split; reflexivity]; simpl; reflexivity.
+    + eexists. split; [exists (b + 1); reflexivity | simpl; reflexivity].
+    + repeat rewrite sep_conj_perm_bottom. constructor; auto.
+      { intros [] (? & ? & ?). simpl in *. split; split; auto.
+        - split; auto. symmetry. apply write_block.
+        - symmetry. apply separate_sep_conj_perm.
+          + apply malloc_write. simpl. lia.
+          + apply malloc_block; simpl; lia.
+          + apply write_block.
+      }
+      { intros [] [] (? & ? & ?). simpl in *. auto. }
+      { intros [] [] H. rewrite sep_conj_perm_assoc in H. apply H. }
+  - simpl. specialize (IHn (Vector.tl xs)).
+    destruct IHn as (? & ? & ? & ? & ?).
+    destruct H as (? & ? & ? & ? & ?).
+    destruct H as (? & ? & ? & ? & ?).
+
+    do 2 eexists. split; [| split]. 2: apply H0.
+    {
+      do 2 eexists. split; [| split]. 2: apply H2. 2: apply H3.
+      do 2 eexists. split; [| split]. apply H. 2: apply H5.
+
+      do 2 eexists. split; [| split].
+Admitted.
+
 Lemma Malloc xi xs len :
   xi :: eqp _ _ (S len) ▷ xs * malloc_Perms ⊢
   malloc xi ⤳
@@ -809,7 +969,7 @@ Lemma Malloc xi xs len :
 Proof.
   intros p si ss Hp Hpre. pstep. unfold malloc.
   destruct Hp as (peq & pmalloc & Heq & Hpmalloc & Hlte). simpl in Heq. subst.
-  destruct Hpmalloc as (? & (n & ?) & Hpmalloc); subst.
+  destruct Hpmalloc as (? & (b & ?) & Hpmalloc); subst.
   (* read step *)
   rewritebisim @bind_trigger. econstructor; eauto; try reflexivity.
   (* write step *)
@@ -817,15 +977,26 @@ Proof.
   { apply Hlte in Hpre. destruct Hpre as (_ & Hpre & _).
     apply Hpmalloc in Hpre. apply Hlte. constructor 1. right. apply Hpmalloc.
     simpl in *. split; auto.
-    intros ptr Hn. split.
+    intros ptr Hb. split.
     - unfold read, allocated. simpl. subst. rewrite nth_error_app_early; auto.
     - unfold sizeof. simpl. subst. rewrite nth_error_app_early; auto.
   }
   (* return *)
   { eapply sep_step_lte. etransitivity. 2: apply Hlte.
     etransitivity. 2: apply lte_r_sep_conj_perm. apply Hpmalloc.
-    (* need new perm here *)
-Abort.
+    apply sep_step_malloc' with (size := len).
+  }
+  { simpl. apply Hlte in Hpre. destruct Hpre as (_ & Hpre & Hlte').
+    apply Hpmalloc in Hpre. simpl in Hpre.
+    constructor.
+    - simpl. split; [| split].
+      + rewrite last_length. lia.
+      + unfold sizeof. simpl.
+        rewrite nth_error_app_last; auto.
+      + unfold read, allocated. simpl. rewrite nth_error_app_last; auto.
+    - rewrite Hpre. apply post_malloc_perm_ok.
+  }
+Qed.
 
 Lemma Free {A} xi len (xs : Vector.t A (S len) * unit) :
   xi :: starPT _ _ (arr (W, 0, (S len), trueP Si Ss)) (blockPT _ _ (S len)) ▷ xs ⊢

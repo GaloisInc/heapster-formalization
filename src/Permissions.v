@@ -52,7 +52,7 @@ Section Permissions.
   Qed.
 
   (* Equality of permissions = the symmetric closure of the ordering *)
- Definition eq_perm p q : Prop := p <= q /\ q <= p.
+  Definition eq_perm p q : Prop := p <= q /\ q <= p.
 
   Notation "p ≡≡ q" := (eq_perm p q) (at level 50).
   Lemma eq_perm_lte_1 : forall p q, p ≡≡ q -> p <= q.
@@ -63,6 +63,24 @@ Section Permissions.
   Hint Unfold eq_perm : core.
   Hint Resolve eq_perm_lte_1 : core.
   Hint Resolve eq_perm_lte_2 : core.
+
+  Global Instance Proper_eq_perm_rely :
+    Proper (eq_perm ==> eq ==> eq ==> Basics.flip Basics.impl) rely.
+  Proof.
+    repeat intro. subst. apply H. auto.
+  Qed.
+
+  Global Instance Proper_eq_perm_guar :
+    Proper (eq_perm ==> eq ==> eq ==> Basics.flip Basics.impl) guar.
+  Proof.
+    repeat intro. subst. apply H. auto.
+  Qed.
+
+  Global Instance Proper_eq_perm_pre :
+    Proper (eq_perm ==> eq ==> Basics.flip Basics.impl) pre.
+  Proof.
+    repeat intro. subst. apply H. auto.
+  Qed.
 
   Global Instance eq_perm_is_Equivalence : Equivalence eq_perm.
   Proof.

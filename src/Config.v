@@ -854,8 +854,7 @@ Qed.
     - intros [si ss] [si' ss'] ?. induction H; try solve [etransitivity; eauto].
       destruct H.
       2: { destruct x, y. destruct H as (? & ? & ? & ?). split; auto.
-           intros. destruct ptr.
-           split; auto. apply H; intro Heq; inversion Heq; subst; simpl in *; lia.
+           intros []. split; auto. apply H; intro Heq; inversion Heq; subst; simpl in *; lia.
       }
       induction H; try solve [etransitivity; eauto]. destruct H.
       + destruct x, y. destruct H as (? & ?). split; auto. intros.
