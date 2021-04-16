@@ -948,14 +948,14 @@ Qed.
       then
         s <- trigger (Modify id);;
         match nth_error (m (lget s)) (fst ptr) with
-        | Some (Some (LBlock size _)) =>
+        | Some (Some (LBlock size bytes)) =>
           trigger (Modify (fun s =>
                              (lput s {|
                                      l := l (lget s);
                                      m := replace_list_index
                                             (m (lget s))
                                             (fst ptr)
-                                            (Some (LBlock size (fun _ => None)));
+                                            (Some (LBlock size (fun o => if o <? size then None else bytes o)));
                                    |})));;
           Ret tt
         | _ => throw tt
