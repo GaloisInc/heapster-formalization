@@ -408,58 +408,6 @@ Qed.
     simpl in Hl. apply Lt.lt_S_n in Hl. apply IHn; auto.
   Qed.
 
-  Lemma write_success_read c c' ptr val :
-    write c ptr val = Some c' ->
-    forall ptr', ptr <> ptr' -> read c ptr' = read c' ptr'.
-  Proof.
-    destruct ptr as [b o].
-    unfold write. unfold read. simpl. intros.
-    destruct (allocated c (b, o)) eqn:?; try solve [inversion H].
-    destruct (nth_error (m c) b) eqn:?; try solve [inversion H].
-    destruct o0 eqn:?; try solve [inversion H].
-    destruct l0. inversion H; subst; clear H. destruct ptr' as [b' o']. simpl.
-    destruct (addr_neq_cases _ _ _ _ H0).
-    - unfold allocated. simpl. erewrite nth_error_replace_list_index_neq; eauto.
-      admit.
-    - destruct (b' =? b) eqn:?; auto.
-      2: {
-  (*       rewrite <- (Bool.reflect_iff _ _ (Nat.eqb_spec _ _)) in Heqb1. subst. *)
-
-
-  (*     rewrite <- (Bool.reflect_iff _ _ (Nat.eqb_spec _ _)) in Heqb1. subst. *)
-  (*     rewrite Heqo0. *)
-  (*     rewrite (Bool.reflect_iff _ _ (Nat.eqb_spec _ _)) in H. *)
-  (*     apply Bool.not_true_is_false in H. rewrite Nat.eqb_sym. *)
-  (*     rewrite H. reflexivity. *)
-  (* Qed. *)
-  Admitted.
-
-  Lemma write_success_sizeof c c' ptr val :
-    write c ptr val = Some c' ->
-    forall ptr', sizeof c ptr' = sizeof c' ptr'.
-  Proof.
-
-  Admitted.
-
-  Lemma write_success_length c c' ptr val :
-    write c ptr val = Some c' ->
-    length (m c) = length (m c').
-  Proof.
-    unfold write. unfold allocated.
-    intros.
-  Admitted.
-
-  Lemma write_success_others c c' ptr val :
-    write c ptr val = Some c' ->
-    l c = l c'.
-  Proof.
-    unfold write. intros.
-    destruct (allocated c ptr); try solve [inversion H].
-    destruct (nth_error (m c) (fst ptr)); try solve [inversion H].
-    destruct o; try solve [inversion H].
-    destruct l0. inversion H. auto.
-  Qed.
-
   Lemma allocated_ptr_block c b o :
     allocated c (b, o) = true ->
     b < length (m c).
@@ -475,6 +423,69 @@ Qed.
   Proof.
     unfold allocated. simpl. intros. rewrite H0 in H.
     rewrite <- (Bool.reflect_iff _ _ (Nat.ltb_spec0 _ _)) in H. auto.
+  Qed.
+
+  Lemma write_success_read c c' ptr val :
+    write c ptr val = Some c' ->
+    forall ptr', ptr <> ptr' -> read c ptr' = read c' ptr'.
+  Proof.
+    destruct ptr as [b o].
+    unfold write. unfold read. simpl. intros.
+    destruct (allocated c (b, o)) eqn:?; try solve [inversion H].
+    destruct (nth_error (m c) b) eqn:?; try solve [inversion H].
+    destruct o0 eqn:?; try solve [inversion H].
+    destruct l0. inversion H; subst; clear H. destruct ptr' as [b' o']. simpl.
+    pose proof (allocated_ptr_block _ _ _ Heqb0).
+    destruct (addr_neq_cases _ _ _ _ H0).
+    - unfold allocated. simpl. erewrite nth_error_replace_list_index_neq; eauto.
+    - destruct (Nat.eq_dec b b').
+      + subst. unfold allocated. simpl. rewrite nth_error_replace_list_index_eq; auto.
+        rewrite Heqo0. destruct (o' <? size) eqn:?; auto.
+        rewrite <- Nat.eqb_neq in H1. rewrite Nat.eqb_sym. rewrite H1. auto.
+      + unfold allocated. simpl. erewrite nth_error_replace_list_index_neq; eauto.
+  Qed.
+
+  Lemma write_success_sizeof c c' ptr val :
+    write c ptr val = Some c' ->
+    forall ptr', sizeof c ptr' = sizeof c' ptr'.
+  Proof.
+    destruct ptr as [b o].
+    unfold write. unfold read. simpl. intros.
+    destruct (allocated c (b, o)) eqn:?; try solve [inversion H].
+    destruct (nth_error (m c) b) eqn:?; try solve [inversion H].
+    destruct o0 eqn:?; try solve [inversion H].
+    destruct l0. inversion H; subst; clear H. destruct ptr' as [b' o']. simpl.
+    pose proof (allocated_ptr_block _ _ _ Heqb0).
+    unfold sizeof. simpl. destruct (o' =? 0) eqn:?; auto.
+    destruct (Nat.eq_dec b b').
+    - subst. simpl. rewrite nth_error_replace_list_index_eq; auto.
+      rewrite Heqo0. auto.
+    - erewrite nth_error_replace_list_index_neq; eauto.
+  Qed.
+
+  Lemma write_success_length c c' ptr val :
+    write c ptr val = Some c' ->
+    length (m c) = length (m c').
+  Proof.
+    destruct ptr as [b o].
+    unfold write. unfold read. simpl. intros.
+    destruct (allocated c (b, o)) eqn:?; try solve [inversion H].
+    destruct (nth_error (m c) b) eqn:?; try solve [inversion H].
+    destruct o0 eqn:?; try solve [inversion H].
+    destruct l0. inversion H; subst; clear H.
+    pose proof (allocated_ptr_block _ _ _ Heqb0).
+    simpl. apply replace_list_index_length; auto.
+  Qed.
+
+  Lemma write_success_others c c' ptr val :
+    write c ptr val = Some c' ->
+    l c = l c'.
+  Proof.
+    unfold write. intros.
+    destruct (allocated c ptr); try solve [inversion H].
+    destruct (nth_error (m c) (fst ptr)); try solve [inversion H].
+    destruct o; try solve [inversion H].
+    destruct l0. inversion H. auto.
   Qed.
 
   Lemma write_read : forall c c' ptr val,
