@@ -760,6 +760,33 @@ Proof.
       rewrite Nat.add_assoc in IHl. rewrite Nat.add_1_r in IHl. apply IHl.
 Qed.
 
+Lemma read_replace_n_neq ptr' n b len (si : Si) bytes :
+    b <> fst ptr' ->
+    b < length (m (lget si)) ->
+    read (lget si) ptr' = read (replace_n (lget si) b len bytes n) ptr'.
+Proof.
+  unfold replace_n, read. intros Hneq Hlt.
+  destruct (allocated (fst si) ptr') eqn:?.
+  2: { simpl. unfold allocated in *. simpl in *.
+       erewrite <- nth_error_replace_list_index_neq; eauto. }
+  pose proof (allocated_ptr_block _ _ _ Heqb0).
+  unfold allocated. simpl.
+  rewrite <- nth_error_replace_list_index_neq; eauto.
+Qed.
+
+Lemma sizeof_replace_n ptr b (si : Si) n size bytes :
+  nth_error (m (lget si)) b = Some (Some (LBlock size bytes)) ->
+  b < length (m (lget si)) ->
+  sizeof (lget si) ptr =
+  sizeof (lget (lput si (replace_n (lget si) b size bytes n))) ptr.
+Proof.
+  simpl. intros Hb Hlt. unfold replace_n, sizeof. destruct (snd ptr =? 0); auto.
+  destruct (Nat.eq_dec (fst ptr) b).
+  * rewrite e in *. simpl. rewrite nth_error_replace_list_index_eq; auto.
+    rewrite Hb. auto.
+  * simpl. erewrite <- nth_error_replace_list_index_neq; auto.
+Qed.
+
 Lemma combined_arr_guar {A} p parr b len n bytes (v : Vector.t A n) (si : Si) (ss : Ss)
       (Hb : b < length (m (lget si)))
       (Hn: (n <= (S len))%nat)
@@ -779,13 +806,12 @@ Proof.
   - destruct Hparr as (pptr & parr' & Hpptr & Hparr' & Hlte').
     etransitivity.
     {
-      eapply IHn. 2: { simpl in Hparr'. rewrite Nat.sub_succ_l. eauto. lia. }
+      eapply IHn; try lia. 2: { simpl in Hparr'. rewrite Nat.sub_succ_l. eauto. lia. }
       - etransitivity; eauto. etransitivity; eauto. apply lte_r_sep_conj_perm.
       - simpl. auto.
       - lia.
-      - simpl. admit.
-      - simpl. admit.
-      - simpl. admit.
+      - simpl. intros. pose proof @read_replace_n_neq; eauto. simpl in H4. apply H4; auto.
+      - simpl. intros. pose proof sizeof_replace_n. simpl in H3. apply H3; auto.
       - apply replace_list_index_length; auto.
       - simpl. auto.
     }
@@ -796,16 +822,36 @@ Proof.
       apply Hlte''. constructor 1. left.
       apply Hpwrite. simpl.
       split; [| split; [| split]]; auto.
-      - intros. unfold replace_n. admit. (* the only interesting case *)
-      - intros. unfold replace_n. admit.
-      - admit.
-Admitted.
+      - intros. destruct (Nat.eq_dec b (fst ptr')).
+        2: { pose proof read_replace_n_neq. simpl in H4. repeat rewrite <- H4; auto. }
+        subst. destruct ptr' as [b o]. simpl in *.
+        assert (Hneq: len - n <> o).
+        { apply addr_neq_cases in H3. destruct H3; auto. }
+        unfold replace_n, read, allocated. simpl.
+        repeat rewrite nth_error_replace_list_index_eq; auto.
+        destruct (o <? S len) eqn:?; auto.
+        rewrite Bool.andb_true_l. simpl.
+        destruct (S len - n <=? o) eqn:?.
+        + pose proof Heqb1.
+          assert (Himpl: (S len - n <= o -> len - n <= o)%nat) by lia.
+          rewrite <- (Bool.reflect_iff _ _ (Nat.leb_spec0 _ _)) in H4. apply Himpl in H4.
+          rewrite (Bool.reflect_iff _ _ (Nat.leb_spec0 _ _)) in H4.
+          rewrite H4. simpl in Heqb1. rewrite Heqb1. auto.
+        + pose proof Heqb1.
+          simpl in Heqb1. rewrite Heqb1.
+          apply Nat.leb_gt in H4.
+          assert (len - n > o) by lia.
+          apply leb_correct_conv in H5. rewrite H5. auto.
+      - intros. pose proof sizeof_replace_n. simpl in H3. rewrite <- H3; auto.
+      - erewrite <- replace_list_index_length; eauto.
+    }
+Qed.
 
 Fixpoint rely_post_malloc n b size x y : Prop :=
   match n with
   | 0 => rely (block_perm size (b, 0) ** malloc_perm (b + 1)) x y
   | S n => rely (@write_perm Si Ss _ (b, size - S n) (VNum 0)) x y /\
-           rely_post_malloc n b size x y
+          rely_post_malloc n b size x y
   end.
 Lemma PO_rely_post_malloc n b size :
   PreOrder (rely_post_malloc n b size).
@@ -863,7 +909,7 @@ Qed.
 
 (* n is the number of unfoldings to do for the rely/guar. size is the size of the block.
    when we use this n = size, but we need them separate to do induction on n *)
-Program Definition post_malloc_perm' n b size : @perm (Si * Ss) :=
+Program Definition post_malloc_perm n b size : @perm (Si * Ss) :=
   {|
   rely := rely_post_malloc (S n) b (S size);
   rely_PO := PO_rely_post_malloc (S n) b (S size);
@@ -901,57 +947,18 @@ Proof.
   - split; auto. simpl in *. apply H. auto.
 Qed.
 
-Lemma sep_step_malloc' n b size : sep_step (malloc_perm b)
-                                           (post_malloc_perm' n b size).
+Lemma sep_step_malloc n b size : sep_step (malloc_perm b)
+                                          (post_malloc_perm n b size).
 Proof.
   apply sep_step_rg.
   - apply guar_malloc_post_malloc.
   - apply rely_malloc_post_malloc.
 Qed.
 
-(* Fixpoint arr_perm_rev {A} rw o l T *)
-(*   : VPermType (Vector.t A l) := *)
-(*   match l with *)
-(*   | 0 => trueP *)
-(*   | S l' => *)
-(*     {| ptApp := fun xi xss => *)
-(*                   xi :: ptr (rw, o, T) ▷ Vector.hd xss * *)
-(*                   xi :: arr_perm rw (S o) l' T ▷ Vector.tl xss *)
-(*     |} *)
-(*   end. *)
-
-Lemma test m n b size x
-  (Hsize : (m <= size)%nat)
-  (Hn : m >= n) :
-  pre (post_malloc_perm' (S n) b size) x ->
-  pre (write_perm (b, size - m) (VNum 0) ** post_malloc_perm' n b size) x.
-Proof.
-  induction n; intros.
-  (* admit. *)
-
-  - simpl in *; auto. destruct x. destruct H as (Hlen & Hsizeof & Hread).
-    split; [| split; [split; [| split] |]]; auto; try solve [intros; apply Hread; lia].
-    (* apply Hread. *)
-    (* constructor; intros. *)
-    (* { destruct x, y. induction H; try solve [etransitivity; eauto]. *)
-    (*   destruct x, y. destruct H; auto. *)
-    (*   - simpl in *. apply H. intro. inversion H0. lia. *)
-    (*   - induction H; try solve [etransitivity; eauto]. *)
-    (*     destruct H. eapply write_block; eauto. eapply malloc_write; eauto. *)
-    (*     unfold fst. rewrite Nat.add_1_r in H. apply H. *)
-    (* } *)
-    (* { destruct x, y. simpl in *. *)
-    (*   split; [| split; [| split]]; try apply H. *)
-    (*   - intro. inversion H0. lia. *)
-    (*   - intros. split; apply H. *)
-    (*     intro. destruct ptr. inversion H1. subst. simpl in *. lia. *)
-    (* } *)
-Admitted.
-
-Lemma test' m n size b
+Lemma write_post_malloc_perm m n size b
       (Hsize : (m <= size)%nat)
       (Hm : m > n):
-  write_perm (b, size - m) (VNum 0) ⊥ post_malloc_perm' n b size.
+  write_perm (b, size - m) (VNum 0) ⊥ post_malloc_perm n b size.
 Proof.
   constructor; auto; intros.
   - revert H. revert x y. induction n; intros.
@@ -974,15 +981,13 @@ Proof.
 Qed.
 
 Lemma post_malloc_perm_extend b size n (Hn : (S n <= size)%nat) :
-  write_perm (b, size - S n) (VNum 0) ** post_malloc_perm' n b size <=
-  post_malloc_perm' (S n) b size.
+  write_perm (b, size - S n) (VNum 0) ** post_malloc_perm n b size <=
+  post_malloc_perm (S n) b size.
 Proof.
-  constructor; auto. (* intros; apply test; auto. *)
-  (* revert Hn. revert size. *)
-  (* induction n; intros ? ? [] ?. *)
+  constructor; auto.
   simpl in *; auto. intros [] H. destruct H as (Hlen & Hsizeof & Hread).
   split; [| split; [split; [| split] |]]; auto; try solve [intros; apply Hread; lia].
-  apply test'; auto.
+  apply write_post_malloc_perm; auto.
 Qed.
     (* constructor; intros. *)
     (* { destruct x, y. induction H; try solve [etransitivity; eauto]. *)
@@ -1037,7 +1042,7 @@ Qed.
 
 Lemma post_malloc_perm_ok {A} n b size (xs : Vector.t A (S n))
   (Hn : (n <= size)%nat) :
-  post_malloc_perm' n b size (* the perm applies S to n and size inside *) ∈
+  post_malloc_perm n b size (* the perm applies S to n and size inside *) ∈
   VPtr (b, size - n) :: arr_perm Si Ss W 0 (S n) (trueP Si Ss) ▷ xs *
   singleton_Perms (block_perm (S size) (b, 0)) *
   malloc_Perms.
@@ -1088,7 +1093,7 @@ Proof.
         rewrite Nat.sub_0_r in *. rewrite Nat.add_0_r in *. auto. }
       { intros [] [] H. rewrite sep_conj_perm_assoc in H.
         rewrite Nat.sub_0_r in *. rewrite Nat.add_0_r in *.
-        unfold post_malloc_perm'. unfold guar. unfold guar_post_malloc.
+        unfold post_malloc_perm. unfold guar. unfold guar_post_malloc.
         unfold "**". unfold guar. unfold guar in H. unfold "**" in H. unfold guar in H.
         replace (S size - 1) with size. 2: lia. apply H. (* TODO simplify this *)
       }
@@ -1142,7 +1147,7 @@ Proof.
   (* return *)
   { eapply sep_step_lte. etransitivity. 2: apply Hlte.
     etransitivity. 2: apply lte_r_sep_conj_perm. apply Hpmalloc.
-    apply sep_step_malloc' with (size := size).
+    apply sep_step_malloc with (size := size).
   }
   { apply Hlte in Hpre. destruct Hpre as (_ & Hpre & Hlte').
     apply Hpmalloc in Hpre. simpl in Hpre.
@@ -1187,37 +1192,17 @@ Proof.
   (* write step *)
   rewritebisim @bind_trigger. unfold id. econstructor; auto.
   - apply Hlte. constructor 1. left.
+    assert (Hb: fst ptr < length (m (fst si))).
+    { apply nth_error_Some. intro. rewrite H in Heqo. inversion Heqo. }
     simpl. erewrite replace_n_same.
     eapply combined_arr_guar; eauto; try reflexivity.
-    + apply nth_error_Some. intro. simpl in H. rewrite H in Heqo. inversion Heqo. (* TODO make into lemma *)
     + destruct ptr. simpl in Hoffset. subst. rewrite Nat.sub_diag. apply Hparr.
-    + simpl. unfold replace_n. intros.
-    + simpl. admit.
-    + simpl. admit.
-    (* eapply test'; eauto. *)
-    (* + intros. admit. (* ok *) *)
-    (* + intros. simpl. admit. (* ok *) *)
-    (* + admit. (* ok *) *)
-    (* + admit. (* ok *) *)
-    (* + reflexivity *)
-    (* (* { simpl in *. (* should be ok *) admit. } *) *)
-    (* (* { apply Hlte. constructor. left. *) *)
-
-
-    (* (* apply Hlte'. constructor 1. left. *) *)
-    (* (* apply Hpwrite. simpl. *) *)
-    (* (* split; [| split; [| split]]; rewrite lGetPut; simpl; auto. *) *)
-    (* + intros. unfold read. unfold allocated. simpl. *)
-    (*   destruct ptr as [b o]; destruct ptr' as [b' o']. *)
-    (*   apply addr_neq_cases in H. simpl. *)
-    (*   admit. (* break up the <> into cases, then use nth_error_replace_list_index_eq/neq *) *)
-    (* + admit. *)
-    (* + assert (fst ptr < length (m (lget si))). *)
-    (*   { apply nth_error_Some. intro. rewrite H in Heqo. inversion Heqo. } *)
-    (*   apply replace_list_index_length; auto. *)
+    + intros. erewrite read_replace_n_neq; eauto. simpl. reflexivity.
+    + intros. erewrite sizeof_replace_n; eauto.
+    + apply replace_list_index_length; auto.
   - apply sep_step_lte'. apply bottom_perm_is_bottom.
   - constructor; simpl; auto.
-Admitted.
+Qed.
 
 Definition ex3i' : Value -> itree (sceE Si) Value :=
   iter (C := Kleisli _)
