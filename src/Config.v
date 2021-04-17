@@ -824,11 +824,18 @@ Qed.
     - apply H0; auto.
   Qed.
 
-  Lemma write_block : forall ptr size v,
-      block_perm size ptr ⊥ write_perm ptr v.
+  Lemma write_block : forall b o o' size v,
+      block_perm size (b, o) ⊥ write_perm (b, o') v.
   Proof.
     constructor; intros [] [] ?; simpl in *; subst; auto.
     apply H.
+  Qed.
+
+  Lemma write_write_sep ptr ptr' v v' :
+      ptr <> ptr' ->
+      write_perm ptr v ⊥ write_perm ptr' v'.
+  Proof.
+    intros Hdiff. constructor; intros; destruct x, y; simpl; apply H; auto.
   Qed.
 
   Program Definition post_malloc_perm n size : @perm (Si * Ss) :=
