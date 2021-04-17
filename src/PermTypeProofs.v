@@ -1095,25 +1095,29 @@ Proof.
   - simpl.
     assert (Hn': (n <= size)%nat) by lia.
     specialize (IHn (Vector.tl xs) Hn').
+    rewrite Nat.add_0_r in *.
     destruct IHn as (? & ? & ? & ? & ?).
     destruct H as (? & ? & ? & ? & ?).
     destruct H as (? & ? & ? & ? & ?).
-    do 2 eexists. split; [| split].
-    3: { etransitivity. 2: apply post_malloc_perm_extend; auto. }
+    exists (write_perm (b, size - S n) (VNum 0) ** x).
+    eexists. split; [| split]; eauto.
     {
-      do 2 eexists. split; [| split]. 2: apply H2. 2: apply H3.
+      exists (write_perm (b, size - S n) (VNum 0) ** x1). eexists. split; [| split]. 2: apply H2.
+      2: { rewrite sep_conj_perm_assoc. apply sep_conj_perm_monotone; auto. reflexivity. }
       do 2 eexists. split; [| split].
-      2: { do 2 eexists. split; [| split].
-           assert (size - S n + 1 = size - n) by lia.
-           rewrite H6. rewrite Nat.add_0_r in *. apply H.
-           rewrite arr_offset in *. simpl in *.
-           assert (size - S n + 2 = size - n + 1) by lia. rewrite H6.
-           apply H4.
-           apply H5.
-      }
-      admit. admit.
+      - eexists. split. exists (VNum 0). reflexivity.
+        eexists. exists bottom_perm. split; [| split]; simpl; reflexivity.
+      - assert (Heq : size - S n + 1 = size - n) by lia. rewrite Heq. clear Heq.
+        exists x3, x4. split; [| split]; eauto.
+        rewrite arr_offset in *. simpl in *.
+        assert (Heq : size - S n + 2 = size - n + 1) by lia. rewrite Heq. clear Heq. auto.
+      - rewrite sep_conj_perm_bottom. reflexivity.
     }
-Admitted.
+    {
+      etransitivity. 2: apply post_malloc_perm_extend; auto.
+      rewrite sep_conj_perm_assoc. apply sep_conj_perm_monotone; auto. reflexivity.
+    }
+Qed.
 
 Lemma Malloc xi xs size :
   xi :: eqp _ _ (S size) ▷ xs * malloc_Perms ⊢
@@ -1149,7 +1153,7 @@ Proof.
         rewrite nth_error_app_last; auto.
       + intros. unfold read, allocated. simpl. rewrite nth_error_app_last; auto.
         rewrite (Bool.reflect_iff _ _ (Nat.ltb_spec0 _ _)) in H. rewrite H. auto.
-    - simpl. unfold "∅", starPT, ptApp.
+    - unfold "∅", starPT, ptApp.
       setoid_rewrite Hpre.
       replace 0 with (size - size) at 2. 2: lia.
       apply post_malloc_perm_ok; auto.
@@ -1187,7 +1191,7 @@ Proof.
     eapply combined_arr_guar; eauto; try reflexivity.
     + apply nth_error_Some. intro. simpl in H. rewrite H in Heqo. inversion Heqo. (* TODO make into lemma *)
     + destruct ptr. simpl in Hoffset. subst. rewrite Nat.sub_diag. apply Hparr.
-    + simpl. unfold replace_n. admit.
+    + simpl. unfold replace_n. intros.
     + simpl. admit.
     + simpl. admit.
     (* eapply test'; eauto. *)
