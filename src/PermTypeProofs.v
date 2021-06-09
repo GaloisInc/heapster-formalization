@@ -12,7 +12,10 @@ Require Import ExtLib.Structures.Monads.
 Require Import ExtLib.Data.Monads.OptionMonad.
 
 From Heapster Require Export
+     Utils
      Permissions
+     Memory
+     MemoryPerms
      SepStep
      Typing
      PermType.
@@ -33,11 +36,12 @@ From Paco Require Import
 
 Import MonadNotation.
 Import ITreeNotations.
+Local Open Scope itree_scope.
 
 Context (Si' Ss:Type).
-Definition Si := prod config Si'.
+Definition Si := prod memory Si'.
 
-Program Definition lens_config' : Lens Si config :=
+Program Definition lens_memory' : Lens Si memory :=
   {|
   lget := fst;
   lput p c := (c, snd p);
@@ -45,7 +49,7 @@ Program Definition lens_config' : Lens Si config :=
 Next Obligation.
   destruct a; auto.
 Qed.
-Instance lens_config : Lens Si config := lens_config'.
+Instance lens_memory : Lens Si memory := lens_memory'.
 
 Lemma ProdI (A1 A2 B1 B2 : Type) xi yi xs ys (T1 : PermType Si Ss A1 B1) (T2 : PermType Si Ss A2 B2) :
   xi :: T1 ▷ xs * yi :: T2 ▷ ys ⊨ (xi, yi) :: T1 *T* T2 ▷ (xs, ys).
@@ -394,13 +398,11 @@ Proof.
   assert (Hguar : guar p' (c1, c2) ((lput c1 c'), c2)).
   {
     apply Hlte. constructor 1. left. apply Hwritelte. simpl.
-    split; [| split; [| split]].
-    + eapply write_success_read; eauto.
+    split; [| split].
+    + eapply write_success_read_neq; eauto.
     + eapply write_success_sizeof; eauto.
     + eapply write_success_length; eauto.
-    + eapply write_success_others; eauto.
   }
-  Unshelve. 2, 3, 4: exact Ss.
   econstructor; eauto.
   3: {
     rewrite Hwrite. constructor; eauto.
@@ -410,7 +412,7 @@ Proof.
          - rewrite sep_conj_perm_bottom. rewrite sep_conj_perm_commut.
            rewrite sep_conj_perm_bottom. reflexivity.
     }
-    rewrite Nat.add_0_r. symmetry. eapply write_read; rewrite lGetPut; eauto.
+    rewrite Nat.add_0_r. symmetry. eapply write_success_read_eq; rewrite lGetPut; eauto.
   }
   - rewrite Hwrite. auto.
   - rewrite Nat.add_0_r. eapply sep_step_lte; eauto.
@@ -709,19 +711,16 @@ Proof.
     Unshelve. all: apply reach_perm_proper.
 Qed.
 
-Definition replace_n c b size bytes n : config :=
-  {|
-  l := l c;
-  m := replace_list_index
-         (m c) b (Some (LBlock size (fun o => if andb (o <? size) (size - n <=? o)
-                                            then None else bytes o)));
-  |}.
+Definition replace_n m b size bytes n : memory :=
+  replace_list_index
+    m b (Some (LBlock size (fun o => if andb (o <? size) (size - n <=? o)
+                                  then None else bytes o))).
 
-Lemma replace_n_0 c b size bytes :
-  nth_error (m c) b = Some (Some (LBlock size bytes)) ->
-  replace_n c b size bytes 0 = c.
+Lemma replace_n_0 m b size bytes :
+  nth_error m b = Some (Some (LBlock size bytes)) ->
+  replace_n m b size bytes 0 = m.
 Proof.
-  unfold replace_n. destruct c; simpl. intros. f_equal.
+  unfold replace_n. intros. f_equal.
   assert (b < length m).
   { apply nth_error_Some. intro. rewrite H in H0. inversion H0. }
   revert H H0. revert b.
@@ -732,12 +731,9 @@ Proof.
   rewrite Nat.ltb_antisym. rewrite Bool.andb_negb_l. reflexivity.
 Qed.
 
-Lemma replace_n_same c b size bytes :
-  {|
-    l := l c;
-    m := replace_list_index (m c) b
-                            (Some (LBlock (S size) (fun o : nat => if o <? S size then None else bytes o))) |} =
-  replace_n c b (S size) bytes (S size).
+Lemma replace_n_same m b size bytes :
+  replace_list_index m b (Some (LBlock (S size) (fun o : nat => if o <? S size then None else bytes o))) =
+  replace_n m b (S size) bytes (S size).
 Proof.
   unfold replace_n. do 4 f_equal. apply functional_extensionality. intros.
   rewrite Nat.sub_diag. simpl. rewrite Bool.andb_true_r. reflexivity.
@@ -762,7 +758,7 @@ Qed.
 
 Lemma read_replace_n_neq ptr' n b len (si : Si) bytes :
     b <> fst ptr' ->
-    b < length (m (lget si)) ->
+    b < length (lget si) ->
     read (lget si) ptr' = read (replace_n (lget si) b len bytes n) ptr'.
 Proof.
   unfold replace_n, read. intros Hneq Hlt.
@@ -775,8 +771,8 @@ Proof.
 Qed.
 
 Lemma sizeof_replace_n ptr b (si : Si) n size bytes :
-  nth_error (m (lget si)) b = Some (Some (LBlock size bytes)) ->
-  b < length (m (lget si)) ->
+  nth_error (lget si) b = Some (Some (LBlock size bytes)) ->
+  b < length (lget si) ->
   sizeof (lget si) ptr =
   sizeof (lget (lput si (replace_n (lget si) b size bytes n))) ptr.
 Proof.
@@ -788,16 +784,15 @@ Proof.
 Qed.
 
 Lemma combined_arr_guar {A} p parr b len n bytes (v : Vector.t A n) (si : Si) (ss : Ss)
-      (Hb : b < length (m (lget si)))
+      (Hb : b < length (lget si))
       (Hn: (n <= (S len))%nat)
       (Hlte : parr <= p)
-      (Hblock: nth_error (m (lget si)) b = Some (Some (LBlock (S len) bytes)))
+      (Hblock: nth_error (lget si) b = Some (Some (LBlock (S len) bytes)))
       (Hparr: parr ∈ VPtr (b, 0) :: arr (W, (S len) - n, n, trueP Si Ss) ▷ v) :
   let si' := lput si (replace_n (lget si) b (S len) bytes n) in
   (forall ptr', b <> fst ptr' -> read (lget si) ptr' = read (lget si') ptr') ->
   (forall ptr', sizeof (lget si) ptr' = sizeof (lget si') ptr') ->
-  length (m (lget si)) = length (m (lget si')) ->
-  l (lget si) = l (lget si') ->
+  length (lget si) = length (lget si') ->
   guar p (si, ss) (si', ss).
 Proof.
   revert Hlte Hparr Hblock Hb Hn. revert b parr v. revert n.
@@ -810,10 +805,9 @@ Proof.
       - etransitivity; eauto. etransitivity; eauto. apply lte_r_sep_conj_perm.
       - simpl. auto.
       - lia.
-      - simpl. intros. pose proof @read_replace_n_neq; eauto. simpl in H4. apply H4; auto.
-      - simpl. intros. pose proof sizeof_replace_n. simpl in H3. apply H3; auto.
+      - simpl. intros. pose proof @read_replace_n_neq; eauto. simpl in H3. apply H3; auto.
+      - simpl. intros. pose proof sizeof_replace_n. simpl in H2. apply H2; auto.
       - apply replace_list_index_length; auto.
-      - simpl. auto.
     }
     {
       subst si'. simpl. apply Hlte. apply Hlte'. constructor 1. left.
@@ -821,12 +815,12 @@ Proof.
       destruct Hpptr as (pwrite & p' & Hpwrite & _ & Hlte'').
       apply Hlte''. constructor 1. left.
       apply Hpwrite. simpl.
-      split; [| split; [| split]]; auto.
+      split; [| split]; auto.
       - intros. destruct (Nat.eq_dec b (fst ptr')).
-        2: { pose proof read_replace_n_neq. simpl in H4. repeat rewrite <- H4; auto. }
+        2: { pose proof read_replace_n_neq. simpl in H3. repeat rewrite <- H3; auto. }
         subst. destruct ptr' as [b o]. simpl in *.
         assert (Hneq: len - n <> o).
-        { apply addr_neq_cases in H3. destruct H3; auto. }
+        { apply addr_neq_cases in H2. destruct H2; auto. }
         unfold replace_n, read, allocated. simpl.
         repeat rewrite nth_error_replace_list_index_eq; auto.
         destruct (o <? S len) eqn:?; auto.
@@ -834,16 +828,16 @@ Proof.
         destruct (S len - n <=? o) eqn:?.
         + pose proof Heqb1.
           assert (Himpl: (S len - n <= o -> len - n <= o)%nat) by lia.
-          rewrite <- (Bool.reflect_iff _ _ (Nat.leb_spec0 _ _)) in H4. apply Himpl in H4.
-          rewrite (Bool.reflect_iff _ _ (Nat.leb_spec0 _ _)) in H4.
-          rewrite H4. simpl in Heqb1. rewrite Heqb1. auto.
+          rewrite <- (Bool.reflect_iff _ _ (Nat.leb_spec0 _ _)) in H3. apply Himpl in H3.
+          rewrite (Bool.reflect_iff _ _ (Nat.leb_spec0 _ _)) in H3.
+          rewrite H3. simpl in Heqb1. rewrite Heqb1. auto.
         + pose proof Heqb1.
           simpl in Heqb1. rewrite Heqb1.
-          apply Nat.leb_gt in H4.
+          apply Nat.leb_gt in H3.
           assert (len - n > o) by lia.
-          apply leb_correct_conv in H5. rewrite H5. auto.
-      - intros. pose proof sizeof_replace_n. simpl in H3. rewrite <- H3; auto.
-      - erewrite <- replace_list_index_length; eauto.
+          apply leb_correct_conv in H4. rewrite H4. auto.
+      - intros. pose proof sizeof_replace_n. simpl in H2. rewrite <- H2; auto.
+      - unfold replace_n. erewrite <- replace_list_index_length; eauto.
     }
 Qed.
 
@@ -883,7 +877,7 @@ Qed.
 
 Definition pre_post_malloc n b size : Si * Ss -> Prop :=
   fun '(x, _) =>
-    b + 1 = length (m (lget x)) /\
+    b + 1 = length (lget x) /\
     Some size = sizeof (lget x) (b, 0) /\
     forall o, o < size -> (size - n <= o)%nat -> Some (VNum 0) = read (lget x) (b, o).
 Lemma pre_respects_post_malloc n b size :
@@ -925,13 +919,11 @@ Proof.
   revert x y. induction n; intros.
   - induction H; try solve [etransitivity; eauto]. destruct H.
     + destruct x, y. simpl in *. subst; auto.
-    + destruct x, y. destruct H as (? & ?). split; auto. intros.
-      split; apply H; lia.
+    + destruct x, y. split; apply H; lia.
   - induction H; auto.
     + destruct H.
-      * destruct x, y. destruct H as (? & ? & ? & ?). split; auto. intros.
-        split; auto.
-        apply H. destruct ptr. intro. inversion H4. simpl in *. lia.
+      * destruct x, y. destruct H as (? & ? & ?). split; auto.
+        apply H. destruct ptr. intro. inversion H3. simpl in *. lia.
       * apply IHn; auto.
     + etransitivity; eauto.
 Qed.
@@ -1139,7 +1131,7 @@ Proof.
   rewritebisim @bind_trigger. unfold id. econstructor; eauto.
   { apply Hlte in Hpre. destruct Hpre as (_ & Hpre & _).
     apply Hpmalloc in Hpre. apply Hlte. constructor 1. right. apply Hpmalloc.
-    simpl in *. split; auto.
+    simpl in *.
     intros ptr Hb. split.
     - unfold read, allocated. simpl. subst. rewrite nth_error_app_early; auto.
     - unfold sizeof. simpl. subst. rewrite nth_error_app_early; auto.
@@ -1186,13 +1178,13 @@ Proof.
   destruct Hpre' as (Hprewrite & Hpreblock & Hsep).
   apply Hpblock in Hpreblock. simpl in Hpreblock.
   unfold sizeof in Hpreblock. rewrite Hoffset in Hpreblock. simpl in Hpreblock.
-  destruct (nth_error (m (fst si)) (fst ptr)) eqn:?; try solve [inversion Hpreblock].
+  destruct (nth_error (fst si) (fst ptr)) eqn:?; try solve [inversion Hpreblock].
   destruct o; try solve [inversion Hpreblock].
   destruct l. inversion Hpreblock; clear Hpreblock; subst.
   (* write step *)
   rewritebisim @bind_trigger. unfold id. econstructor; auto.
   - apply Hlte. constructor 1. left.
-    assert (Hb: fst ptr < length (m (fst si))).
+    assert (Hb: fst ptr < length (fst si)).
     { apply nth_error_Some. intro. rewrite H in Heqo. inversion Heqo. }
     simpl. erewrite replace_n_same.
     eapply combined_arr_guar; eauto; try reflexivity.

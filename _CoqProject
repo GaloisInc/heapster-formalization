@@ -1,12 +1,14 @@
 -R src Heapster
--R ../../InteractionTrees/theories ITree
+
+src/Utils.v
 
 src/Permissions.v
 src/Memory.v
+src/Lifetime.v
 src/SepStep.v
 src/Typing.v
 
-src/Config.v
+src/MemoryPerms.v
 src/PermType.v
 src/PermTypeProofs.v
 src/Temporal.v

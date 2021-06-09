@@ -30,6 +30,7 @@ From Paco Require Import
      paco.
 
 Import ITreeNotations.
+Local Open Scope itree_scope.
 
 Ltac rewritebisim lem := pose proof lem as bisim;
                          eapply bisimulation_is_eq in bisim;
@@ -42,8 +43,8 @@ Ltac rewritebisim_in lem H := pose proof lem as bisim;
                               clear bisim.
 
 Lemma throw_vis {E R} `{exceptE unit -< E} (k : void -> itree E R) :
-  (* vis (Throw tt) k = throw tt. *)
-  Vis (subevent void (subevent void (Throw tt))) k = throw tt.
+  vis (Throw tt) k = throw tt.
+  (* Vis (subevent void (subevent void (Throw tt))) k = throw tt. *)
 Proof.
   apply bisimulation_is_eq. pstep. unfold throw.
   constructor. intros. inversion v.

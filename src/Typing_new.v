@@ -77,8 +77,8 @@ Section bisim.
     Proper (observing eq ==> eq ==> iff) (paco2 (@no_errors_gen S R) r).
   Proof.
     repeat intro; destruct H, H0.
-    split; intro; punfold H0; pfold; unfold no_errors_gen in *;
-      [ rewrite <- H | rewrite H ]; eauto.
+    split; intro; punfold H; pfold; unfold no_errors_gen in *;
+      [ rewrite <- observing_observe | rewrite observing_observe ]; eauto.
   Qed.
 
   Instance Proper_observing_no_errors {S R} :
@@ -283,7 +283,7 @@ Section bisim.
            (paco6 (@sbuter_gen S1 S2 R1 R2) r p Q).
   Proof.
     repeat intro; destruct H, H0, H1, H2.
-    split; intro; pfold; red; punfold H1; red in H1; destruct H, H0; eauto.
+    split; intro; pfold; red; punfold H; red in H; destruct observing_observe, observing_observe0; auto.
   Qed.
 
   Instance Proper_observing_sbuter {S1 S2 R1 R2 p Q} :

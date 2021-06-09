@@ -1,6 +1,5 @@
 From Heapster Require Import
      Permissions
-     Config
      Typing_new.
 
 From Coq Require Import
@@ -26,6 +25,7 @@ From ITree Require Import
      Events.State
      Events.StateFacts
      Eq.Eq
+     Eq.Shallow
      Interp.Interp
      Interp.InterpFacts.
 
@@ -415,13 +415,13 @@ Proof.
   intro eq_sat_Ps; unfold AReturns; split; intros.
   - revert p t2 s2 H H0 H1 H2; dependent induction H3; intros.
     + destruct H as [? [[]]].
-      punfold H2; red in H2; destruct H.
+      punfold H2; red in H2; destruct observing_observe.
       dependent induction H2; try solve [ inv H7 ].
       * eapply AF_here; exists r2; split; eauto.
         eapply (eq_sat_Ps p'); eauto.
-      * punfold H3; red in H3; destruct x; inv H3.
+      * punfold H2; red in H2; destruct x; inv H2.
       * eapply AF_step; eauto; intros.
-        eapply H5; eauto.
+        eapply H4; eauto.
         -- respects; eapply sep_r; eauto.
         -- eapply step_no_errors; eauto.
     + punfold H5; red in H5; dependent induction H5.
@@ -442,12 +442,12 @@ Proof.
         -- eapply step_no_errors; eauto.
   - revert p t1 s1 H H0 H1 H2; dependent induction H3; intros.
     + destruct H as [? [[]]].
-      punfold H2; red in H2; destruct H.
+      punfold H2; red in H2; destruct observing_observe.
       dependent induction H2; try solve [ inv H2 | inv H7 ].
       * eapply AF_here; exists r1; split; eauto.
         eapply (eq_sat_Ps p'); eauto.
       * eapply AF_step; eauto; intros.
-        eapply H5; eauto.
+        eapply H4; eauto.
         respects; eapply sep_r; eauto.
     + punfold H5; red in H5; dependent induction H5.
       * red in H0; destruct x; inv H0.

@@ -1,6 +1,6 @@
 From Heapster Require Import
      Permissions
-     Config
+     SepStep
      Typing.
 
 From Coq Require Import

@@ -9,11 +9,12 @@ From Coq Require Import
 Require Import ExtLib.Structures.Monads.
 Require Import ExtLib.Data.Monads.OptionMonad.
 
-From Heapster Require Export
+From Heapster Require Import
+     Utils
      Permissions
      Memory
+     MemoryPerms
      SepStep
-     Config
      Typing.
 
 From ITree Require Import
@@ -35,7 +36,7 @@ Import MonadNotation.
 
 Section permType.
   Context (Si Ss:Type).
-  Context `{Lens Si config}.
+  Context `{Lens Si memory}.
 
   Record PermType (A B:Type) : Type :=
     { ptApp : A -> B -> @Perms(Si*Ss) }.

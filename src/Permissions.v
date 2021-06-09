@@ -5,12 +5,6 @@ From Coq Require Import
      Relations.Relation_Operators
      Relations.Operators_Properties.
 
-(* Module Type Config. *)
-(*   Parameter t : Type. *)
-(* End Config. *)
-
-(* Module Permissions (C : Config). *)
-(* Definition config := C.t. *)
 Section Permissions.
   Context {config : Type}.
 
@@ -443,7 +437,6 @@ Qed. *)
   Next Obligation.
     constructor; repeat intro.
     - split; reflexivity.
-    (* - destruct H; split; symmetry; auto. *)
     - destruct H, H0.
       split; etransitivity; eauto.
   Qed.
@@ -935,13 +928,13 @@ Notation "P -≡- Q" := (P -⊑- Q /\ Q -⊑- P) (at level 60).
 
 Ltac respects := eapply pre_respects; eauto.
 
-Hint Unfold rely : core.
-Hint Unfold pre : core.
-Hint Unfold guar : core.
-Hint Resolve pre_respects : core.
-Hint Resolve pre_inc : core.
-Hint Resolve rely_inc : core.
-Hint Resolve guar_inc : core.
-Hint Unfold eq_perm : core.
-Hint Resolve eq_perm_lte_1 : core.
-Hint Resolve eq_perm_lte_2 : core.
+#[ export ] Hint Unfold rely : core.
+#[ export ] Hint Unfold pre : core.
+#[ export ] Hint Unfold guar : core.
+#[ export ] Hint Resolve pre_respects : core.
+#[ export ] Hint Resolve pre_inc : core.
+#[ export ] Hint Resolve rely_inc : core.
+#[ export ] Hint Resolve guar_inc : core.
+#[ export ] Hint Unfold eq_perm : core.
+#[ export ] Hint Resolve eq_perm_lte_1 : core.
+#[ export ] Hint Resolve eq_perm_lte_2 : core.
