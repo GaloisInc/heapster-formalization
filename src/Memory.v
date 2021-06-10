@@ -227,3 +227,57 @@ Proof.
   do 3 f_equal. apply functional_extensionality. intros.
   destruct (x =? o); auto.
 Qed.
+
+Definition replace_n m b size bytes n : memory :=
+  replace_list_index
+    m b (Some (LBlock size (fun o => if andb (o <? size) (size - n <=? o)
+                                  then None else bytes o))).
+
+Lemma replace_n_0 m b size bytes :
+  nth_error m b = Some (Some (LBlock size bytes)) ->
+  replace_n m b size bytes 0 = m.
+Proof.
+  unfold replace_n. intros. f_equal.
+  assert (b < length m).
+  { apply nth_error_Some. intro. rewrite H in H0. inversion H0. }
+  revert H H0. revert b.
+  induction m; intros; simpl in *; try lia; auto.
+  destruct b; f_equal; [| apply IHm; auto; lia].
+  inversion H. rewrite Nat.sub_0_r.
+  do 2 f_equal. apply functional_extensionality. intros.
+  rewrite Nat.ltb_antisym. rewrite Bool.andb_negb_l. reflexivity.
+Qed.
+
+Lemma replace_n_same m b size bytes :
+  replace_list_index m b (Some (LBlock (S size) (fun o : nat => if o <? S size then None else bytes o))) =
+  replace_n m b (S size) bytes (S size).
+Proof.
+  unfold replace_n. do 4 f_equal. apply functional_extensionality. intros.
+  rewrite Nat.sub_diag. simpl. rewrite Bool.andb_true_r. reflexivity.
+Qed.
+
+Lemma read_replace_n_neq ptr' n b len m bytes :
+    b <> fst ptr' ->
+    b < length m ->
+    read m ptr' = read (replace_n m b len bytes n) ptr'.
+Proof.
+  unfold replace_n, read. intros Hneq Hlt.
+  destruct (allocated m ptr') eqn:?.
+  2: { unfold allocated in *.
+       erewrite <- nth_error_replace_list_index_neq; eauto. rewrite Heqb0; auto. }
+  pose proof (allocated_ptr_block _ _ _ Heqb0).
+  unfold allocated in *. simpl.
+  rewrite <- nth_error_replace_list_index_neq; eauto. rewrite Heqb0; auto.
+Qed.
+
+Lemma sizeof_replace_n ptr b m n size bytes :
+  nth_error m b = Some (Some (LBlock size bytes)) ->
+  b < length m ->
+  sizeof m ptr = sizeof (replace_n m b size bytes n) ptr.
+Proof.
+  simpl. intros Hb Hlt. unfold replace_n, sizeof. destruct (snd ptr =? 0); auto.
+  destruct (Nat.eq_dec (fst ptr) b).
+  * rewrite e in *. simpl. rewrite nth_error_replace_list_index_eq; auto.
+    rewrite Hb. auto.
+  * simpl. erewrite <- nth_error_replace_list_index_neq; auto.
+Qed.

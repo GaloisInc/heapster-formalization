@@ -711,34 +711,6 @@ Proof.
     Unshelve. all: apply reach_perm_proper.
 Qed.
 
-Definition replace_n m b size bytes n : memory :=
-  replace_list_index
-    m b (Some (LBlock size (fun o => if andb (o <? size) (size - n <=? o)
-                                  then None else bytes o))).
-
-Lemma replace_n_0 m b size bytes :
-  nth_error m b = Some (Some (LBlock size bytes)) ->
-  replace_n m b size bytes 0 = m.
-Proof.
-  unfold replace_n. intros. f_equal.
-  assert (b < length m).
-  { apply nth_error_Some. intro. rewrite H in H0. inversion H0. }
-  revert H H0. revert b.
-  induction m; intros; simpl in *; try lia; auto.
-  destruct b; f_equal; [| apply IHm; auto; lia].
-  inversion H. rewrite Nat.sub_0_r.
-  do 2 f_equal. apply functional_extensionality. intros.
-  rewrite Nat.ltb_antisym. rewrite Bool.andb_negb_l. reflexivity.
-Qed.
-
-Lemma replace_n_same m b size bytes :
-  replace_list_index m b (Some (LBlock (S size) (fun o : nat => if o <? S size then None else bytes o))) =
-  replace_n m b (S size) bytes (S size).
-Proof.
-  unfold replace_n. do 4 f_equal. apply functional_extensionality. intros.
-  rewrite Nat.sub_diag. simpl. rewrite Bool.andb_true_r. reflexivity.
-Qed.
-
 Lemma arr_offset {A} ptr rw o l (T : VPermType Si Ss A) (v : Vector.t A l) :
   VPtr ptr :: arr (rw, o, l, T) ▷ v ≡ offset (VPtr ptr) o :: arr (rw, 0, l, T) ▷ v.
 Proof.
@@ -756,91 +728,7 @@ Proof.
       rewrite Nat.add_assoc in IHl. rewrite Nat.add_1_r in IHl. apply IHl.
 Qed.
 
-Lemma read_replace_n_neq ptr' n b len (si : Si) bytes :
-    b <> fst ptr' ->
-    b < length (lget si) ->
-    read (lget si) ptr' = read (replace_n (lget si) b len bytes n) ptr'.
-Proof.
-  unfold replace_n, read. intros Hneq Hlt.
-  destruct (allocated (fst si) ptr') eqn:?.
-  2: { simpl. unfold allocated in *. simpl in *.
-       erewrite <- nth_error_replace_list_index_neq; eauto. }
-  pose proof (allocated_ptr_block _ _ _ Heqb0).
-  unfold allocated. simpl.
-  rewrite <- nth_error_replace_list_index_neq; eauto.
-Qed.
-
-Lemma sizeof_replace_n ptr b (si : Si) n size bytes :
-  nth_error (lget si) b = Some (Some (LBlock size bytes)) ->
-  b < length (lget si) ->
-  sizeof (lget si) ptr =
-  sizeof (lget (lput si (replace_n (lget si) b size bytes n))) ptr.
-Proof.
-  simpl. intros Hb Hlt. unfold replace_n, sizeof. destruct (snd ptr =? 0); auto.
-  destruct (Nat.eq_dec (fst ptr) b).
-  * rewrite e in *. simpl. rewrite nth_error_replace_list_index_eq; auto.
-    rewrite Hb. auto.
-  * simpl. erewrite <- nth_error_replace_list_index_neq; auto.
-Qed.
-
-Lemma combined_arr_guar {A} p parr b len n bytes (v : Vector.t A n) (si : Si) (ss : Ss)
-      (Hb : b < length (lget si))
-      (Hn: (n <= (S len))%nat)
-      (Hlte : parr <= p)
-      (Hblock: nth_error (lget si) b = Some (Some (LBlock (S len) bytes)))
-      (Hparr: parr ∈ VPtr (b, 0) :: arr (W, (S len) - n, n, trueP Si Ss) ▷ v) :
-  let si' := lput si (replace_n (lget si) b (S len) bytes n) in
-  (forall ptr', b <> fst ptr' -> read (lget si) ptr' = read (lget si') ptr') ->
-  (forall ptr', sizeof (lget si) ptr' = sizeof (lget si') ptr') ->
-  length (lget si) = length (lget si') ->
-  guar p (si, ss) (si', ss).
-Proof.
-  revert Hlte Hparr Hblock Hb Hn. revert b parr v. revert n.
-  induction n; intros.
-  - apply Hlte. subst si'. simpl in *. rewrite replace_n_0; auto. destruct si. reflexivity.
-  - destruct Hparr as (pptr & parr' & Hpptr & Hparr' & Hlte').
-    etransitivity.
-    {
-      eapply IHn; try lia. 2: { simpl in Hparr'. rewrite Nat.sub_succ_l. eauto. lia. }
-      - etransitivity; eauto. etransitivity; eauto. apply lte_r_sep_conj_perm.
-      - simpl. auto.
-      - lia.
-      - simpl. intros. pose proof @read_replace_n_neq; eauto. simpl in H3. apply H3; auto.
-      - simpl. intros. pose proof sizeof_replace_n. simpl in H2. apply H2; auto.
-      - apply replace_list_index_length; auto.
-    }
-    {
-      subst si'. simpl. apply Hlte. apply Hlte'. constructor 1. left.
-      destruct Hpptr as (val & (? & ?) & Hpptr); subst.
-      destruct Hpptr as (pwrite & p' & Hpwrite & _ & Hlte'').
-      apply Hlte''. constructor 1. left.
-      apply Hpwrite. simpl.
-      split; [| split]; auto.
-      - intros. destruct (Nat.eq_dec b (fst ptr')).
-        2: { pose proof read_replace_n_neq. simpl in H3. repeat rewrite <- H3; auto. }
-        subst. destruct ptr' as [b o]. simpl in *.
-        assert (Hneq: len - n <> o).
-        { apply addr_neq_cases in H2. destruct H2; auto. }
-        unfold replace_n, read, allocated. simpl.
-        repeat rewrite nth_error_replace_list_index_eq; auto.
-        destruct (o <? S len) eqn:?; auto.
-        rewrite Bool.andb_true_l. simpl.
-        destruct (S len - n <=? o) eqn:?.
-        + pose proof Heqb1.
-          assert (Himpl: (S len - n <= o -> len - n <= o)%nat) by lia.
-          rewrite <- (Bool.reflect_iff _ _ (Nat.leb_spec0 _ _)) in H3. apply Himpl in H3.
-          rewrite (Bool.reflect_iff _ _ (Nat.leb_spec0 _ _)) in H3.
-          rewrite H3. simpl in Heqb1. rewrite Heqb1. auto.
-        + pose proof Heqb1.
-          simpl in Heqb1. rewrite Heqb1.
-          apply Nat.leb_gt in H3.
-          assert (len - n > o) by lia.
-          apply leb_correct_conv in H4. rewrite H4. auto.
-      - intros. pose proof sizeof_replace_n. simpl in H2. rewrite <- H2; auto.
-      - unfold replace_n. erewrite <- replace_list_index_length; eauto.
-    }
-Qed.
-
+(* helper lemmas for Malloc *)
 Fixpoint rely_post_malloc n b size x y : Prop :=
   match n with
   | 0 => rely (block_perm size (b, 0) ** malloc_perm (b + 1)) x y
@@ -901,6 +789,7 @@ Proof.
       * apply IHn; auto. intros. apply Hread; auto. lia.
 Qed.
 
+(* The intermediate permission for Malloc *)
 (* n is the number of unfoldings to do for the rely/guar. size is the size of the block.
    when we use this n = size, but we need them separate to do induction on n *)
 Program Definition post_malloc_perm n b size : @perm (Si * Ss) :=
@@ -981,56 +870,6 @@ Proof.
   split; [| split; [split; [| split] |]]; auto; try solve [intros; apply Hread; lia].
   apply write_post_malloc_perm; auto.
 Qed.
-    (* constructor; intros. *)
-    (* { destruct x, y. induction H; try solve [etransitivity; eauto]. *)
-    (*   destruct x, y. destruct H; auto. *)
-    (*   - simpl in *. apply H. intro. inversion H0. lia. *)
-    (*   - induction H; try solve [etransitivity; eauto]. *)
-    (*     destruct H. eapply write_block; eauto. eapply malloc_write; eauto. *)
-    (*     unfold fst. rewrite Nat.add_1_r in H. apply H. *)
-    (* } *)
-    (* { destruct x, y. simpl in *. *)
-    (*   split; [| split; [| split]]; try apply H. *)
-    (*   - intro. inversion H0. lia. *)
-    (*   - intros. split; apply H. *)
-    (*     intro. destruct ptr. inversion H1. subst. simpl in *. lia. *)
-    (* } *)
-  (* - simpl in *; auto. destruct H as (Hlen & Hsizeof & Hread). *)
-  (*   split; [| split; [split; [| split] |]]; auto; try solve [intros; apply Hread; lia]. *)
-  (*   constructor; intros. *)
-  (*   { induction H; try solve [etransitivity; eauto]. *)
-  (*     destruct H; auto. *)
-  (*     - destruct x, y. simpl in *. apply H. intro. inversion H0. lia. *)
-  (*     - induction H; try solve [etransitivity; eauto]. *)
-  (*       destruct H. *)
-  (*       + destruct x, y. simpl. apply H. intro. inversion H0. lia. *)
-  (*       + admit. *)
-  (*   } *)
-  (*   { destruct x, y. simpl in *. *)
-  (*     split; [| split]; try solve [apply H; intro Heq; inversion Heq; lia]. *)
-  (*     apply IHn. *)
-  (*     - intro. inversion H0. lia. *)
-  (*     - intros. split; apply H. *)
-  (*       intro. destruct ptr. inversion H1. subst. simpl in *. lia. *)
-  (*   } *)
-  (*   simpl. apply IHn. *)
-
-  (* - destruct x. simpl in *; auto. destruct H as (Hlen & Hsizeof & Hread). *)
-  (*   split; [| split; [split; [| split] |]]; auto. *)
-  (*   + apply Hread; lia. *)
-  (*   + intros. apply Hread; lia. *)
-  (*   + constructor; intros. *)
-  (*     { destruct x, y. induction H; try solve [etransitivity; eauto]. *)
-  (*       destruct x, y. destruct H; auto. *)
-  (*       - simpl in *. apply H. intro. inversion H0. lia. *)
-  (*       - simpl in *. admit. *)
-  (*     } *)
-  (*     { destruct x, y. simpl in *. *)
-  (*       split. apply H. intro. inversion H0. lia. *)
-  (*       admit. *)
-  (*     } *)
-
-
 
 Lemma post_malloc_perm_ok {A} n b size (xs : Vector.t A (S n))
   (Hn : (n <= size)%nat) :
@@ -1039,30 +878,6 @@ Lemma post_malloc_perm_ok {A} n b size (xs : Vector.t A (S n))
   singleton_Perms (block_perm (S size) (b, 0)) *
   malloc_Perms.
 Proof.
-  (* rewrite <- sep_conj_Perms_assoc. *)
-  (* rewrite sep_conj_Perms_commut. *)
-  (* simpl. exists (block_perm (S size) (b, 0) ** malloc_perm (b + 1)). *)
-  (* induction size. *)
-  (* - eexists. split; [| split]. *)
-  (*   + do 2 eexists. split; [| split]; try reflexivity. *)
-  (*     eexists. split; [exists (b + 1); reflexivity | simpl; reflexivity]. *)
-  (*   + eexists. exists bottom_perm. split; [| split]; try reflexivity. *)
-  (*     eexists. split; [exists (VNum 0); reflexivity |]. *)
-  (*     simpl. eexists. exists bottom_perm. split; [| split]; reflexivity. *)
-  (*   + repeat rewrite sep_conj_perm_bottom. constructor; auto. *)
-  (*     { intros [] (? & ? & ?). simpl in *. split; split; auto. *)
-  (*       - split; auto. symmetry. apply malloc_block; auto; simpl; lia. *)
-  (*       - symmetry. apply separate_sep_conj_perm; symmetry. *)
-  (*         + apply write_block. *)
-  (*         + apply malloc_write. simpl. lia. *)
-  (*         + symmetry. apply malloc_block; simpl; lia. *)
-  (*     } *)
-  (*     { intros [] [] (? & ? & ?). simpl in *. auto. } *)
-  (*     { *)
-  (*       intros [] [] H. *)
-  (*       rewrite sep_conj_perm_commut in H. *)
-  (*       apply H. *)
-  (*     } *)
   simpl.
   induction n.
   - simpl. do 2 eexists. split; [| split].
@@ -1157,6 +972,65 @@ Proof.
   }
 Qed.
 
+(* helper lemma for Free *)
+Lemma combined_arr_guar {A} p parr b len n bytes (v : Vector.t A n) (si : Si) (ss : Ss)
+      (Hb : b < length (lget si))
+      (Hn: (n <= (S len))%nat)
+      (Hlte : parr <= p)
+      (Hblock: nth_error (lget si) b = Some (Some (LBlock (S len) bytes)))
+      (Hparr: parr ∈ VPtr (b, 0) :: arr (W, (S len) - n, n, trueP Si Ss) ▷ v) :
+  let si' := lput si (replace_n (lget si) b (S len) bytes n) in
+  (forall ptr', b <> fst ptr' -> read (lget si) ptr' = read (lget si') ptr') ->
+  (forall ptr', sizeof (lget si) ptr' = sizeof (lget si') ptr') ->
+  length (lget si) = length (lget si') ->
+  guar p (si, ss) (si', ss).
+Proof.
+  revert Hlte Hparr Hblock Hb Hn. revert b parr v. revert n.
+  induction n; intros.
+  - apply Hlte. subst si'. simpl in *. rewrite replace_n_0; auto. destruct si. reflexivity.
+  - destruct Hparr as (pptr & parr' & Hpptr & Hparr' & Hlte').
+    etransitivity.
+    {
+      eapply IHn; try lia. 2: { simpl in Hparr'. rewrite Nat.sub_succ_l. eauto. lia. }
+      - etransitivity; eauto. etransitivity; eauto. apply lte_r_sep_conj_perm.
+      - simpl. auto.
+      - lia.
+      - simpl. intros. pose proof @read_replace_n_neq; eauto.
+      - simpl. intros. pose proof sizeof_replace_n; eauto.
+      - apply replace_list_index_length; auto.
+    }
+    {
+      subst si'. simpl. apply Hlte. apply Hlte'. constructor 1. left.
+      destruct Hpptr as (val & (? & ?) & Hpptr); subst.
+      destruct Hpptr as (pwrite & p' & Hpwrite & _ & Hlte'').
+      apply Hlte''. constructor 1. left.
+      apply Hpwrite. simpl.
+      split; [| split]; auto.
+      - intros. destruct (Nat.eq_dec b (fst ptr')).
+        2: { pose proof read_replace_n_neq. simpl in H3. repeat rewrite <- H3; auto. }
+        subst. destruct ptr' as [b o]. simpl in *.
+        assert (Hneq: len - n <> o).
+        { apply addr_neq_cases in H2. destruct H2; auto. }
+        unfold replace_n, read, allocated. simpl.
+        repeat rewrite nth_error_replace_list_index_eq; auto.
+        destruct (o <? S len) eqn:?; auto.
+        rewrite Bool.andb_true_l. simpl.
+        destruct (S len - n <=? o) eqn:?.
+        + pose proof Heqb1.
+          assert (Himpl: (S len - n <= o -> len - n <= o)%nat) by lia.
+          rewrite <- (Bool.reflect_iff _ _ (Nat.leb_spec0 _ _)) in H3. apply Himpl in H3.
+          rewrite (Bool.reflect_iff _ _ (Nat.leb_spec0 _ _)) in H3.
+          rewrite H3. simpl in Heqb1. rewrite Heqb1. auto.
+        + pose proof Heqb1.
+          simpl in Heqb1. rewrite Heqb1.
+          apply Nat.leb_gt in H3.
+          assert (len - n > o) by lia.
+          apply leb_correct_conv in H4. rewrite H4. auto.
+      - intros. pose proof sizeof_replace_n. simpl in H2. rewrite <- H2; auto.
+      - unfold replace_n. erewrite <- replace_list_index_length; eauto.
+    }
+Qed.
+
 Lemma Free {A} xi len (xs : Vector.t A (S len) * unit) :
   xi :: starPT _ _ (arr (W, 0, (S len), trueP Si Ss)) (blockPT _ _ (S len)) ▷ xs ⊢
   free xi ⤳
@@ -1190,229 +1064,112 @@ Proof.
     eapply combined_arr_guar; eauto; try reflexivity.
     + destruct ptr. simpl in Hoffset. subst. rewrite Nat.sub_diag. apply Hparr.
     + intros. erewrite read_replace_n_neq; eauto. simpl. reflexivity.
-    + intros. erewrite sizeof_replace_n; eauto.
+    + intros. rewrite lGetPut. erewrite sizeof_replace_n; eauto.
     + apply replace_list_index_length; auto.
   - apply sep_step_lte'. apply bottom_perm_is_bottom.
   - constructor; simpl; auto.
 Qed.
 
+(*
+   while (v != NULL)
+         v = *(v + 1);
+   return 0;
+*)
 Definition ex3i' : Value -> itree (sceE Si) Value :=
   iter (C := Kleisli _)
-       (fun v => v' <- load (offset v 1);; (* continue with *(v + 1) *)
+       (fun v =>  b <- isNull v;;
+               if (b : bool)
+               then Ret (inr (VNum 0)) (* v == NULL *)
+               else v' <- load (offset v 1);; (* continue with *(v + 1) *)
                Ret (inl v')).
 
 Definition ex3s' {A} : list A -> itree (sceE Ss) unit :=
   iter (C := Kleisli _)
-       (fun l => sum_rect (fun _ => itree (sceE Ss) (list A + unit)) (fun _ : unit => Ret (inr tt)) (fun '(h, t) => Ret (inl t)) (unfoldFP l)).
-
-          (* match l with *)
-          (*     | nil => Ret (inr tt) *)
-          (*     | h :: t => Ret (inl t) *)
-          (*     end). *)
+       (fun l => sum_rect
+                (fun _ => itree (sceE Ss) (list A + unit))
+                (fun _ : unit => Ret tt;; Ret (inr tt))
+                (fun '(h, t) => Ret (inl t))
+                (unfoldFP l)).
 
 Lemma ex3'_typing A xi xs (T : VPermType _ _ A) :
   xi :: list_perm _ _ R _ T ▷ xs ⊢
   ex3i' xi ⤳
   ex3s' xs :::
-  (falseP _ _).
+  (trueP _ _).
 Proof.
   unfold ex3i', ex3s'. apply Iter.
   intros. unfold list_perm. eapply Weak; [| reflexivity |].
-  (* etransitivity. eapply MuUnfold. apply (EqRefl _ _ 0). rewrite sep_conj_Perms_commut. *)
   eapply MuUnfold. rewrite <- sep_conj_Perms_bottom_identity.
-  eapply OrE.
-  - intros. admit.
-  - intros (? & ?). rewrite sep_conj_Perms_bottom_identity.
+  eapply OrE; setoid_rewrite sep_conj_Perms_bottom_identity.
+  - intros []. eapply Bind; [apply IsNull2 |].
+    intros ? []. remember true.
+    assert ((Ret (inr tt) : itree (sceE Ss) ((list A) + unit)) =
+            (if b then Ret (inr tt) else throw tt)) by (subst; auto).
+    rewrite H; clear H. rewrite <- sep_conj_Perms_bottom_identity.
+    eapply If; [| apply Err].
+    eapply Weak; [| reflexivity | apply Ret_].
+    etransitivity. 2: apply SumI2. reflexivity.
+  - intros (? & ?).
     eapply Weak; [| reflexivity |].
     apply StarE.
     rewrite sep_conj_Perms_commut.
-    (* eapply Weak; [| reflexivity |]. *)
-    (* apply sep_conj_Perms_monotone. apply bottom_Perms_is_bottom. reflexivity. *)
-    (* rewrite sep_conj_Perms_bottom_identity. *)
-
-    (* eapply Weak; [| reflexivity |]. *)
-    (* apply PtrOff with (o2 := 1); auto. *)
     replace (Ret (inl l)) with (Ret tt;; (Ret (inl l) : itree (sceE Ss) (list A + unit))).
     2: { rewritebisim @bind_ret_l. reflexivity. }
-    (* rewrite <- sep_conj_Perms_bottom_identity. *)
-    (* eapply PtrE. intros. rewrite sep_conj_Perms_bottom_identity. *)
-
     rewrite sep_conj_Perms_commut.
     eapply PtrE. intros zi.
-
-    eapply Bind with (T := _).
-    + rewrite <- sep_conj_Perms_assoc.
-      rewrite sep_conj_Perms_commut.
-      eapply Frame.
-      eapply Weak; [| reflexivity |].
-      apply sep_conj_Perms_monotone.
-      apply PtrOff with (o2 := 1); auto. reflexivity.
-      eapply Frame.
-      eapply Load.
-    + intros v [].
-      eapply Weak; [| reflexivity |].
-      apply sep_conj_Perms_monotone.
-      apply PermsE. reflexivity.
+    eapply Bind.
+    { (* isNull *)
       rewrite <- sep_conj_Perms_assoc.
-      eapply Weak; [| reflexivity |].
-      apply sep_conj_Perms_monotone.
-      apply PermsE. reflexivity.
+      eapply Frame.
+      apply IsNull1.
+    }
+    (* if *)
+    intros ? [].
+    eapply Weak; [| reflexivity |].
+    apply sep_conj_Perms_monotone.
+    apply PermsE. reflexivity.
+    rewrite <- sep_conj_Perms_assoc.
+    rewrite sep_conj_Perms_commut.
+    remember false.
+    assert ((Ret (inl l) : itree (sceE Ss) ((list A) + unit)) =
+            (if b then throw tt else Ret (inl l))) by (subst; auto).
+    rewrite H; clear H. apply If; [apply Err |].
+    (* drop the 0 offset perm *)
+    eapply Weak; [| reflexivity |].
+    apply sep_conj_Perms_monotone; [apply bottom_Perms_is_bottom | reflexivity].
+    rewrite sep_conj_Perms_bottom_identity.
+    replace (Ret (inl l)) with (Ret tt;; (Ret (inl l) : itree (sceE Ss) (list A + unit))).
+    2: { rewritebisim @bind_ret_l. reflexivity. }
+    eapply Bind.
+    (* load offset 1 *)
+    eapply Frame.
+    eapply Weak; [| reflexivity |].
+    apply PtrOff with (o2 := 1); auto.
+    eapply Load.
+    (* iterate *)
+    intros v [].
+    eapply Weak; [| reflexivity |].
+    apply sep_conj_Perms_monotone.
+    apply PermsE. reflexivity.
+    rewrite <- sep_conj_Perms_assoc.
+    rewrite sep_conj_Perms_commut.
+    rewrite <- sep_conj_Perms_assoc.
+    eapply Weak; [| reflexivity |].
+    apply sep_conj_Perms_monotone; [apply bottom_Perms_is_bottom | reflexivity].
+    rewrite sep_conj_Perms_bottom_identity.
+    rewrite sep_conj_Perms_commut.
+    eapply Weak; [apply Cast | reflexivity |].
+    eapply Weak; [| reflexivity | apply Ret_].
+    etransitivity. 2: apply SumI1. reflexivity.
+Qed.
 
-      rewrite sep_conj_Perms_assoc.
-      eapply Weak; [| reflexivity |].
-      apply sep_conj_Perms_monotone. reflexivity.
-      apply bottom_Perms_is_bottom.
-
-      rewrite <- sep_conj_Perms_assoc.
-      eapply Weak; [| reflexivity |].
-      apply sep_conj_Perms_monotone.
-      {
-        apply sep_conj_Perms_monotone. reflexivity.
-        apply bottom_Perms_is_bottom.
-      }
-      rewrite sep_conj_Perms_commut.
-      rewrite sep_conj_Perms_bottom_identity.
-      reflexivity.
-
-      repeat rewrite <- sep_conj_Perms_assoc.
-      repeat rewrite sep_conj_Perms_bottom_identity.
-
-      eapply Weak; [| reflexivity |].
-      apply Cast.
-
-      eapply Weak; [| reflexivity |].
-      eapply SumI1.
-      apply Ret_.
-Admitted.
-(*       apply sep_conj_Perms_monotone. reflexivity. *)
-(*       apply bottom_Perms_is_bottom. *)
-
-(*       (* remove offset *) *)
-(*       rewrite <- sep_conj_Perms_assoc. *)
-(*       eapply Weak; [| reflexivity |]. *)
-(*       apply sep_conj_Perms_monotone. reflexivity. *)
-(*       { *)
-(*         apply sep_conj_Perms_monotone. *)
-(*         replace 0 with (1 - 1) by auto. eapply PtrOff'; auto. *)
-(*         reflexivity. *)
-(*       } *)
-
-(*       (* first mess around with the equality permission *) *)
-(*       eapply Weak; [| reflexivity |]. *)
-(*       apply sep_conj_Perms_monotone. 2: reflexivity. *)
-(*       etransitivity. 2: apply EqDup. *)
-(*       apply sep_conj_Perms_monotone. *)
-(*       reflexivity. apply EqSym. *)
-
-(*       (* change zi to v in yi+1 permission *) *)
-(*       rewrite sep_conj_Perms_assoc. *)
-(*       eapply Weak; [| reflexivity |]. *)
-(*       apply sep_conj_Perms_monotone. 2: reflexivity. *)
-(*       rewrite <- sep_conj_Perms_assoc. *)
-(*       apply sep_conj_Perms_monotone. reflexivity. *)
-(*       rewrite sep_conj_Perms_commut. apply PtrI. *)
-
-(*       (* combine zi and v permissions *) *)
-(*       rewrite sep_conj_Perms_assoc. *)
-(*       rewrite sep_conj_Perms_commut. *)
-(*       eapply Weak; [| reflexivity |]. *)
-(*       apply sep_conj_Perms_monotone. reflexivity. *)
-(*       rewrite sep_conj_Perms_commut. *)
-(*       rewrite sep_conj_Perms_assoc. *)
-(*       apply sep_conj_Perms_monotone. 2: reflexivity. *)
-(*       rewrite sep_conj_Perms_commut. *)
-(*       apply Cast. *)
-
-(*       (* combine yi+1 and v permissions *) *)
-(*       eapply Weak; [| reflexivity |]. *)
-(*       apply sep_conj_Perms_monotone. reflexivity. *)
-(*       rewrite sep_conj_Perms_commut. *)
-(*       apply PtrI. *)
-
-(*       eapply Weak; [| reflexivity |]. *)
-(*       apply StarI. *)
-
-(*       eapply Weak; [| reflexivity |]. *)
-(*       eapply OrI2. *)
-
-(*       eapply Weak; [| reflexivity |]. *)
-(*       eapply MuFold. *)
-(*       apply Ret_. *)
-(*       (* etransitivity. *) *)
-(*       (* apply sep_conj_Perms_monotone. apply EqSym. reflexivity. *) *)
-(*       (* etransitivity. reflexivity. *) *)
-(*       (* rewrite sep_conj_Perms_commut. eapply PtrI. *) *)
-(*       (* apply sep_conj_Perms_commut. *) *)
-(*       (* apply PtrI. *) *)
-(*       (* erewrite sep_conj_Perms_commut at 2. apply PtrI. *) *)
-
-
-(*       rewrite <- sep_conj_Perms_assoc. *)
-
-(*       eapply Weak; [| reflexivity |]. *)
-(*       apply sep_conj_Perms_monotone. reflexivity. *)
-(*       { *)
-(*         (* rewrite sep_conj_Perms_commut. *) *)
-(*         rewrite sep_conj_Perms_assoc. *)
-
-(*         apply sep_conj_Perms_monotone. *)
-(*         { *)
-(*           etransitivity. *)
-(*           apply sep_conj_Perms_monotone. apply EqSym. reflexivity. *)
-(*           etransitivity. reflexivity. *)
-(*           rewrite sep_conj_Perms_commut. eapply PtrI. *)
-(*           apply sep_conj_Perms_commut. *)
-(*           apply PtrI. *)
-(*           erewrite sep_conj_Perms_commut at 2. apply PtrI. *)
-
-
-(*         rewrite sep_conj_Perms_commut. *)
-(*         rewrite sep_conj_Perms_assoc. *)
-(*         rewrite sep_conj_Perms_commut. *)
-(*         rewrite sep_conj_Perms_assoc. *)
-(*         apply sep_conj_Perms_monotone. reflexivity. *)
-(*         rewrite sep_conj_Perms_commut. *)
-
-(*         rewrite sep_conj_Perms_assoc. *)
-
-(*         apply sep_conj_Perms_monotone. *)
-(*               { *)
-(*         rewrite sep_conj_Perms_commut. *)
-
-(*         apply Cast. *)
-(*       } *)
-(*       reflexivity. *)
-
-(*       rewrite sep_conj_Perms_commut. *)
-(*       rewrite sep_conj_Perms_assoc. *)
-
-(*       eapply Weak; [| reflexivity |]. *)
-(*       apply sep_conj_Perms_monotone. *)
-(*       apply StarI. reflexivity. *)
-
-(*       rewrite sep_conj_Perms_commut. *)
-(*       rewrite sep_conj_Perms_assoc. *)
-(*       rewrite sep_conj_Perms_commut. *)
-(*       rewrite sep_conj_Perms_assoc. *)
-
-(*       eapply Weak; [| reflexivity |]. *)
-(*       apply sep_conj_Perms_monotone. reflexivity. *)
-
-(*       rewrite sep_conj_Perms_commut. *)
-(*       rewrite sep_conj_Perms_assoc. *)
-(*       rewrite <- sep_conj_Perms_assoc. *)
-
-(*       eapply Weak; [| reflexivity |]. *)
-(*       apply StarI. *)
-(*       rewrite sep_conj_Perms_commut. *)
-(*       rewrite sep_conj_Perms_assoc. *)
-(*       rewrite sep_conj_Perms_commut. *)
-(*       (* rewrite sep_conj_Perms_assoc. *) *)
-(*       apply sep_conj_Perms_monotone. reflexivity. *)
-(*       rewrite sep_conj_Perms_commut. apply Cast. *)
-
-(* Qed. *)
-
+(*
+  n = 0;
+  while (v != NULL) {
+        v = *(v + 1);
+        n++;
+  }
+*)
 Definition ex3i (v : Value) : itree (sceE Si) Value :=
   iter (C := Kleisli _)
        (fun '(n, v) => b <- isNull v;;
