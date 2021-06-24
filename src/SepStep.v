@@ -6,9 +6,9 @@ From Coq Require Import
 
 Section step.
 
-  Context {config specConfig : Type}.
+  Context {config : Type}.
 
-  Definition sep_step (p q : @perm (config * specConfig)) : Prop :=
+  Definition sep_step (p q : @perm config) : Prop :=
     forall r, p ⊥ r -> q ⊥ r.
 
   Global Instance sep_step_refl : Reflexive sep_step.

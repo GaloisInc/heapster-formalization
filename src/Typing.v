@@ -199,9 +199,6 @@ Section bisim.
     inversion 1; auto.
   Qed.
 
-  Definition typing {R1 R2} P Q (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) :=
-    forall p c1 c2, p ∈ P -> pre p (c1, c2) -> sbuter p Q t c1 s c2.
-
   Lemma sbuter_lte {R1 R2} p Q Q' (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) c1 c2 :
     sbuter p Q t c1 s c2 -> (forall r1 r2, Q r1 r2 ⊨ Q' r1 r2) -> sbuter p Q' t c1 s c2.
   Proof.
@@ -213,6 +210,9 @@ Section bisim.
       + destruct (H1 b1). eexists. right. eapply CIH; eauto. pclearbot. apply H3.
       + destruct (H2 b2). eexists. right. eapply CIH; eauto. pclearbot. apply H3.
   Qed.
+
+  Definition typing {R1 R2} P Q (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) :=
+    forall p c1 c2, p ∈ P -> pre p (c1, c2) -> sbuter p Q t c1 s c2.
 
   Lemma typing_lte {R1 R2} P P' Q Q' (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) :
     typing P Q t s ->
