@@ -1,25 +1,38 @@
-# KNOWNTARGETS will not be passed along to CoqMakefile
-KNOWNTARGETS := CoqMakefile extra-stuff extra-stuff2
-# KNOWNFILES will not get implicit targets from the final rule, and so
-# depending on them won't invoke the submake
-# Warning: These files get declared as PHONY, so any targets depending
-# on them always get rebuilt
-KNOWNFILES   := Makefile _CoqProject
+EXTRA_DIR:=extra
+COQDOCFLAGS:= \
+  --external 'http://ssr2.msr-inria.inria.fr/doc/ssreflect-1.5/' Ssreflect \
+  --external 'http://ssr2.msr-inria.inria.fr/doc/mathcomp-1.5/' MathComp \
+  --toc --toc-depth 2 --html --interpolate \
+  --index indexpage --no-lib-name --parse-comments \
+  --with-header $(EXTRA_DIR)/header.html --with-footer $(EXTRA_DIR)/footer.html
+export COQDOCFLAGS
+COQMAKEFILE:=Makefile.coq
+COQ_PROJ:=_CoqProject
+VS:=$(wildcard *.v)
+VS_IN_PROJ:=$(shell grep .v $(COQ_PROJ))
 
-.DEFAULT_GOAL := invoke-coqmakefile
+ifeq (,$(VS_IN_PROJ))
+VS_OTHER := $(VS)
+else
+VS := $(VS_IN_PROJ)
+endif
 
-CoqMakefile: Makefile _CoqProject
-	$(COQBIN)coq_makefile -f _CoqProject -o CoqMakefile
+all: html
 
-invoke-coqmakefile: CoqMakefile
-	$(MAKE) --no-print-directory -f CoqMakefile $(filter-out $(KNOWNTARGETS),$(MAKECMDGOALS))
+clean: $(COQMAKEFILE)
+	@$(MAKE) -f $(COQMAKEFILE) $@
+	rm -f $(COQMAKEFILE)
 
-.PHONY: invoke-coqmakefile $(KNOWNFILES)
+html: $(COQMAKEFILE) $(VS)
+	rm -fr html
+	@$(MAKE) -f $(COQMAKEFILE) $@
+	cp $(EXTRA_DIR)/resources/* html
 
-####################################################################
-##                      Your targets here                         ##
-####################################################################
+$(COQMAKEFILE): $(COQ_PROJ) $(VS)
+		coq_makefile -f $(COQ_PROJ) $(VS_OTHER) -o $@
 
-# This should be the last rule, to handle any targets not declared above
-%: invoke-coqmakefile
-	@true
+%: $(COQMAKEFILE) force
+	@$(MAKE) -f $(COQMAKEFILE) $@
+force $(COQ_PROJ) $(VS): ;
+
+.PHONY: clean all force
