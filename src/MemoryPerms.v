@@ -1,3 +1,5 @@
+(* begin hide *)
+
 From Coq Require Import
      Classes.Morphisms
      Relations.Relation_Operators
@@ -7,8 +9,9 @@ From Coq Require Import
      Logic.FunctionalExtensionality
      Lia.
 
-Require Import ExtLib.Structures.Monads.
-Require Import ExtLib.Data.Monads.OptionMonad.
+From ExtLib Require Import
+     Structures.Monads
+     Data.Monads.OptionMonad.
 
 From Heapster Require Import
      Utils
@@ -36,6 +39,7 @@ Import MonadNotation.
 Import ListNotations.
 Import ITreeNotations.
 Local Open Scope itree_scope.
+(* end hide *)
 
 Section MemoryPerms.
   Context {Si Ss : Type}.
@@ -145,19 +149,19 @@ Section MemoryPerms.
   (*   destruct (x0 =? snd ptr); auto. *)
   (* Qed. *)
 
-  (** memory permissions **)
+  (** * Memory permissions **)
 
-  (* gives permission to allocate memory, assuming the last allocated block was n-1 *)
+  (** Gives permission to allocate memory, assuming the last allocated block was n-1 *)
   Program Definition malloc_perm (n : nat) : (@perm (Si * Ss)) :=
     {|
-    (* always valid *)
+    (** always valid *)
     pre '(x, _) := length (lget x) = n;
-    (* no new blocks are allocated *)
+    (** No new blocks are allocated *)
     rely '(x, _) '(y, _) := length (lget x) = length (lget y) /\
                             (forall ptr, fst ptr >= n ->
                                     sizeof (lget x) ptr = sizeof (lget y) ptr /\
                                     read (lget x) ptr = read (lget y) ptr);
-    (* existing blocks do not change *)
+    (** Existing blocks do not change *)
     guar '(x, _) '(y, _) :=
       (forall ptr, fst ptr < n ->
               read (lget x) ptr = read (lget y) ptr /\
@@ -173,20 +177,17 @@ Section MemoryPerms.
     split; (etransitivity; [apply H; auto |]); apply H0; auto.
   Qed.
 
-  Definition malloc_Perms :=
-    meet_Perms (fun Q => exists n : nat, Q = singleton_Perms (malloc_perm n)).
-
   Program Definition block_perm (size : nat) (ptr : addr) : (@perm (Si * Ss)) :=
     {|
-    (* the ptr points to the first cell of an allocated block of size `size` *)
+    (** the ptr points to the first cell of an allocated block of size `size` *)
     pre '(x, _) :=
       (* if we swap the order of the equality then the obligation automatically
       unifies and we lose info... *)
       Some size = sizeof (lget x) ptr;
-    (* if ptr satisfies the precondition, the size of the block does not change *)
+    (** if ptr satisfies the precondition, the size of the block does not change *)
     rely '(x, _) '(y, _) :=
       sizeof (lget x) ptr = sizeof (lget y) ptr;
-    (* no updates allowed *)
+    (** no updates allowed *)
     guar '(x, _) '(y, _) := x = y;
     |}.
   Next Obligation.
@@ -208,11 +209,11 @@ Section MemoryPerms.
 
   Program Definition read_perm (ptr : addr) (v : Value) : @perm (Si * Ss) :=
     {|
-    (* ptr points to valid memory *)
+    (** ptr points to valid memory *)
     pre '(x, _) := read (lget x) ptr = Some v;
-    (* only checks if the memory ptr points to in the 2 memories are equal *)
+    (** only checks if the memory ptr points to in the 2 memories are equal *)
     rely '(x, _) '(y, _) := read (lget x) ptr = read (lget y) ptr;
-    (* no updates allowed *)
+    (** no updates allowed *)
     guar '(x, _) '(y, _) := x = y;
     |}.
   Next Obligation.
@@ -242,11 +243,6 @@ Section MemoryPerms.
     split; [| split]; (etransitivity; [apply H; auto |]); apply H0; auto.
   Qed.
 
-  Definition read_Perms (ptr : addr) (P : Value -> Perms) : Perms :=
-    meet_Perms (fun Q => exists y : Value, Q = singleton_Perms (read_perm ptr y) * P y).
-
-  Definition write_Perms (ptr : addr) (P : Value -> Perms) : Perms :=
-    meet_Perms (fun Q => exists y : Value, Q = singleton_Perms (write_perm ptr y) * P y).
 
   Lemma read_lte_write : forall ptr v, read_perm ptr v <= write_perm ptr v.
   Proof.
@@ -348,7 +344,17 @@ Section MemoryPerms.
   (*   constructor; intros; simpl in *; subst; reflexivity. *)
   (* Qed. *)
 
+  (** * Memory mermission sets *)
+  Definition malloc_Perms :=
+    meet_Perms (fun Q => exists n : nat, Q = singleton_Perms (malloc_perm n)).
 
+  Definition read_Perms (ptr : addr) (P : Value -> Perms) : Perms :=
+    meet_Perms (fun Q => exists y : Value, Q = singleton_Perms (read_perm ptr y) * P y).
+
+  Definition write_Perms (ptr : addr) (P : Value -> Perms) : Perms :=
+    meet_Perms (fun Q => exists y : Value, Q = singleton_Perms (write_perm ptr y) * P y).
+
+  (** * Memory operations *)
   Definition load (v : Value) : itree (sceE Si) Value :=
     s <- trigger (Modify id);;
     match v with

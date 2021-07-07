@@ -1,3 +1,5 @@
+(* begin hide *)
+
 From Heapster Require Import
      Permissions
      SepStep
@@ -40,10 +42,12 @@ Import VectorNotations.
 Hint Resolve no_errors_gen_mon : paco.
 Hint Resolve sbuter_gen_mon : paco.
 
+(* end hide *)
+
 Definition CompM S R := itree (sceE S) R.
 
 
-(** * Basic facts about `no_errors` and `sbuter` **)
+(** * Basic facts about [no_errors] and [sbuter] **)
 
 Lemma no_errors_Tau {S R} (s : S) (t : CompM S R) :
   no_errors s t <-> no_errors s (Tau t).

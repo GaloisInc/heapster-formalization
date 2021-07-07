@@ -1,7 +1,10 @@
+(* begin hide *)
 Require Import Coq.Lists.List.
 
 Import ListNotations.
+(* end hide *)
 
+(** * Lens typeclass *)
 Class Lens (A B:Type) : Type :=
   {
   lget: A -> B;
@@ -11,6 +14,8 @@ Class Lens (A B:Type) : Type :=
   lPutPut: forall a b b', lput (lput a b) b' = lput a b'
   }.
 
+(** * [replace_list_index] *)
+(** A function for replacing an element in a list, growing the list if needed. *)
 Fixpoint replace_list_index {A : Type} (l : list A) (n : nat) (new : A) :=
   match l with
   | [] => repeat new (n + 1)
@@ -20,6 +25,7 @@ Fixpoint replace_list_index {A : Type} (l : list A) (n : nat) (new : A) :=
             end
   end.
 
+(** Some properties about [replace_list_index] *)
 Lemma replace_list_index_length A (l : list A) n (a : A) :
   n < length l ->
   length l = length (replace_list_index l n a).

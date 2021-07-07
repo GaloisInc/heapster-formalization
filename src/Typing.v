@@ -1,3 +1,4 @@
+(* begin hide *)
 From Coq Require Import
      Structures.Equalities
      Classes.Morphisms
@@ -31,7 +32,11 @@ From Paco Require Import
 
 Import ITreeNotations.
 Local Open Scope itree_scope.
+(* end hide *)
 
+(** * Bisimulation axiom *)
+(** We make use of the [bisimulation_is_eq] axiom from the ITrees library.
+    This axiom is used to avoid setoid rewriting for TODO *)
 Ltac rewritebisim lem := pose proof lem as bisim;
                          eapply bisimulation_is_eq in bisim;
                          rewrite bisim;
@@ -44,7 +49,6 @@ Ltac rewritebisim_in lem H := pose proof lem as bisim;
 
 Lemma throw_vis {E R} `{exceptE unit -< E} (k : void -> itree E R) :
   vis (Throw tt) k = throw tt.
-  (* Vis (subevent void (subevent void (Throw tt))) k = throw tt. *)
 Proof.
   apply bisimulation_is_eq. pstep. unfold throw.
   constructor. intros. inversion v.
@@ -56,7 +60,7 @@ Proof.
   unfold throw. rewritebisim @bind_vis. apply throw_vis.
 Qed.
 
-
+(** * Parallel composition *)
 Section Parallel.
 
   Definition par_match {E R1 R2} `{nondetE -< E}
@@ -90,6 +94,7 @@ Section Parallel.
   Qed.
 End Parallel.
 
+(** * Stuttering bisimulation *)
 Section bisim.
   Variant modifyE C : Type -> Type :=
   | Modify : forall (f : C -> C), modifyE C C.
@@ -98,31 +103,6 @@ Section bisim.
   Definition sceE (C : Type) := (exceptE unit +' modifyE C +' nondetE).
 
   Context {config specConfig : Type}.
-
-  Variant no_errors_gen {R C : Type} no_errors (c : C) : itree (sceE C) R -> Prop :=
-  | no_errors_ret : forall r, no_errors_gen no_errors c (Ret r)
-  | no_errors_tau : forall t, no_errors c t -> no_errors_gen no_errors c (Tau t)
-  | no_errors_modify : forall f k,
-      no_errors (f c) (k c) ->
-      no_errors_gen no_errors c (vis (Modify f) k)
-  | no_errors_choice : forall k,
-      (forall b, no_errors c (k b)) ->
-      no_errors_gen no_errors c (vis Or k)
-  .
-
-  Definition no_errors {R C : Type} :=
-    paco2 (@no_errors_gen R C) bot2.
-
-  Lemma no_errors_gen_mon {R C} : monotone2 (@no_errors_gen R C).
-  Proof.
-    repeat intro. inversion IN; subst; try solve [constructor; auto].
-  Qed.
-  Hint Resolve no_errors_gen_mon : paco.
-
-  Program Definition eq_p {T : Type} (y x : T) : (@Perms (config * specConfig)) :=
-  {|
-    in_Perms := fun _ => x = y;
-  |}.
 
   Inductive sbuter_gen {R1 R2 : Type} (sbuter : perm -> (R1 -> R2 -> Perms) -> itree (sceE config) R1 -> config -> itree (sceE specConfig) R2 -> specConfig -> Prop)
             (p : perm) (Q : R1 -> R2 -> Perms) :
@@ -211,6 +191,7 @@ Section bisim.
       + destruct (H2 b2). eexists. right. eapply CIH; eauto. pclearbot. apply H3.
   Qed.
 
+  (** * Typing *)
   Definition typing {R1 R2} P Q (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) :=
     forall p c1 c2, p ∈ P -> pre p (c1, c2) -> sbuter p Q t c1 s c2.
 
@@ -509,6 +490,28 @@ Section bisim.
     (*       + specialize (Ht2 p2 c1 c2 Hp2 Hpre2). punfold Ht2. induction Ht2. *)
     (*         * simpl. *)
   Abort.
+
+  (** * [no_errors] *)
+  Variant no_errors_gen {R C : Type} no_errors (c : C) : itree (sceE C) R -> Prop :=
+  | no_errors_ret : forall r, no_errors_gen no_errors c (Ret r)
+  | no_errors_tau : forall t, no_errors c t -> no_errors_gen no_errors c (Tau t)
+  | no_errors_modify : forall f k,
+      no_errors (f c) (k c) ->
+      no_errors_gen no_errors c (vis (Modify f) k)
+  | no_errors_choice : forall k,
+      (forall b, no_errors c (k b)) ->
+      no_errors_gen no_errors c (vis Or k)
+  .
+  Lemma no_errors_gen_mon {R C} : monotone2 (@no_errors_gen R C).
+  Proof.
+    repeat intro. inversion IN; subst; try solve [constructor; auto].
+  Qed.
+  Hint Resolve no_errors_gen_mon : paco.
+
+
+  Definition no_errors {R C : Type} :=
+    paco2 (@no_errors_gen R C) bot2.
+
 
   Lemma sbuter_no_errors {R1 R2} Q (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) p c1 c2 :
     sbuter p Q t c1 s c2 ->

@@ -1,13 +1,15 @@
+(* begin hide *)
 From Heapster Require Import
      Permissions.
 
 From Coq Require Import
      Classes.RelationClasses.
+(* end hide *)
 
 Section step.
-
   Context {config : Type}.
 
+  (** * Preserves separability *)
   Definition sep_step (p q : @perm config) : Prop :=
     forall r, p ⊥ r -> q ⊥ r.
 
@@ -29,6 +31,17 @@ Section step.
   Lemma sep_step_lte' : forall p q, q <= p -> sep_step p q.
   Proof.
     repeat intro. symmetry. eapply separate_antimonotone; eauto. symmetry; auto.
+  Qed.
+
+  Program Definition sym_guar_perm (p : @perm config) : perm :=
+    {|
+    pre x := False;
+    rely := guar p;
+    guar := rely p;
+    |}.
+  Lemma separate_self_sym : forall p, p ⊥ sym_guar_perm p.
+  Proof.
+    intros. split; intros; auto.
   Qed.
 
   Lemma sep_step_rely : forall p q x y, sep_step p q ->

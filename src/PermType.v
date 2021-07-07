@@ -1,3 +1,4 @@
+(* begin hide *)
 From Coq Require Import
      Classes.Morphisms
      Relations.Relation_Operators
@@ -6,8 +7,9 @@ From Coq Require Import
      Arith.PeanoNat
      Logic.FunctionalExtensionality.
 
-Require Import ExtLib.Structures.Monads.
-Require Import ExtLib.Data.Monads.OptionMonad.
+From ExtLib Require Import
+     Structures.Monads
+     Data.Monads.OptionMonad.
 
 From Heapster Require Import
      Utils
@@ -33,10 +35,13 @@ From Paco Require Import
      paco.
 
 Import MonadNotation.
+(* end hide *)
 
 Section permType.
   Context (Si Ss:Type).
   Context `{Lens Si memory}.
+
+  (** * Permission types *)
 
   Record PermType (A B:Type) : Type :=
     { ptApp : A -> B -> @Perms(Si*Ss) }.
@@ -47,9 +52,25 @@ Section permType.
     {| ptApp:= fun ai abs => ai :: T ▷ abs * P|}.
   Notation "T ∅ P" := (withPerms T P) (at level 40).
 
-  Definition starPT {Ai As Bs} (T:PermType Ai As) (U:PermType Ai Bs)
+  Definition plusPT {A1 A2 B1 B2}
+             (T1:PermType A1 B1) (T2:PermType A2 B2) : PermType (A1+A2) (B1+B2) :=
+    {| ptApp := fun eithA eithB =>
+                  match (eithA,eithB) with
+                  | (inl a1, inl b1) => a1 :: T1 ▷ b1
+                  | (inr a2, inr b2) => a2 :: T2 ▷ b2
+                  | _ => top_Perms
+                  end |}.
+  Notation "T1 ⊕ T2" := (plusPT T1 T2) (at level 50).
+
+  Definition timesPT {A1 A2 B1 B2}
+             (T1:PermType A1 B1) (T2:PermType A2 B2) : PermType (A1*A2) (B1*B2) :=
+    {| ptApp := fun a12 b12 =>  fst a12 :: T1 ▷ fst b12 * snd a12 :: T2 ▷ snd b12 |}.
+  Notation "T1 ⊗ T2" := (timesPT T1 T2) (at level 40).
+
+  Definition starPT {Ai As Bs} (T1:PermType Ai As) (T2:PermType Ai Bs)
     : PermType Ai (As * Bs) :=
-    {| ptApp := fun ai abs => ai :: T ▷ fst abs * ai :: U ▷ snd abs |}.
+    {| ptApp := fun ai abs => ai :: T1 ▷ fst abs * ai :: T2 ▷ snd abs |}.
+  Notation "T1 ⋆ T2" := (starPT T1 T2) (at level 40).
 
   Definition existsPT {Ai As} {Bs:As -> Type}
              (F : forall a, PermType Ai (Bs a)) : PermType Ai (sigT Bs) :=
@@ -60,7 +81,6 @@ Section permType.
              (T2:PermType Ai Bs) : PermType Ai (As + Bs) :=
     {| ptApp := fun ai abs =>
                   sum_rect _ (ptApp _ _ T1 ai) (ptApp _ _ T2 ai) abs |}.
-
 
   Variant RW: Type := R | W.
 
@@ -102,21 +122,6 @@ Section permType.
       |}
     end.
   Notation "'arr' ( rw , o , l , T )":=(arr_perm rw o l T).
-
-  Definition plusPT {A1 A2 B1 B2}
-             (T1:PermType A1 B1) (T2:PermType A2 B2) : PermType (A1+A2) (B1+B2) :=
-    {| ptApp := fun eithA eithB =>
-                  match (eithA,eithB) with
-                  | (inl a1, inl b1) => a1 :: T1 ▷ b1
-                  | (inr a2, inr b2) => a2 :: T2 ▷ b2
-                  | _ => top_Perms
-                  end |}.
-  Notation "T1 +T+ T2" := (plusPT T1 T2) (at level 50).
-
-  Definition timesPT {A1 A2 B1 B2}
-             (T1:PermType A1 B1) (T2:PermType A2 B2) : PermType (A1*A2) (B1*B2) :=
-    {| ptApp := fun a12 b12 =>  fst a12 :: T1 ▷ fst b12 * snd a12 :: T2 ▷ snd b12 |}.
-  Notation "T1 *T* T2" := (timesPT T1 T2) (at level 40).
 
   Program Definition equals_perm {A} (a1 a2 : A): @perm (Si*Ss) := {|
     rely _ _ := True; guar s1 s2 := s1=s2; pre _ := a1=a2; |}.
@@ -368,8 +373,9 @@ End permType.
 
 Notation "P ⊢ ti ⤳ ts ::: U" := (typing P (ptApp _ _ _ _ U) ti ts) (at level 60).
 Notation "xi :: T ▷ xs" := (ptApp _ _ _ _ T xi xs) (at level 35).
-Notation "T1 +T+ T2" := (plusPT _ _ T1 T2) (at level 50).
-Notation "T1 *T* T2" := (timesPT _ _ T1 T2) (at level 40).
+Notation "T1 ⊕ T2" := (plusPT _ _ T1 T2) (at level 50).
+Notation "T1 ⊗ T2" := (timesPT _ _ T1 T2) (at level 40).
+Notation "T1 ⋆ T2" := (starPT _ _ T1 T2) (at level 40).
 Notation "'ex' ( x 'oftype' A ) T" := (existsPT _ _ (As:=A) (fun x => T)) (at level 70).
 Notation "T ∅ P" := (withPerms _ _ T P) (at level 40).
 Notation "'arr' ( rw , o , l , T )" := (arr_perm _ _ rw o l T) (at level 40).

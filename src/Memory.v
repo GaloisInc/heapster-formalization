@@ -1,3 +1,4 @@
+(* begin hide *)
 From Coq Require Import
      Arith.PeanoNat
      Logic.FunctionalExtensionality
@@ -9,12 +10,29 @@ From Heapster Require Import
      Permissions.
 
 Import ListNotations.
+(* end hide *)
 
-(* Memory model *)
+(** * Memory model *)
+(** ** Addresses *)
+(** We use a block-offset address model. *)
 Definition addr : Set := nat * nat.
 
+(** Equality on addresses. *)
 Definition eqb (a b : addr) : bool :=
   Nat.eqb (fst a) (fst b) && Nat.eqb (snd a) (snd b).
+
+Lemma eqb_spec : forall x y, Bool.reflect (x = y) (eqb x y).
+Proof.
+  intros [x1 x2] [y1 y2]. destruct (eqb (x1, x2) (y1, y2)) eqn:?; constructor.
+  - unfold eqb in Heqb. simpl in Heqb. symmetry in Heqb. apply Bool.andb_true_eq in Heqb.
+    destruct Heqb. symmetry in H, H0.
+    apply (Bool.reflect_iff _ _ (Nat.eqb_spec _ _)) in H.
+    apply (Bool.reflect_iff _ _ (Nat.eqb_spec _ _)) in H0. subst. auto.
+  - unfold eqb in Heqb. simpl in Heqb. apply Bool.andb_false_iff in Heqb.
+    destruct Heqb.
+    + intro. inversion H0. subst. rewrite Nat.eqb_refl in H. inversion H.
+    + intro. inversion H0. subst. rewrite Nat.eqb_refl in H. inversion H.
+Qed.
 
 Lemma addr_dec : forall (a b : addr), {a = b} + {a <> b}.
 Proof.
@@ -32,19 +50,7 @@ Proof.
   destruct (Nat.eq_dec b b'); destruct (Nat.eq_dec o o'); subst; auto.
 Qed.
 
-Lemma eqb_spec : forall x y, Bool.reflect (x = y) (eqb x y).
-Proof.
-  intros [x1 x2] [y1 y2]. destruct (eqb (x1, x2) (y1, y2)) eqn:?; constructor.
-  - unfold eqb in Heqb. simpl in Heqb. symmetry in Heqb. apply Bool.andb_true_eq in Heqb.
-    destruct Heqb. symmetry in H, H0.
-    apply (Bool.reflect_iff _ _ (Nat.eqb_spec _ _)) in H.
-    apply (Bool.reflect_iff _ _ (Nat.eqb_spec _ _)) in H0. subst. auto.
-  - unfold eqb in Heqb. simpl in Heqb. apply Bool.andb_false_iff in Heqb.
-    destruct Heqb.
-    + intro. inversion H0. subst. rewrite Nat.eqb_refl in H. inversion H.
-    + intro. inversion H0. subst. rewrite Nat.eqb_refl in H. inversion H.
-Qed.
-
+(** ** Memory definition *)
 Inductive Value :=
 | VNum : nat -> Value
 | VPtr : addr -> Value.
@@ -56,14 +62,15 @@ Variant logical_block :=
 
 Definition memory := list (option logical_block).
 
-(* is the block of ptr allocated and is the offset of ptr within bounds *)
+(** ** Memory operations *)
+(** Whether the block of ptr is allocated and is the offset of ptr within bounds. *)
 Definition allocated (m : memory) (ptr : addr) : bool :=
   match nth_error m (fst ptr) with
   | Some (Some (LBlock size _)) => snd ptr <? size
   | _ => false
   end.
 
-(* read c at memory location ptr. ptr must be a valid location and allocated. *)
+(** Read m at memory location ptr. ptr must be a valid location and allocated. *)
 Definition read (m : memory) (ptr : addr) : option Value :=
   if allocated m ptr
   then match nth_error m (fst ptr) with
@@ -72,8 +79,8 @@ Definition read (m : memory) (ptr : addr) : option Value :=
        end
   else None.
 
-(* returns the size of the block only if ptr has offset 0 *)
-(* note if we used `allocated` here then it doesn't work for size 0 blocks... *)
+(** Returns the size of the block only if ptr has offset 0. *)
+(** Note if we used [allocated] here then it doesn't work for size 0 blocks. *)
 Definition sizeof (m : memory) (ptr : addr) : option nat :=
   if snd ptr =? 0
   then match nth_error m (fst ptr) with
@@ -82,6 +89,7 @@ Definition sizeof (m : memory) (ptr : addr) : option nat :=
        end
   else None.
 
+(** Write v into m at address ptr. *)
 Definition write (m : memory) (ptr : addr) (v : Value) : option memory :=
   if allocated m ptr
   then match nth_error m (fst ptr) with
@@ -96,6 +104,7 @@ Definition write (m : memory) (ptr : addr) (v : Value) : option memory :=
        end
   else None.
 
+(** Properties about memory operations *)
 Lemma allocated_ptr_block m b o :
   allocated m (b, o) = true ->
   b < length m.
@@ -187,7 +196,9 @@ Proof.
   simpl. apply replace_list_index_length; auto.
 Qed.
 
-(* mem_at ptr v creates a memory which is only defined at location ptr *)
+(** ** Helper definitions *)
+(** [mem_at] ptr v creates a memory which is only defined at location ptr. *)
+(** We use this for some sanity checks when we define memory permissions. *)
 Definition mem_at (ptr : addr) (v : Value) : memory :=
   repeat None (fst ptr) ++ [Some (LBlock
                                     (snd ptr + 1)
@@ -195,6 +206,7 @@ Definition mem_at (ptr : addr) (v : Value) : memory :=
                                            then Some v
                                            else None))].
 
+(** Properties about [mem_at]. *)
 Lemma allocated_mem_at ptr v : allocated (mem_at ptr v) ptr = true.
   destruct ptr as [b o]. unfold allocated, mem_at. simpl.
   induction b; simpl; auto. apply Nat.ltb_lt. lia.
@@ -228,11 +240,13 @@ Proof.
   destruct (x =? o); auto.
 Qed.
 
+(** [replace_n] is used later for TODO. *)
 Definition replace_n m b size bytes n : memory :=
   replace_list_index
     m b (Some (LBlock size (fun o => if andb (o <? size) (size - n <=? o)
                                   then None else bytes o))).
 
+(** Properties of [replace_n]. *)
 Lemma replace_n_0 m b size bytes :
   nth_error m b = Some (Some (LBlock size bytes)) ->
   replace_n m b size bytes 0 = m.

@@ -1,3 +1,4 @@
+(* begin hide *)
 From Coq Require Import
      Classes.Morphisms
      Relations.Relation_Operators
@@ -8,8 +9,9 @@ From Coq Require Import
      Logic.FunctionalExtensionality
      Lia.
 
-Require Import ExtLib.Structures.Monads.
-Require Import ExtLib.Data.Monads.OptionMonad.
+From ExtLib Require Import
+     Structures.Monads
+     Data.Monads.OptionMonad.
 
 From Heapster Require Export
      Utils
@@ -37,34 +39,36 @@ From Paco Require Import
 Import MonadNotation.
 Import ITreeNotations.
 Local Open Scope itree_scope.
+(* end hide *)
 
-Context (Si' Ss:Type).
-Definition Si := prod memory Si'.
+Context (Si Ss:Type).
+Context `{Lens Si memory}.
 
-Program Definition lens_memory' : Lens Si memory :=
-  {|
-  lget := fst;
-  lput p c := (c, snd p);
-  |}.
-Next Obligation.
-  destruct a; auto.
+(** * Basic permission connective rules *)
+
+Lemma Weak (A B : Type) P1 P2 (U1 U2 : PermType Si Ss A B) ts ti :
+  P1 ⊨ P2 ->
+  (forall xi xs, xi :: U2 ▷ xs ⊨ xi :: U1 ▷ xs) ->
+  P2 ⊢ ts ⤳ ti ::: U2 ->
+  P1 ⊢ ts ⤳ ti ::: U1.
+Proof.
+  intros. eapply typing_lte; eauto.
 Qed.
-Instance lens_memory : Lens Si memory := lens_memory'.
 
 Lemma ProdI (A1 A2 B1 B2 : Type) xi yi xs ys (T1 : PermType Si Ss A1 B1) (T2 : PermType Si Ss A2 B2) :
-  xi :: T1 ▷ xs * yi :: T2 ▷ ys ⊨ (xi, yi) :: T1 *T* T2 ▷ (xs, ys).
+  xi :: T1 ▷ xs * yi :: T2 ▷ ys ⊨ (xi, yi) :: T1 ⊗ T2 ▷ (xs, ys).
 Proof. reflexivity. Qed.
 
 Lemma ProdE (A1 A2 B1 B2 : Type) xi xs (T1 : PermType Si Ss A1 B1) (T2 : PermType Si Ss A2 B2) :
-  xi :: T1 *T* T2 ▷ xs ⊨ fst xi :: T1 ▷ fst xs * snd xi :: T2 ▷ snd xs.
+  xi :: T1 ⊗ T2 ▷ xs ⊨ fst xi :: T1 ▷ fst xs * snd xi :: T2 ▷ snd xs.
 Proof. reflexivity. Qed.
 
 Lemma SumI1 (A1 A2 B1 B2 : Type) (xi : A1) (xs : B1) (T1 : PermType Si Ss A1 B1) (T2 : PermType Si Ss A2 B2) :
-  xi :: T1 ▷ xs ⊨ inl xi :: T1 +T+ T2 ▷ inl xs.
+  xi :: T1 ▷ xs ⊨ inl xi :: T1 ⊕ T2 ▷ inl xs.
 Proof. reflexivity. Qed.
 
 Lemma SumI2 (A1 A2 B1 B2 : Type) (xi : A2) (xs : B2) (T1 : PermType Si Ss A1 B1) (T2 : PermType Si Ss A2 B2) :
-  xi :: T2 ▷ xs ⊨ inr xi :: T1 +T+ T2 ▷ inr xs.
+  xi :: T2 ▷ xs ⊨ inr xi :: T1 ⊕ T2 ▷ inr xs.
 Proof. reflexivity. Qed.
 
 Lemma SumE (A1 A2 B1 B2 R1 R2 : Type)
@@ -72,7 +76,7 @@ Lemma SumE (A1 A2 B1 B2 R1 R2 : Type)
       (T1 : PermType Si Ss A1 B1) (T2 : PermType Si Ss A2 B2) (P : Perms) (U : PermType Si Ss (A1 + A2) (B1 + B2)) :
   (forall yi ys, P * yi :: T1 ▷ ys ⊢ ti1 yi ⤳ ts1 ys ::: U) ->
   (forall yi ys, P * yi :: T2 ▷ ys ⊢ ti2 yi ⤳ ts2 ys ::: U) ->
-  P * xi :: T1 +T+ T2 ▷ xs ⊢ sum_rect _ ti1 ti2 xi ⤳ sum_rect _ ts1 ts2 xs ::: U.
+  P * xi :: T1 ⊕ T2 ▷ xs ⊢ sum_rect _ ti1 ti2 xi ⤳ sum_rect _ ts1 ts2 xs ::: U.
 Proof.
   intros. simpl.
   destruct xi, xs; simpl; auto;
@@ -80,11 +84,11 @@ Proof.
 Qed.
 
 Lemma StarI (A B1 B2 : Type) xi xs ys (T1 : PermType Si Ss A B1) (T2 : PermType Si Ss A B2) :
-  xi :: T1 ▷ xs * xi :: T2 ▷ ys ⊨ xi :: starPT _ _ T1 T2 ▷ (xs, ys).
+  xi :: T1 ▷ xs * xi :: T2 ▷ ys ⊨ xi :: T1 ⋆ T2 ▷ (xs, ys).
 Proof. reflexivity. Qed.
 
 Lemma StarE (A B1 B2 : Type) xi xs (T1 : PermType Si Ss A B1) (T2 : PermType Si Ss A B2) :
-  xi :: starPT _ _ T1 T2 ▷ xs ⊨ xi :: T1 ▷ fst xs * xi :: T2 ▷ snd xs.
+  xi :: T1 ⋆ T2 ▷ xs ⊨ xi :: T1 ▷ fst xs * xi :: T2 ▷ snd xs.
 Proof. reflexivity. Qed.
 
 Lemma PermsI (A B : Type) (P : Perms) xi xs (T : PermType Si Ss A B) :
@@ -132,7 +136,7 @@ Lemma ExE (A B : Type) (C : B -> Type) (xi : A) (xs : sigT (fun b : B => C b)) (
   xi :: ex (z oftype B) (F z) ▷ xs ⊨ xi :: F (projT1 xs) ▷ (projT2 xs).
 Proof. reflexivity. Qed.
 
-(***********************************************************************)
+(** * Equality rules *)
 
 Lemma EqRefl A P (xi : A) :
   P ⊨ P * xi :: eqp Si Ss xi ▷ tt.
@@ -150,7 +154,7 @@ Qed.
 Lemma EqTrans (A : Type) (xi yi zi : A) :
    xi :: eqp _ _ yi ▷ tt * yi :: eqp _ _ zi ▷ tt ⊨ xi :: eqp Si Ss zi ▷ tt.
 Proof.
-  repeat intro. destruct H as (? & ? & ? & ? & ?). simpl in *; subst. reflexivity.
+  repeat intro. destruct H0 as (? & ? & ? & ? & ?). simpl in *; subst. reflexivity.
 Qed.
 
 Lemma EqCtx (A B : Type) (xi yi : A) (f : A -> B) :
@@ -169,15 +173,13 @@ Qed.
 Lemma Cast (A B : Type) (P : PermType Si Ss A B) xi yi xs ys :
   xi :: eqp _ _ yi ▷ xs * yi :: P ▷ ys ⊨ xi :: P ▷ ys.
 Proof.
-  repeat intro. destruct H as (e & p' & Heq & Hp & Hlte).
+  repeat intro. destruct H0 as (e & p' & Heq & Hp & Hlte).
   simpl in Heq. subst.
   eapply Perms_upwards_closed; eauto. etransitivity. apply lte_r_sep_conj_perm. eauto.
 Qed.
 
-(***********************************************************************)
-
-
-(* TODO name conflicts with ITree Ret *)
+(** * Instruction rules *)
+(** Name conflicts with ITree Ret. *)
 Lemma Ret_ (A B : Type) xi xs (T : PermType Si Ss A B) :
   xi :: T ▷ xs ⊢ Ret xi ⤳ Ret xs ::: T.
 Proof.
@@ -199,13 +201,13 @@ Proof.
 Qed.
 
 Lemma Iter (A B C D : Type) (T : PermType Si Ss C D) xi xs fi fs (U : PermType Si Ss A B) :
-  (forall yi ys, yi :: T ▷ ys ⊢ fi yi ⤳ fs ys ::: T +T+ U) ->
+  (forall yi ys, yi :: T ▷ ys ⊢ fi yi ⤳ fs ys ::: T ⊕ U) ->
   xi :: T ▷ xs ⊢ iter fi xi ⤳ iter fs xs ::: U.
 Proof.
   revert xi xs fi fs U. pcofix CIH. intros.
   do 2 rewritebisim @unfold_iter_ktree.
   eapply sbuter_bind; eauto.
-  - apply H0; auto.
+  - apply H1; auto.
   - simpl. intros. destruct r1, r2; try contradiction.
     + repeat intro. pstep. constructor 5; eauto.
     + pstep. constructor; auto.
@@ -216,11 +218,11 @@ Lemma If (A B : Type) P ti1 ti2 ts1 ts2 (xi yi : bool) xs (U : PermType Si Ss A 
   P ⊢ ti2 ⤳ ts2 ::: U ->
   P * xi :: eqp _ _ yi ▷ xs ⊢ if xi then ti1 else ti2 ⤳ if yi then ts1 else ts2 ::: U.
 Proof.
-  repeat intro. destruct H1 as (? & ? & ? & ? & ?); simpl in *; subst.
+  repeat intro. destruct H2 as (? & ? & ? & ? & ?); simpl in *; subst.
   destruct xi.
-  - apply H; auto. eapply Perms_upwards_closed; eauto.
-    etransitivity; eauto. apply lte_l_sep_conj_perm.
   - apply H0; auto. eapply Perms_upwards_closed; eauto.
+    etransitivity; eauto. apply lte_l_sep_conj_perm.
+  - apply H1; auto. eapply Perms_upwards_closed; eauto.
     etransitivity; eauto. apply lte_l_sep_conj_perm.
 Qed.
 
@@ -230,16 +232,7 @@ Proof.
   repeat intro. pstep. constructor.
 Qed.
 
-Lemma Weak (A B : Type) P1 P2 (U1 U2 : PermType Si Ss A B) ts ti :
-  P1 ⊨ P2 ->
-  (forall xi xs, xi :: U2 ▷ xs ⊨ xi :: U1 ▷ xs) ->
-  P2 ⊢ ts ⤳ ti ::: U2 ->
-  P1 ⊢ ts ⤳ ti ::: U1.
-Proof.
-  intros. eapply typing_lte; eauto.
-Qed.
-
-(***********************************************************************)
+(** * Example 1 *)
 
 Definition ex1i xi : itree (sceE Si) Value :=
   x <- getNum xi;;
@@ -270,7 +263,7 @@ Proof.
   apply Ret_.
 Qed.
 
-(***********************************************************************)
+(** * Pointer rules *)
 
 Lemma PtrI A xi yi xs ys rw o (T : VPermType Si Ss A) :
   xi :: ptr _ _ (rw, o, eqp Si Ss yi) ▷ xs * yi :: T ▷ ys ⊨ xi :: ptr _ _ (rw, o, T) ▷ ys.
@@ -278,7 +271,7 @@ Proof.
   destruct xi; simpl.
   - rewrite sep_conj_Perms_top_absorb. reflexivity.
   - repeat intro. destruct a. rename p into p'.
-    destruct H as (p & t & (P & (v & ?) & Hp) & Hp' & Hlte). subst.
+    destruct H0 as (p & t & (P & (v & ?) & Hp) & Hp' & Hlte). subst.
     destruct Hp as (? & ? & ? & ? & ?). simpl in *. subst.
     eexists. split; [exists v; reflexivity |].
     eapply Perms_upwards_closed; eauto.
@@ -291,11 +284,11 @@ Lemma PtrE A B C (P : Perms) rw o (T : VPermType Si Ss A) (xi : Value) xs ti ts 
   (forall yi, P * xi :: ptr _ _ (rw, o, eqp Si Ss yi) ▷ tt * yi :: T ▷ xs ⊢ ti ⤳ ts ::: U) ->
   P * xi :: ptr _ _ (rw, o, T) ▷ xs ⊢ ti ⤳ ts ::: U.
 Proof.
-  repeat intro. rename p into p''. destruct H0 as (p & p' & Hp & Hptr & Hlte).
+  repeat intro. rename p into p''. destruct H1 as (p & p' & Hp & Hptr & Hlte).
   destruct xi; [contradiction | destruct a].
   destruct Hptr as (? & (? & ?) & ?). subst.
-  destruct H2 as (pptr & pt & Hptr & Hpt & Hlte').
-  eapply H; eauto. exists (p ** pptr), pt.
+  destruct H3 as (pptr & pt & Hptr & Hpt & Hlte').
+  eapply H0; eauto. exists (p ** pptr), pt.
   split; [| split]; eauto.
   - do 2 eexists. split; [| split]; eauto. 2: reflexivity. eexists.
     split; eauto.
@@ -311,9 +304,9 @@ Lemma ReadDup o xi yi :
 Proof.
   repeat intro. simpl in *. destruct xi; [contradiction |].
   destruct a as [b o']. unfold offset in *.
-  destruct H as (? & (v & ?) & ?). subst.
+  destruct H0 as (? & (v & ?) & ?). subst.
   exists (read_perm (b, o' + o) v), (read_perm (b, o' + o) v).
-  destruct H0 as (pread & peq & Hpread & Hpeq & Hlte).
+  destruct H1 as (pread & peq & Hpread & Hpeq & Hlte).
   simpl in Hpread, Hpeq. subst.
   assert (read_perm (b, o' + o) v ∈ ptr_Perms _ _ R (VPtr (b, o' + o)) tt (eqp Si Ss v)).
   {
@@ -325,10 +318,10 @@ Proof.
   split; [| split]; auto.
   constructor; intros; eauto.
   - split; [| split]; auto. 1, 2: apply Hpread; apply Hlte; auto.
-    split; intros; auto; destruct x0, y; simpl in H1; subst; reflexivity.
+    split; intros; auto; destruct x0, y; simpl in H2; subst; reflexivity.
   - split; apply Hpread; apply Hlte; auto.
-  - apply Hlte. constructor. left. apply Hpread. induction H0; auto.
-    + destruct H0; auto.
+  - apply Hlte. constructor. left. apply Hpread. induction H1; auto.
+    + destruct H1; auto.
     + etransitivity; eauto.
 Qed.
 
@@ -337,7 +330,7 @@ Lemma PtrOff A xi xs rw o1 o2 (T : VPermType Si Ss A) :
   xi :: ptr _ _ (rw, o1, T) ▷ xs ⊨ offset xi o2 :: ptr _ _ (rw, o1 - o2, T) ▷ xs.
 Proof.
   destruct xi; [reflexivity | destruct a].
-  intros. simpl. rewrite <- Nat.add_assoc. rewrite (Minus.le_plus_minus_r _ _ H).
+  intros. simpl. rewrite <- Nat.add_assoc. rewrite (Minus.le_plus_minus_r _ _ H0).
   reflexivity.
 Qed.
 Lemma PtrOff' A xi xs rw o1 o2 (T : VPermType Si Ss A) :
@@ -345,7 +338,7 @@ Lemma PtrOff' A xi xs rw o1 o2 (T : VPermType Si Ss A) :
   offset xi o2 :: ptr _ _ (rw, o1 - o2, T) ▷ xs ⊨ xi :: ptr _ _ (rw, o1, T) ▷ xs.
 Proof.
   destruct xi; [reflexivity | destruct a].
-  intros. simpl. rewrite <- Nat.add_assoc. rewrite (Minus.le_plus_minus_r _ _ H).
+  intros. simpl. rewrite <- Nat.add_assoc. rewrite (Minus.le_plus_minus_r _ _ H0).
   reflexivity.
 Qed.
 
@@ -358,15 +351,15 @@ Proof.
   repeat intro. pstep. unfold load. rewritebisim @bind_trigger.
   econstructor; eauto; try reflexivity.
   destruct xi as [? | [b o]]; try contradiction.
-  simpl in H. unfold ptr_Perms in H.
-  destruct H as (? & (v & ?) & ?); subst.
-  destruct H1 as (? & ? & ? & ? & ?). simpl in H, H1. subst.
+  simpl in H0. unfold ptr_Perms in H0.
+  destruct H0 as (? & (v & ?) & ?); subst.
+  destruct H2 as (? & ? & ? & ? & ?). simpl in H0, H2. subst.
   assert (read (lget c1) (b, o) = Some v).
   {
-    apply H2 in H0. destruct H0 as (? & _). apply H in H0.
-    rewrite Nat.add_0_r in H0. destruct rw; auto.
+    apply H3 in H1. destruct H1 as (? & _).
+    rewrite Nat.add_0_r in H0. apply H0 in H1. destruct rw; auto.
   }
-  rewrite H1. constructor; auto.
+  rewrite H2. constructor; auto.
   (* TODO: these exists are kind of weird *)
   simpl. exists bottom_perm, x. split; [| split]; eauto. eexists. split; eauto.
   simpl. exists x, bottom_perm. split; [| split]; eauto.
@@ -383,8 +376,8 @@ Lemma Store A xi yi xs (P : VPermType Si Ss A) :
 Proof.
   repeat intro. pstep. unfold store. destruct xi as [| [b o]]; try contradiction.
   rewritebisim @bind_trigger.
-  rename p into p'. rename H0 into Hpre.
-  destruct H as (? & (v & ?) & Hwrite); subst.
+  rename p into p'. rename H1 into Hpre.
+  destruct H0 as (? & (v & ?) & Hwrite); subst.
   destruct Hwrite as (pw & p & Hwritelte & Hp & Hlte).
   rewrite Nat.add_0_r in Hwritelte.
   assert (exists val, read (lget c1) (b, o) = Some val).
@@ -393,12 +386,12 @@ Proof.
     apply Hwritelte in Hpre. eexists.
     symmetry. apply Hpre.
   }
-  destruct H as (val & Hread). eapply (read_success_write _ _ _ yi) in Hread.
+  destruct H0 as (val & Hread). eapply (read_success_write _ _ _ yi) in Hread.
   destruct Hread as (c' & Hwrite).
   assert (Hguar : guar p' (c1, c2) ((lput c1 c'), c2)).
   {
     apply Hlte. constructor 1. left. apply Hwritelte. simpl.
-    split; [| split].
+    split; [| split]; rewrite lGetPut.
     + eapply write_success_read_neq; eauto.
     + eapply write_success_sizeof; eauto.
     + eapply write_success_length; eauto.
@@ -442,7 +435,7 @@ Proof.
   repeat intro. pstep. simpl in *. subst. constructor; simpl; auto.
 Qed.
 
-(***********************************************************************)
+(** * Example 2 *)
 
 Definition ex2i xi yi : itree (sceE Si) Si :=
   x <- load xi;;
@@ -514,14 +507,15 @@ Proof.
   - apply Frame. apply Frame. apply Store.
 Qed.
 
-(***********************************************************************)
+(** * Array rules *)
 
+(** Some helper lemmas? TODO *)
 Fixpoint split_leq {A} l1 (v:Vector.t A l1) :
   forall l2, le l2 l1 -> (Vector.t A l2 * Vector.t A (l1 - l2)).
 Proof.
   destruct v; intros; destruct l2.
   - split; apply Vector.nil.
-  - elimtype False; inversion H.
+  - elimtype False; inversion H0.
   - split; [ apply Vector.nil | apply Vector.cons; assumption ].
   - edestruct (split_leq _ n v l2) as [v1 v2].
     + apply le_S_n; assumption.
@@ -588,7 +582,7 @@ Proof.
   - rewrite <- (split_leq_append_leq _ l1 xs l2 l).
     rewrite ArrCombine_eq. repeat rewrite split_leq_append_leq.
     rewrite sep_conj_Perms_assoc.
-    apply H.
+    apply H0.
   - apply Err.
 Qed.
 
@@ -608,13 +602,13 @@ Lemma ArrCombine A xi rw o l1 l2 xs1 xs2 (P : VPermType Si Ss A) :
   xi :: arr (rw, o, l1, P) ▷ xs1 * xi :: arr (rw, o + l1, l2, P) ▷ xs2 ⊨
   xi :: arr (rw, o, l1 + l2, P) ▷ Vector.append xs1 xs2 .
 Proof.
-  repeat intro. destruct H as (p1 & p2 & Hp1 & Hp2 & Hlte).
+  repeat intro. destruct H0 as (p1 & p2 & Hp1 & Hp2 & Hlte).
   revert Hp1 Hp2. revert o xi l2 xs2. revert Hlte. revert p p1 p2. induction l1; intros.
   - rewrite Nat.add_0_r in Hp2. simpl in *. revert xs1. apply Vector.case0. simpl.
     eapply Perms_upwards_closed; eauto. etransitivity; [apply lte_r_sep_conj_perm |]; eauto.
   - simpl. destruct Hp1 as (? & ? & ? & ? & ?).
     do 2 eexists. split; [| split].
-    + rewrite vector_hd_append. apply H.
+    + rewrite vector_hd_append. apply H0.
     + rewrite vector_tl_append. eapply IHl1. reflexivity.
       * eapply Perms_upwards_closed; eauto. reflexivity.
       * simpl. rewrite <- plus_n_Sm in Hp2. eauto.
@@ -634,82 +628,6 @@ Proof.
   simpl. rewrite sep_conj_Perms_commut. rewrite sep_conj_Perms_bottom_identity. reflexivity.
 Qed.
 
-(***********************************************************************)
-
-Lemma MuFold A G X `{FixedPoint G X} (F:PermType Si Ss A X -> PermType Si Ss A (G X))
-      {prp:Proper (lte_PermType _ _ ==> lte_PermType _ _) F}
-      xi xs :
-  xi :: F (mu _ _ F) ▷ xs ⊨ xi :: mu _ _ F ▷ foldFP xs.
-Proof.
-  (* FIXME: why can't we just rewrite with mu_fixed_point here? *)
-  eapply Proper_eq_Perms_lte_Perms; [ | reflexivity | ].
-  - apply Proper_eq_PermType_ptApp; [ apply mu_fixed_point | | ]; reflexivity.
-  - simpl. rewrite foldUnfold. reflexivity.
-Qed.
-
-Lemma MuUnfold A G X `{FixedPoint G X} (F:PermType Si Ss A X -> PermType Si Ss A (G X))
-      {prp:Proper (lte_PermType _ _ ==> lte_PermType _ _) F}
-      xi xs :
-   xi :: mu _ _ F ▷ xs ⊨ xi :: F (mu _ _ F) ▷ unfoldFP xs.
-Proof.
-  eapply Proper_eq_Perms_lte_Perms; [ reflexivity | | ].
-  - apply Proper_eq_PermType_ptApp; [ apply mu_fixed_point | | ]; reflexivity.
-  - simpl. reflexivity.
-Qed.
-
-(* Program Definition list_reach_perm r rw A (T : VPermType Si Ss A) : VPermType Si Ss (list A) := *)
-(*   @mu _ _ _ (mu_list A) _ (fixed_point_list _) *)
-(*       (fun U => or _ _ (eqp Si Ss r) (starPT _ _ (ptr _ _ (rw, 0, T)) (ptr _ _ (rw, 1, U)))) _. *)
-(* Next Obligation. *)
-(*   repeat intro. simpl. induction b; simpl in *; auto. *)
-(*   destruct H0 as (? & ? & ? & ? & ?). exists x0, x1. split; [| split]; auto. *)
-(*   clear H0. unfold ptr_Perms in *. destruct (offset a 1); auto. *)
-(*   destruct H1. destruct H0. destruct H0. subst. destruct H1 as (? & ? & ? & ? & ?). *)
-(*   eexists. split; eauto. do 2 eexists. split; eauto. split; eauto. apply H. auto. *)
-(* Qed. *)
-
-Lemma ReflR {A} x rw o (T : VPermType Si Ss A) :
-  x :: trueP _ _ ▷ tt ⊨ x :: reach_perm _ _ x rw o T ▷ nil.
-Proof.
-  repeat intro. apply mu_fixed_point. reflexivity.
-Qed.
-
-Lemma TransR {A} x y z rw o (T : VPermType Si Ss A) xs ys :
-  x :: reach_perm _ _ y rw o T ▷ xs * y :: reach_perm _ _ z rw o T ▷ ys ⊨
-  x :: reach_perm _ _ z rw o T ▷ (xs ++ ys).
-Proof.
-  revert x.
-  induction xs.
-  - intros x p (p1 & p2 & Hp1 & Hp2 & Hlte).
-    destruct Hp1 as (? & (U & HU & ?) & Hp1); subst.
-    apply HU in Hp1. simpl in Hp1. subst. eapply Perms_upwards_closed; eauto.
-    etransitivity; eauto. apply lte_r_sep_conj_perm.
-  - intros x p (px' & py & Hpx' & Hpy & Hlte).
-    eapply mu_fixed_point in Hpx'.
-    destruct Hpx' as (pa & px & Hpa & Hpx & Hlte').
-    (* x must be a pointer *)
-    destruct x; try contradiction. destruct a0 as [b o'].
-    destruct Hpx as (? & (v & ?) & Hpx); subst.
-    destruct Hpx as (px'' & pv & Hpx'' & Hpv & Hlte'').
-
-    apply mu_fixed_point.
-    simpl.
-    exists pa. exists (px'' ** (pv ** py)). split; [apply Hpa | split].
-    2: { repeat rewrite <- sep_conj_perm_assoc.
-         etransitivity; eauto.
-         eapply sep_conj_perm_monotone; intuition.
-         repeat rewrite sep_conj_perm_assoc.
-         etransitivity; eauto.
-         eapply sep_conj_perm_monotone; intuition.
-    }
-    eexists; split; [eexists; reflexivity |].
-    apply sep_conj_Perms_perm; [apply Hpx'' |].
-    simpl. exists (v :: reach_perm _ _ z rw o T ▷ (xs ++ ys)). split.
-    2: { apply IHxs. apply sep_conj_Perms_perm; auto. }
-    eexists; split; eauto.
-    repeat intro. eapply mu_fixed_point in H; auto.
-    Unshelve. all: apply reach_perm_proper.
-Qed.
 
 Lemma arr_offset {A} ptr rw o l (T : VPermType Si Ss A) (v : Vector.t A l) :
   VPtr ptr :: arr (rw, o, l, T) ▷ v ≡ offset (VPtr ptr) o :: arr (rw, 0, l, T) ▷ v.
@@ -741,10 +659,10 @@ Proof.
   constructor.
   - intros []; induction n; simpl; auto.
   - intros [] [] [] ? ?. induction n.
-    + split; [| split]; try solve [etransitivity; [apply H | apply H0]].
-      intros; split; (etransitivity; [apply H | apply H0]); auto.
-    + split; try solve [etransitivity; [apply H | apply H0]].
-      apply IHn; [apply H | apply H0].
+    + split; [| split]; try solve [etransitivity; [apply H0 | apply H1]].
+      intros; split; (etransitivity; [apply H0 | apply H1]); auto.
+    + split; try solve [etransitivity; [apply H0 | apply H1]].
+      apply IHn; [apply H0 | apply H1].
 Qed.
 
 Fixpoint guar_post_malloc n b size x y : Prop :=
@@ -784,7 +702,7 @@ Proof.
     + apply IHn; auto. intros. apply Hread; auto. lia.
     + apply IHn; auto. intros. apply Hread; auto. lia.
     + intros. assert (size - S (S n) = o \/ (size - S n <= o)%nat) by lia.
-      destruct H1.
+      destruct H2.
       * subst. rewrite <- Hread'. auto.
       * apply IHn; auto. intros. apply Hread; auto. lia.
 Qed.
@@ -806,13 +724,13 @@ Lemma guar_malloc_post_malloc n b size x y :
   guar_post_malloc n b (S size) x y -> guar (malloc_perm b) x y.
 Proof.
   revert x y. induction n; intros.
-  - induction H; try solve [etransitivity; eauto]. destruct H.
+  - induction H0; try solve [etransitivity; eauto]. destruct H0.
     + destruct x, y. simpl in *. subst; auto.
-    + destruct x, y. split; apply H; lia.
-  - induction H; auto.
-    + destruct H.
-      * destruct x, y. destruct H as (? & ? & ?). split; auto.
-        apply H. destruct ptr. intro. inversion H3. simpl in *. lia.
+    + destruct x, y. split; apply H0; lia.
+  - induction H0; auto.
+    + destruct H0.
+      * destruct x, y. destruct H0 as (? & ? & ?). split; auto.
+        apply H0. destruct ptr. intro. inversion H4. simpl in *. lia.
       * apply IHn; auto.
     + etransitivity; eauto.
 Qed.
@@ -821,11 +739,11 @@ Lemma rely_malloc_post_malloc n b size x y :
   rely (malloc_perm b) x y -> rely_post_malloc n b (S size) x y.
 Proof.
   destruct x, y. induction n; intros.
-  - destruct H as (Hlen & Hptr).
+  - destruct H0 as (Hlen & Hptr).
     split; [| split]; simpl; auto.
     + apply Hptr; simpl; auto.
     + intros. apply Hptr; lia.
-  - split; auto. simpl in *. apply H. auto.
+  - split; auto. simpl in *. apply H0. auto.
 Qed.
 
 Lemma sep_step_malloc n b size : sep_step (malloc_perm b)
@@ -842,22 +760,22 @@ Lemma write_post_malloc_perm m n size b
   write_perm (b, size - m) (VNum 0) ⊥ post_malloc_perm n b size.
 Proof.
   constructor; auto; intros.
-  - revert H. revert x y. induction n; intros.
-    + induction H; try solve [etransitivity; eauto].
-      destruct H; [| induction H; try solve [etransitivity; eauto]; destruct H].
-      * eapply write_write_sep; eauto. intro. inversion H0. lia.
+  - revert H0. revert x y. induction n; intros.
+    + induction H0; try solve [etransitivity; eauto].
+      destruct H0; [| induction H0; try solve [etransitivity; eauto]; destruct H0].
+      * eapply write_write_sep; eauto. intro. inversion H1. lia.
       * eapply write_block; eauto.
-      * eapply malloc_write; eauto. rewrite Nat.add_1_r in H. auto.
-    + induction H; try solve [etransitivity; eauto].
-      destruct H. 2: apply IHn; auto; lia.
-      eapply write_write_sep; eauto. intro. inversion H0. lia.
-  - revert H. revert x y. induction n; intros.
-    + destruct x, y. split; [| split; [| split; [| split]]]; simpl in *; try apply H.
-      * intro. inversion H0. lia.
-      * destruct ptr. intro. simpl in *. inversion H1. lia.
-    + destruct x, y. simpl in H. split; [| split]; simpl; try apply H.
-      * intro. inversion H0. lia.
-      * intro. inversion H0. lia.
+      * eapply malloc_write; eauto. rewrite Nat.add_1_r in H0. auto.
+    + induction H0; try solve [etransitivity; eauto].
+      destruct H0. 2: apply IHn; auto; lia.
+      eapply write_write_sep; eauto. intro. inversion H1. lia.
+  - revert H0. revert x y. induction n; intros.
+    + destruct x, y. split; [| split; [| split; [| split]]]; simpl in *; try apply H0.
+      * intro. inversion H1. lia.
+      * destruct ptr. intro. simpl in *. inversion H2. lia.
+    + destruct x, y. simpl in H0. split; [| split]; simpl; try apply H0.
+      * intro. inversion H1. lia.
+      * intro. inversion H1. lia.
       * apply IHn. lia. auto.
 Qed.
 
@@ -909,12 +827,12 @@ Proof.
     specialize (IHn (Vector.tl xs) Hn').
     rewrite Nat.add_0_r in *.
     destruct IHn as (? & ? & ? & ? & ?).
-    destruct H as (? & ? & ? & ? & ?).
-    destruct H as (? & ? & ? & ? & ?).
+    destruct H0 as (? & ? & ? & ? & ?).
+    destruct H0 as (? & ? & ? & ? & ?).
     exists (write_perm (b, size - S n) (VNum 0) ** x).
     eexists. split; [| split]; eauto.
     {
-      exists (write_perm (b, size - S n) (VNum 0) ** x1). eexists. split; [| split]. 2: apply H2.
+      exists (write_perm (b, size - S n) (VNum 0) ** x1). eexists. split; [| split]. 2: apply H3.
       2: { rewrite sep_conj_perm_assoc. apply sep_conj_perm_monotone; auto. reflexivity. }
       do 2 eexists. split; [| split].
       - eexists. split. exists (VNum 0). reflexivity.
@@ -935,7 +853,7 @@ Lemma Malloc xi xs size :
   xi :: eqp _ _ (S size) ▷ xs * malloc_Perms ⊢
   malloc xi ⤳
   Ret (Vector.const tt (S size), tt) :::
-  starPT _ _ (arr (W, 0, S size, trueP Si Ss)) (blockPT _ _ (S size)) ∅ malloc_Perms.
+  (arr (W, 0, S size, trueP Si Ss)) ⋆ (blockPT _ _ (S size)) ∅ malloc_Perms.
 Proof.
   intros p si ss Hp Hpre. pstep. unfold malloc.
   destruct Hp as (peq & pmalloc & Heq & Hpmalloc & Hlte). simpl in Heq. subst.
@@ -947,9 +865,9 @@ Proof.
   { apply Hlte in Hpre. destruct Hpre as (_ & Hpre & _).
     apply Hpmalloc in Hpre. apply Hlte. constructor 1. right. apply Hpmalloc.
     simpl in *.
-    intros ptr Hb. split.
-    - unfold read, allocated. simpl. subst. rewrite nth_error_app_early; auto.
-    - unfold sizeof. simpl. subst. rewrite nth_error_app_early; auto.
+    intros ptr Hb. split; rewrite lGetPut.
+    - unfold read, allocated. subst. rewrite nth_error_app_early; auto.
+    - unfold sizeof. subst. rewrite nth_error_app_early; auto.
   }
   (* return *)
   { eapply sep_step_lte. etransitivity. 2: apply Hlte.
@@ -959,13 +877,13 @@ Proof.
   { apply Hlte in Hpre. destruct Hpre as (_ & Hpre & Hlte').
     apply Hpmalloc in Hpre. simpl in Hpre.
     constructor.
-    - simpl. split; [| split].
+    - simpl. split; [| split]; rewrite lGetPut.
       + rewrite last_length. lia.
       + unfold sizeof. simpl.
         rewrite nth_error_app_last; auto.
       + intros. unfold read, allocated. simpl. rewrite nth_error_app_last; auto.
-        rewrite (Bool.reflect_iff _ _ (Nat.ltb_spec0 _ _)) in H. rewrite H. auto.
-    - unfold "∅", starPT, ptApp.
+        rewrite (Bool.reflect_iff _ _ (Nat.ltb_spec0 _ _)) in H0. rewrite H0. auto.
+    - unfold "∅", "⋆", ptApp.
       setoid_rewrite Hpre.
       replace 0 with (size - size) at 2. 2: lia.
       apply post_malloc_perm_ok; auto.
@@ -987,11 +905,13 @@ Lemma combined_arr_guar {A} p parr b len n bytes (v : Vector.t A n) (si : Si) (s
 Proof.
   revert Hlte Hparr Hblock Hb Hn. revert b parr v. revert n.
   induction n; intros.
-  - apply Hlte. subst si'. simpl in *. rewrite replace_n_0; auto. destruct si. reflexivity.
+  - apply Hlte. subst si'. simpl in *.
+    rewrite replace_n_0; auto. rewrite lPutGet. reflexivity.
   - destruct Hparr as (pptr & parr' & Hpptr & Hparr' & Hlte').
     etransitivity.
     {
-      eapply IHn; try lia. 2: { simpl in Hparr'. rewrite Nat.sub_succ_l. eauto. lia. }
+      eapply IHn; try lia; try rewrite lGetPut.
+      2: { simpl in Hparr'. rewrite Nat.sub_succ_l. eauto. lia. }
       - etransitivity; eauto. etransitivity; eauto. apply lte_r_sep_conj_perm.
       - simpl. auto.
       - lia.
@@ -1005,12 +925,12 @@ Proof.
       destruct Hpptr as (pwrite & p' & Hpwrite & _ & Hlte'').
       apply Hlte''. constructor 1. left.
       apply Hpwrite. simpl.
-      split; [| split]; auto.
+      split; [| split]; auto; repeat rewrite lGetPut in *.
       - intros. destruct (Nat.eq_dec b (fst ptr')).
-        2: { pose proof read_replace_n_neq. simpl in H3. repeat rewrite <- H3; auto. }
+        2: { pose proof read_replace_n_neq. simpl in H3. repeat rewrite <- H4; auto. }
         subst. destruct ptr' as [b o]. simpl in *.
         assert (Hneq: len - n <> o).
-        { apply addr_neq_cases in H2. destruct H2; auto. }
+        { apply addr_neq_cases in H3. destruct H3; auto. }
         unfold replace_n, read, allocated. simpl.
         repeat rewrite nth_error_replace_list_index_eq; auto.
         destruct (o <? S len) eqn:?; auto.
@@ -1018,21 +938,21 @@ Proof.
         destruct (S len - n <=? o) eqn:?.
         + pose proof Heqb1.
           assert (Himpl: (S len - n <= o -> len - n <= o)%nat) by lia.
-          rewrite <- (Bool.reflect_iff _ _ (Nat.leb_spec0 _ _)) in H3. apply Himpl in H3.
-          rewrite (Bool.reflect_iff _ _ (Nat.leb_spec0 _ _)) in H3.
-          rewrite H3. simpl in Heqb1. rewrite Heqb1. auto.
+          rewrite <- (Bool.reflect_iff _ _ (Nat.leb_spec0 _ _)) in H4. apply Himpl in H4.
+          rewrite (Bool.reflect_iff _ _ (Nat.leb_spec0 _ _)) in H4.
+          rewrite H4. simpl in Heqb1. rewrite Heqb1. auto.
         + pose proof Heqb1.
           simpl in Heqb1. rewrite Heqb1.
-          apply Nat.leb_gt in H3.
+          apply Nat.leb_gt in H4.
           assert (len - n > o) by lia.
-          apply leb_correct_conv in H4. rewrite H4. auto.
-      - intros. pose proof sizeof_replace_n. simpl in H2. rewrite <- H2; auto.
+          apply leb_correct_conv in H5. rewrite H5. auto.
+      - intros. pose proof sizeof_replace_n. simpl in H3. rewrite <- H3; auto.
       - unfold replace_n. erewrite <- replace_list_index_length; eauto.
     }
 Qed.
 
 Lemma Free {A} xi len (xs : Vector.t A (S len) * unit) :
-  xi :: starPT _ _ (arr (W, 0, (S len), trueP Si Ss)) (blockPT _ _ (S len)) ▷ xs ⊢
+  xi :: (arr (W, 0, (S len), trueP Si Ss)) ⋆ (blockPT _ _ (S len)) ▷ xs ⊢
   free xi ⤳
   Ret tt :::
   trueP _ _.
@@ -1052,22 +972,100 @@ Proof.
   destruct Hpre' as (Hprewrite & Hpreblock & Hsep).
   apply Hpblock in Hpreblock. simpl in Hpreblock.
   unfold sizeof in Hpreblock. rewrite Hoffset in Hpreblock. simpl in Hpreblock.
-  destruct (nth_error (fst si) (fst ptr)) eqn:?; try solve [inversion Hpreblock].
+  unfold memory in *.
+  destruct (nth_error (lget si) (fst ptr)) eqn:?; try solve [inversion Hpreblock].
   destruct o; try solve [inversion Hpreblock].
   destruct l. inversion Hpreblock; clear Hpreblock; subst.
   (* write step *)
   rewritebisim @bind_trigger. unfold id. econstructor; auto.
   - apply Hlte. constructor 1. left.
-    assert (Hb: fst ptr < length (fst si)).
-    { apply nth_error_Some. intro. rewrite H in Heqo. inversion Heqo. }
-    simpl. erewrite replace_n_same.
-    eapply combined_arr_guar; eauto; try reflexivity.
+    assert (Hb: fst ptr < length (lget si)).
+    { apply nth_error_Some. intro. rewrite H0 in Heqo. inversion Heqo. }
+    erewrite replace_n_same.
+    eapply combined_arr_guar; eauto; try reflexivity; try rewrite lGetPut.
     + destruct ptr. simpl in Hoffset. subst. rewrite Nat.sub_diag. apply Hparr.
-    + intros. erewrite read_replace_n_neq; eauto. simpl. reflexivity.
-    + intros. rewrite lGetPut. erewrite sizeof_replace_n; eauto.
+    + intros. erewrite read_replace_n_neq; eauto.
+    + intros. erewrite sizeof_replace_n; eauto.
     + apply replace_list_index_length; auto.
   - apply sep_step_lte'. apply bottom_perm_is_bottom.
   - constructor; simpl; auto.
+Qed.
+
+(** * Recursive and reachability rules *)
+
+Lemma MuFold A G X `{FixedPoint G X} (F:PermType Si Ss A X -> PermType Si Ss A (G X))
+      {prp:Proper (lte_PermType _ _ ==> lte_PermType _ _) F}
+      xi xs :
+  xi :: F (mu _ _ F) ▷ xs ⊨ xi :: mu _ _ F ▷ foldFP xs.
+Proof.
+  (* FIXME: why can't we just rewrite with mu_fixed_point here? *)
+  eapply Proper_eq_Perms_lte_Perms; [ | reflexivity | ].
+  - apply Proper_eq_PermType_ptApp; [ apply mu_fixed_point | | ]; reflexivity.
+  - simpl. rewrite foldUnfold. reflexivity.
+Qed.
+
+Lemma MuUnfold A G X `{FixedPoint G X} (F:PermType Si Ss A X -> PermType Si Ss A (G X))
+      {prp:Proper (lte_PermType _ _ ==> lte_PermType _ _) F}
+      xi xs :
+   xi :: mu _ _ F ▷ xs ⊨ xi :: F (mu _ _ F) ▷ unfoldFP xs.
+Proof.
+  eapply Proper_eq_Perms_lte_Perms; [ reflexivity | | ].
+  - apply Proper_eq_PermType_ptApp; [ apply mu_fixed_point | | ]; reflexivity.
+  - simpl. reflexivity.
+Qed.
+
+(* Program Definition list_reach_perm r rw A (T : VPermType Si Ss A) : VPermType Si Ss (list A) := *)
+(*   @mu _ _ _ (mu_list A) _ (fixed_point_list _) *)
+(*       (fun U => or _ _ (eqp Si Ss r) ((ptr _ _ (rw, 0, T)) ⋆ (ptr _ _ (rw, 1, U)))) _. *)
+(* Next Obligation. *)
+(*   repeat intro. simpl. induction b; simpl in *; auto. *)
+(*   destruct H0 as (? & ? & ? & ? & ?). exists x0, x1. split; [| split]; auto. *)
+(*   clear H0. unfold ptr_Perms in *. destruct (offset a 1); auto. *)
+(*   destruct H1. destruct H0. destruct H0. subst. destruct H1 as (? & ? & ? & ? & ?). *)
+(*   eexists. split; eauto. do 2 eexists. split; eauto. split; eauto. apply H. auto. *)
+(* Qed. *)
+
+Lemma ReflR {A} x rw o (T : VPermType Si Ss A) :
+  x :: trueP _ _ ▷ tt ⊨ x :: reach_perm _ _ x rw o T ▷ nil.
+Proof.
+  repeat intro. apply mu_fixed_point. reflexivity.
+Qed.
+
+Lemma TransR {A} x y z rw o (T : VPermType Si Ss A) xs ys :
+  x :: reach_perm _ _ y rw o T ▷ xs * y :: reach_perm _ _ z rw o T ▷ ys ⊨
+  x :: reach_perm _ _ z rw o T ▷ (xs ++ ys).
+Proof.
+  revert x.
+  induction xs.
+  - intros x p (p1 & p2 & Hp1 & Hp2 & Hlte).
+    destruct Hp1 as (? & (U & HU & ?) & Hp1); subst.
+    apply HU in Hp1. simpl in Hp1. subst. eapply Perms_upwards_closed; eauto.
+    etransitivity; eauto. apply lte_r_sep_conj_perm.
+  - intros x p (px' & py & Hpx' & Hpy & Hlte).
+    eapply mu_fixed_point in Hpx'.
+    destruct Hpx' as (pa & px & Hpa & Hpx & Hlte').
+    (* x must be a pointer *)
+    destruct x; try contradiction. destruct a0 as [b o'].
+    destruct Hpx as (? & (v & ?) & Hpx); subst.
+    destruct Hpx as (px'' & pv & Hpx'' & Hpv & Hlte'').
+
+    apply mu_fixed_point.
+    simpl.
+    exists pa. exists (px'' ** (pv ** py)). split; [apply Hpa | split].
+    2: { repeat rewrite <- sep_conj_perm_assoc.
+         etransitivity; eauto.
+         eapply sep_conj_perm_monotone; intuition.
+         repeat rewrite sep_conj_perm_assoc.
+         etransitivity; eauto.
+         eapply sep_conj_perm_monotone; intuition.
+    }
+    eexists; split; [eexists; reflexivity |].
+    apply sep_conj_Perms_perm; [apply Hpx'' |].
+    simpl. exists (v :: reach_perm _ _ z rw o T ▷ (xs ++ ys)). split.
+    2: { apply IHxs. apply sep_conj_Perms_perm; auto. }
+    eexists; split; eauto.
+    repeat intro. eapply mu_fixed_point in H0; auto.
+    Unshelve. all: apply reach_perm_proper.
 Qed.
 
 (*
@@ -1105,7 +1103,7 @@ Proof.
     intros ? []. remember true.
     assert ((Ret (inr tt) : itree (sceE Ss) ((list A) + unit)) =
             (if b then Ret (inr tt) else throw tt)) by (subst; auto).
-    rewrite H; clear H. rewrite <- sep_conj_Perms_bottom_identity.
+    rewrite H0; clear H0. rewrite <- sep_conj_Perms_bottom_identity.
     eapply If; [| apply Err].
     eapply Weak; [| reflexivity | apply Ret_].
     etransitivity. 2: apply SumI2. reflexivity.
@@ -1133,7 +1131,7 @@ Proof.
     remember false.
     assert ((Ret (inl l) : itree (sceE Ss) ((list A) + unit)) =
             (if b then throw tt else Ret (inl l))) by (subst; auto).
-    rewrite H; clear H. apply If; [apply Err |].
+    rewrite H0; clear H0. apply If; [apply Err |].
     (* drop the 0 offset perm *)
     eapply Weak; [| reflexivity |].
     apply sep_conj_Perms_monotone; [apply bottom_Perms_is_bottom | reflexivity].
