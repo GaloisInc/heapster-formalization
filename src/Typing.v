@@ -36,7 +36,9 @@ Local Open Scope itree_scope.
 
 (** * Bisimulation axiom *)
 (** We make use of the [bisimulation_is_eq] axiom from the ITrees library.
-    This axiom is used to avoid setoid rewriting for TODO *)
+    This axiom is used to avoid setoid rewriting up to strong bisimulation,
+    [eq_itree eq]. This is used for convenience, we could also prove Proper
+    instances for our definitions. *)
 Ltac rewritebisim lem := pose proof lem as bisim;
                          eapply bisimulation_is_eq in bisim;
                          rewrite bisim;
@@ -508,10 +510,8 @@ Section bisim.
   Qed.
   Hint Resolve no_errors_gen_mon : paco.
 
-
   Definition no_errors {R C : Type} :=
     paco2 (@no_errors_gen R C) bot2.
-
 
   Lemma sbuter_no_errors {R1 R2} Q (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) p c1 c2 :
     sbuter p Q t c1 s c2 ->

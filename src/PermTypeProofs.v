@@ -646,7 +646,7 @@ Proof.
       rewrite Nat.add_assoc in IHl. rewrite Nat.add_1_r in IHl. apply IHl.
 Qed.
 
-(* helper lemmas for Malloc *)
+(** helper lemmas for Malloc *)
 Fixpoint rely_post_malloc n b size x y : Prop :=
   match n with
   | 0 => rely (block_perm size (b, 0) ** malloc_perm (b + 1)) x y
@@ -707,9 +707,9 @@ Proof.
       * apply IHn; auto. intros. apply Hread; auto. lia.
 Qed.
 
-(* The intermediate permission for Malloc *)
-(* n is the number of unfoldings to do for the rely/guar. size is the size of the block.
-   when we use this n = size, but we need them separate to do induction on n *)
+(** The intermediate permission for Malloc. *)
+(** [n] is the number of unfoldings to do for the rely/guar. [size] is the size of the block.
+    when we use this [n = size], but we need them separate to do induction on [n] *)
 Program Definition post_malloc_perm n b size : @perm (Si * Ss) :=
   {|
   rely := rely_post_malloc (S n) b (S size);

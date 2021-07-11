@@ -63,14 +63,14 @@ Variant logical_block :=
 Definition memory := list (option logical_block).
 
 (** ** Memory operations *)
-(** Whether the block of ptr is allocated and is the offset of ptr within bounds. *)
+(** Whether the block of [ptr] is allocated and is the offset of [ptr] within bounds. *)
 Definition allocated (m : memory) (ptr : addr) : bool :=
   match nth_error m (fst ptr) with
   | Some (Some (LBlock size _)) => snd ptr <? size
   | _ => false
   end.
 
-(** Read m at memory location ptr. ptr must be a valid location and allocated. *)
+(** Read [m] at memory location [ptr]. [ptr] must be a valid location and allocated. *)
 Definition read (m : memory) (ptr : addr) : option Value :=
   if allocated m ptr
   then match nth_error m (fst ptr) with
@@ -79,7 +79,7 @@ Definition read (m : memory) (ptr : addr) : option Value :=
        end
   else None.
 
-(** Returns the size of the block only if ptr has offset 0. *)
+(** Returns the size of the block only if [ptr] has offset 0. *)
 (** Note if we used [allocated] here then it doesn't work for size 0 blocks. *)
 Definition sizeof (m : memory) (ptr : addr) : option nat :=
   if snd ptr =? 0
@@ -89,7 +89,7 @@ Definition sizeof (m : memory) (ptr : addr) : option nat :=
        end
   else None.
 
-(** Write v into m at address ptr. *)
+(** Write [v] into [m] at address [ptr]. *)
 Definition write (m : memory) (ptr : addr) (v : Value) : option memory :=
   if allocated m ptr
   then match nth_error m (fst ptr) with
@@ -197,7 +197,7 @@ Proof.
 Qed.
 
 (** ** Helper definitions *)
-(** [mem_at] ptr v creates a memory which is only defined at location ptr. *)
+(** [mem_at ptr v] creates a memory which is only defined at location [ptr]. *)
 (** We use this for some sanity checks when we define memory permissions. *)
 Definition mem_at (ptr : addr) (v : Value) : memory :=
   repeat None (fst ptr) ++ [Some (LBlock
@@ -240,7 +240,7 @@ Proof.
   destruct (x =? o); auto.
 Qed.
 
-(** [replace_n] is used later for TODO. *)
+(** [replace_n] is used later for proving the [Free] rule. *)
 Definition replace_n m b size bytes n : memory :=
   replace_list_index
     m b (Some (LBlock size (fun o => if andb (o <? size) (size - n <=? o)

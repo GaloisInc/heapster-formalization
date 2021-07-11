@@ -151,7 +151,7 @@ Section MemoryPerms.
 
   (** * Memory permissions **)
 
-  (** Gives permission to allocate memory, assuming the last allocated block was n-1 *)
+  (** Gives permission to allocate memory, assuming the last allocated block was [n-1] *)
   Program Definition malloc_perm (n : nat) : (@perm (Si * Ss)) :=
     {|
     (** always valid *)
@@ -179,12 +179,12 @@ Section MemoryPerms.
 
   Program Definition block_perm (size : nat) (ptr : addr) : (@perm (Si * Ss)) :=
     {|
-    (** the ptr points to the first cell of an allocated block of size `size` *)
+    (** [ptr] points to the first cell of an allocated block of size [size] *)
     pre '(x, _) :=
       (* if we swap the order of the equality then the obligation automatically
       unifies and we lose info... *)
       Some size = sizeof (lget x) ptr;
-    (** if ptr satisfies the precondition, the size of the block does not change *)
+    (** if [ptr] satisfies the precondition, the size of the block does not change *)
     rely '(x, _) '(y, _) :=
       sizeof (lget x) ptr = sizeof (lget y) ptr;
     (** no updates allowed *)
@@ -209,9 +209,9 @@ Section MemoryPerms.
 
   Program Definition read_perm (ptr : addr) (v : Value) : @perm (Si * Ss) :=
     {|
-    (** ptr points to valid memory *)
+    (** [ptr] points to [v] *)
     pre '(x, _) := read (lget x) ptr = Some v;
-    (** only checks if the memory ptr points to in the 2 memories are equal *)
+    (** only checks if the memory [ptr] points to in the 2 memories are equal *)
     rely '(x, _) '(y, _) := read (lget x) ptr = read (lget y) ptr;
     (** no updates allowed *)
     guar '(x, _) '(y, _) := x = y;
@@ -225,9 +225,9 @@ Section MemoryPerms.
 
   Program Definition write_perm (ptr : addr) (v : Value) : (@perm (Si * Ss)) :=
     {|
-    (* ptr points to valid memory *)
+    (* [ptr] points to [v] *)
     pre '(x, _) := Some v = read (lget x) ptr;
-    (* only checks if the memory ptr points to in the 2 configs are equal *)
+    (* only checks if the memory [ptr] points to in the 2 configs are equal *)
     rely '(x, _) '(y, _) := read (lget x) ptr = read (lget y) ptr;
     (* only the pointer we have write permission to may change *)
     guar '(x, _) '(y, _) := (forall ptr', ptr <> ptr' -> read (lget x) ptr' = read (lget y) ptr') /\
@@ -282,8 +282,6 @@ Section MemoryPerms.
       Some (VNum 0) = read (lget x) (n, 0);
     rely x y :=
       rely (malloc_perm (n + 1) ** block_perm size (n, 0) ** write_perm (n, 0) (VNum 0)) x y;
-      (* forall ptr, (allocated (lget x) ptr = false -> allocated (lget y) ptr = false) /\ *)
-    (*        (allocated (lget x) ptr = true -> sizeof (lget x) ptr = sizeof (lget y) ptr); *)
     rely_PO := rely_PO (malloc_perm (n + 1) ** block_perm size (n, 0) ** write_perm (n, 0) (VNum 0));
     guar x y :=
       guar (malloc_perm (n + 1) ** block_perm size (n, 0) ** write_perm (n, 0) (VNum 0)) x y;
@@ -519,24 +517,24 @@ Section MemoryPerms.
     - constructor; simpl; auto.
   Admitted.
 
-  Lemma typing_load {R} ptr (Q : Value -> Perms) (r : R) :
-    typing
-      (read_Perms ptr Q)
-      (fun x _ => (read_Perms ptr (eq_p x)) * Q x)
-      (load (VPtr ptr))
-      (Ret r).
-  Proof.
-    repeat intro. pstep. unfold load. rewritebisim @bind_trigger.
-    econstructor; eauto; try reflexivity.
-    destruct H as (? & (? & ?) & ?); subst.
-    destruct H1 as (? & ? & ? & ? & ?). simpl in *.
-    assert (read (lget c1) ptr = Some x0).
-    { apply H2 in H0. destruct H0 as (? & _). apply H in H0. auto. }
-    rewrite H3. constructor; eauto.
-    simpl. exists x, x1. split; [| split]; eauto. eexists. split; eauto.
-    simpl. exists x, bottom_perm. split; [| split]; eauto.
-    rewrite sep_conj_perm_bottom. reflexivity.
-  Qed.
+  (* Lemma typing_load {R} ptr (Q : Value -> Perms) (r : R) : *)
+  (*   typing *)
+  (*     (read_Perms ptr Q) *)
+  (*     (fun x _ => (read_Perms ptr (eq_p x)) * Q x) *)
+  (*     (load (VPtr ptr)) *)
+  (*     (Ret r). *)
+  (* Proof. *)
+  (*   repeat intro. pstep. unfold load. rewritebisim @bind_trigger. *)
+  (*   econstructor; eauto; try reflexivity. *)
+  (*   destruct H as (? & (? & ?) & ?); subst. *)
+  (*   destruct H1 as (? & ? & ? & ? & ?). simpl in *. *)
+  (*   assert (read (lget c1) ptr = Some x0). *)
+  (*   { apply H2 in H0. destruct H0 as (? & _). apply H in H0. auto. } *)
+  (*   rewrite H3. constructor; eauto. *)
+  (*   simpl. exists x, x1. split; [| split]; eauto. eexists. split; eauto. *)
+  (*   simpl. exists x, bottom_perm. split; [| split]; eauto. *)
+  (*   rewrite sep_conj_perm_bottom. reflexivity. *)
+  (* Qed. *)
 
   Lemma typing_store {R} ptr val' (P Q : Value -> Perms) (r : R) :
     typing
@@ -586,17 +584,17 @@ Section MemoryPerms.
       intros ? []. constructor; auto.
   Qed.
 
-  Lemma typing_store' {R} ptr val' (P : Value -> Perms) (r : R):
-    typing
-      (write_Perms ptr P)
-      (fun _ _ => write_Perms ptr (eq_p val'))
-      (store (VPtr ptr) val')
-      (Ret r).
-  Proof.
-    assert (bottom_Perms ≡ @eq_p Si Ss _ val' val').
-    { split; repeat intro; simpl; auto. }
-    rewrite <- sep_conj_Perms_bottom_identity. rewrite sep_conj_Perms_commut.
-    rewrite H. apply typing_store.
-  Qed.
+  (* Lemma typing_store' {R} ptr val' (P : Value -> Perms) (r : R): *)
+  (*   typing *)
+  (*     (write_Perms ptr P) *)
+  (*     (fun _ _ => write_Perms ptr (eq_p val')) *)
+  (*     (store (VPtr ptr) val') *)
+  (*     (Ret r). *)
+  (* Proof. *)
+  (*   assert (bottom_Perms ≡ @eq_p Si Ss _ val' val'). *)
+  (*   { split; repeat intro; simpl; auto. } *)
+  (*   rewrite <- sep_conj_Perms_bottom_identity. rewrite sep_conj_Perms_commut. *)
+  (*   rewrite H. apply typing_store. *)
+  (* Qed. *)
 
 End MemoryPerms.

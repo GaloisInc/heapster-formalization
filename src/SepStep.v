@@ -70,6 +70,13 @@ Section step.
     - apply H1. apply H. auto.
   Qed.
 
+  Lemma sep_step_iff : forall p q,
+      sep_step p q <-> (forall x y, rely p x y -> rely q x y) /\ (forall x y, guar q x y -> guar p x y).
+  Proof.
+    split; [split; intros; [eapply sep_step_rely | eapply sep_step_guar] |
+            intros []; apply sep_step_rg]; eauto.
+  Qed.
+
   Lemma sep_step_sep_conj_l : forall p1 p2 q, p1 ⊥ q -> sep_step p1 p2 -> sep_step (p1 ** q) (p2 ** q).
   Proof.
     intros p1 p2 q ? ?.

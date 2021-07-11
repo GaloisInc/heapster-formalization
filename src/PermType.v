@@ -91,7 +91,7 @@ Section permType.
 
   Definition offset (v : Value) (o : nat) : Value :=
     match v with
-    | VNum n => VNum n
+    | VNum n => VNum (n + o)
     | VPtr (blk, n) => VPtr (blk, n + o)
     end.
 
@@ -111,8 +111,7 @@ Section permType.
     ptApp := fun x a => ptr_Perms rw (offset x o) a T;
     |}.
 
-  Fixpoint arr_perm {A} rw o l T
-    : VPermType (Vector.t A l) :=
+  Fixpoint arr_perm {A} rw o l T : VPermType (Vector.t A l) :=
     match l with
     | 0 => trueP
     | S l' =>
@@ -123,15 +122,6 @@ Section permType.
     end.
   Notation "'arr' ( rw , o , l , T )":=(arr_perm rw o l T).
 
-  Program Definition equals_perm {A} (a1 a2 : A): @perm (Si*Ss) := {|
-    rely _ _ := True; guar s1 s2 := s1=s2; pre _ := a1=a2; |}.
-  Next Obligation.
-     repeat constructor.
-  Defined.
-  Next Obligation.
-    repeat constructor. intros x y z e1 e2. transitivity y; assumption.
-  Defined.
-
   Program Definition eqp {A} (a:A): PermType A unit :=
     {| ptApp := fun a' _ => {| in_Perms _ := a=a' |} |}.
 
@@ -141,6 +131,8 @@ Section permType.
                         | _ => top_Perms
                         end |}.
 
+  (** * Operations used in typing rules *)
+
   Definition vsingle {A} (a:A) : Vector.t A 1 :=
     Vector.cons _ a _ (Vector.nil _).
 
@@ -149,9 +141,6 @@ Section permType.
 
   Definition getNum {S} v : itree (sceE S) nat :=
     match v with VNum n => Ret n | VPtr _ => throw tt end.
-  (* Definition addOff v o : Value := *)
-  (*   match v with VNum n => VNum (n+o) *)
-  (*           | VPtr (blk,n) => VPtr (blk,n+o) end. *)
 
   Definition isNull {S} v: itree (sceE S) bool :=
     match v with
@@ -161,11 +150,13 @@ Section permType.
 
   Definition isNat := ex (n oftype nat) (eqp (VNum n)).
 
-  (* The ordering on permission types is just the lifting of that on Perms *)
+  (** * Recursive and reachability permissions *)
+
+  (** The ordering on permission types is just the lifting of that on Perms *)
   Definition lte_PermType {A B} (T1 T2:PermType A B): Prop :=
     forall a b, lte_Perms (ptApp _ _ T1 a b) (ptApp _ _ T2 a b).
 
-  (* Equals on PermType is just the symmetric closure of the ordering *)
+  (** Equals on PermType is just the symmetric closure of the ordering *)
   Definition eq_PermType {A B} (T1 T2:PermType A B): Prop :=
     lte_PermType T1 T2 /\ lte_PermType T2 T1.
 
@@ -191,18 +182,18 @@ Section permType.
     destruct eT. split; [ apply H0 | apply H1 ].
   Qed.
 
-  (* The meet on permission types is just the lifitng of that on Perms *)
+  (** The meet on permission types is just the lifitng of that on Perms *)
   Definition meet_PermType {A B} (Ts:PermType A B -> Prop) : PermType A B :=
     {| ptApp := fun a b => meet_Perms (fun P => exists T, Ts T /\ P = (a :: T ▷ b)) |}.
 
-  (* Meet is a lower bound for PermType *)
+  (** Meet is a lower bound for PermType *)
   Lemma lte_meet_PermType {A B} (Ts:PermType A B -> Prop) T:
     Ts T -> lte_PermType (meet_PermType Ts) T.
   Proof.
     intros ts_t a b. simpl. apply lte_meet_Perms. exists T; split; eauto.
   Qed.
 
-  (* Meet is the greatest lower bound for PermType *)
+  (** Meet is the greatest lower bound for PermType *)
   Lemma meet_PermType_max {A B} (Ts:PermType A B -> Prop) T:
     (forall T', Ts T' -> lte_PermType T T') ->
     lte_PermType T (meet_PermType Ts).
@@ -211,13 +202,13 @@ Section permType.
     rewrite P_eq. apply (lte_T_Ts T' Ts_T' a b).
   Qed.
 
-  (* The least fixed-point permission type is defined via the standard
+  (** The least fixed-point permission type is defined via the standard
   Knaster-Tarski construction as the meet of all F-closed permission types *)
   Definition fixPT {A B} (F:PermType A B -> PermType A B)
              {prp:Proper (lte_PermType ==> lte_PermType) F} : PermType A B :=
     meet_PermType (fun T => lte_PermType (F T) T).
 
-  (* First we prove that fixPT is itself F-closed *)
+  (** First we prove that fixPT is itself F-closed *)
   Lemma fixPT_F_closed {A B} (F:PermType A B -> PermType A B)
         {prp:Proper (lte_PermType ==> lte_PermType) F} :
     lte_PermType (F (fixPT F)) (fixPT F).
@@ -227,7 +218,7 @@ Section permType.
     apply lte_meet_PermType. assumption.
   Qed.
 
-  (* Then we prove that fixPT is a fixed-point *)
+  (** Then we prove that fixPT is a fixed-point *)
   Lemma fixPT_fixed_point {A B} (F:PermType A B -> PermType A B)
         {prp:Proper (lte_PermType ==> lte_PermType) F} :
     eq_PermType (fixPT F) (F (fixPT F)).
@@ -293,7 +284,7 @@ Section permType.
 
   Lemma reach_perm_proper {A} r (T : VPermType A) rw o :
     Proper (lte_PermType ==> lte_PermType)
-           (fun U : VPermType (list A) => or (eqp r) (starPT T (ptr (rw, o, U)))).
+           (fun U : VPermType (list A) => or (eqp r) (T ⋆ (ptr (rw, o, U)))).
   Proof.
     intros T1 T2 Hlte v l p Hp. simpl.
     destruct l as [| ?]; simpl in *; auto.
@@ -311,11 +302,11 @@ Section permType.
           (T : VPermType A)
     : VPermType (list A) :=
     @mu _ (mu_list A) _ (fixed_point_list _)
-        (fun U => or (eqp r) (starPT T (ptr (rw, o, U))))
+        (fun U => or (eqp r) (T ⋆ (ptr (rw, o, U))))
         (reach_perm_proper _ _ _ _).
 
   Program Definition list_perm rw A (T : VPermType A) : VPermType (list A) :=
-    @mu _ (mu_list A) _ (fixed_point_list _) (fun U => or (eqp (VNum 0)) (starPT (ptr (rw, 0, T)) (ptr (rw, 1, U)))) _.
+    @mu _ (mu_list A) _ (fixed_point_list _) (fun U => or (eqp (VNum 0)) (ptr (rw, 0, T) ⋆ ptr (rw, 1, U))) _.
   Next Obligation.
     repeat intro. simpl. induction b; simpl in *; auto.
     destruct H1 as (? & ? & ? & ? & ?). exists x0, x1. split; auto. split; auto.

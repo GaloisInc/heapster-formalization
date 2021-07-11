@@ -47,7 +47,7 @@ Hint Resolve sbuter_gen_mon : paco.
 Definition CompM S R := itree (sceE S) R.
 
 
-(** * Basic facts about [no_errors] and [sbuter] **)
+(** * Helper lemmas and definitions about [no_errors] and [sbuter] **)
 
 Lemma no_errors_Tau {S R} (s : S) (t : CompM S R) :
   no_errors s t <-> no_errors s (Tau t).
@@ -132,7 +132,7 @@ Proof.
 Qed.
 
 
-(** * `sbuter_ex` and lemmas **)
+(** ** [sbuter_ex] **)
 
 Definition sbuter_ex {S1 S2 R1 R2} (p:@perm (S1*S2)) (Q: R1 -> R2 -> Perms) t1 s1 t2 s2 :=
   exists p', sep_step p p' /\ sbuter p' Q t1 s1 t2 s2.
@@ -142,7 +142,7 @@ Definition sbuter_to_sbuter_ex {S1 S2 R1 R2} p Q t1 s1 t2 s2 :
 Proof. intro; exists p; split; [ reflexivity | assumption ]. Defined.
 
 
-(** * Definitions of steps and finite paths **)
+(** ** Definitions of [step] and finite paths **)
 
 Inductive tau_step {S R} : relation (CompM S R * S) :=
 | tau_step_Tau t s : tau_step (Tau t, s) (t, s).
@@ -162,23 +162,23 @@ Hint Extern 0 (step (Tau ?t, ?s) (?t, ?s)) => eapply step_Tau : core.
 Hint Extern 0 (step (vis Or ?k, ?s) (?k ?b, ?s)) => eapply step_Choice : core.
 Hint Extern 0 (step (vis (Modify ?f) ?k, ?s) (?k ?s, ?f ?s)) => eapply step_Modify : core.
 
-(* Finite paths with a special case for the length 0 case *)
+(** Finite paths with a special case for the length 0 case *)
 Fixpoint is_gen_finite_path0 {A} (r0 r : relation A) n x ys z :=
   match ys with
   | [] => r0 x z
   | y :: ys' => r x y /\ is_gen_finite_path0 r0 r _ y ys' z
   end.
 
-(* Finite paths of a single relation *)
+(** Finite paths of a single relation *)
 Definition is_gen_finite_path {A} (r : relation A) := @is_gen_finite_path0 A r r.
 Arguments is_gen_finite_path /.
 
-(* Finite paths (of steps) *)
+(** Finite paths (of steps) *)
 Definition is_finite_path {S R} :=
   is_gen_finite_path0 (eq \2/ step) (@step S R).
 
 
-(** * lemmas about steps and paths **)
+(** ** lemmas about steps and paths **)
 
 Definition tau_step_no_errors {S R} t1 s1 t2 s2 :
   @tau_step S R (t1,s1) (t2,s2) -> no_errors s1 t1 -> no_errors s2 t2.
@@ -263,27 +263,27 @@ Proof.
   - eapply step_no_errors; eauto.
 Qed.
 
+(** * Helper lemmas and definitions relating [sbuter] and paths *)
+(** ** [sbuter_path_r], [exists_sbuter_path_r], and [sbuter_impl_path_r]  **)
 
-(** * `sbuter_path_r`, `exists_sbuter_path_r`, and `sbuter_impl_path_r`  **)
-
-(* An impressionistic picture of `sbuter_impl_path_r`, where the solid line is
+(** An impressionistic picture of [sbuter_impl_path_r], where the solid line is
    assumed, the dotted lines are shown to exist, and all the center lines
-   represent `sbuter_ex`.
-
+   represent [sbuter_ex].
+<<
    (t2,s2) ⋯⋯ (t4,s4)      --
                   ⋮ step      | all dotted lines:
                (ti,si)       | sbuter_path_r ((t1,s1), (t3,s3))
             ⋰    ⋮ step      |               ((t2,s2), (t4,s4))
    (t1,s1) --- (t3,s3)      --
         sbuter_ex
-
-   In words, this picture states that if `sbuter_ex t1 s1 t3 s3` then there
-   exists some `(t4,s4)` which satisfies `sbuter_ex t2 s2 t4 s4` and for which
-   there exists a finite path from `(t3,s3)`, where each intermediate point
-   along the path satisfies `sbuter_ex t1 s1 ti si`.
+>>
+   In words, this picture states that if [sbuter_ex t1 s1 t3 s3] then there
+   exists some [(t4,s4)] which satisfies [sbuter_ex t2 s2 t4 s4] and for which
+   there exists a finite path from [(t3,s3)], where each intermediate point
+   along the path satisfies [sbuter_ex t1 s1 ti si].
 *)
 
-(* `sbuter_path_r ((t1,s1), (t3,s3)) ((t2,s2), (t4,s4))` represents all the
+(** [sbuter_path_r ((t1,s1), (t3,s3)) ((t2,s2), (t4,s4))] represents all the
    dotted lines in the picture above. *)
 Inductive sbuter_path_r {S1 S2 R1 R2} p Q :
   relation ((CompM S1 R1 * S1) * (CompM S2 R2 * S2)) :=
@@ -295,7 +295,7 @@ Inductive sbuter_path_r {S1 S2 R1 R2} p Q :
     sbuter_path_r p Q ((t1,s1),(t3,s3)) ((t2,s2),(t4,s4)).
 Arguments ex_path_r {S1 S2 R1 R2 p Q t1 s1 t2 s2 t3 s3 t4 s4} n ts.
 
-(* Like `sbuter_path_r` but with the endpoints on the right existentially
+(** Like [sbuter_path_r] but with the endpoints on the right existentially
    quantified and the arguments curried. *)
 Definition exists_sbuter_path_r {S1 S2 R1 R2} p Q t1 s1 t2 s2 t3 s3 :=
   exists t4 s4, @sbuter_path_r S1 S2 R1 R2 p Q ((t1,s1),(t3,s3)) ((t2,s2),(t4,s4)).
@@ -304,9 +304,9 @@ Definition sbuter_impl_path_r {S1 S2 R1 R2} p Q t1 s1 t2 s2 t3 s3 :=
   sbuter_ex p Q t1 s1 t3 s3 -> @exists_sbuter_path_r S1 S2 R1 R2 p Q t1 s1 t2 s2 t3 s3.
 
 
-(** * `step_sbuter_l` *)
+(** ** [sbuter_step_l] *)
 
-(* We start with some lemmas about `sbuter_path_r` and `exists_sbuter_path_r`. *)
+(** We start with some lemmas about [sbuter_path_r] and [exists_sbuter_path_r]. *)
 
 Lemma exists_path_r_tau_R {S1 S2 R1 R2} p Q t1 s1 t2 s2 t3 s3 :
   sbuter_ex p Q t1 s1 t3 s3 ->
@@ -355,7 +355,7 @@ Proof.
     + specialize (H1 i); destruct H1; split; eauto.
 Qed.
 
-(* Next we prove `sbuter_impl_path_r` for `step`. *)
+(** Next we prove [sbuter_impl_path_r] for [step]. *)
 
 Lemma tau_step_sbuter_impl_path_r {S1 S2 R1 R2} p Q t1 s1 t2 s2 t3 s3 :
   no_errors s3 t3 ->
@@ -365,13 +365,13 @@ Proof.
   intros ne3 H [q [step_q Hb]].
   dependent destruction H.
   punfold Hb; dependent induction Hb.
-  (* sbuter_gen_err *)
+  (* [sbuter_gen_err] *)
   - punfold ne3; inv ne3.
-  (* sbuter_gen_tau_L *)
+  (* [sbuter_gen_tau_L] *)
   - exists t0, c2; apply (ex_path_r 0 []); try easy.
     + left; reflexivity.
     + exists p0; split; [|pfold]; eauto.
-  (* sbuter_gen_tau_R *)
+  (* [sbuter_gen_tau_R] *)
   - apply no_errors_Tau in ne3.
     apply exists_path_r_tau_R; eauto.
     exists p0; split; [|pfold]; eauto.
@@ -475,20 +475,21 @@ Proof.
 Qed.
 
 
-(** * `sbuter_path_l`, `exists_sbuter_path_l`, and `sbuter_impl_path_l`  **)
+(** ** [sbuter_path_l], [exists_sbuter_path_l], and [sbuter_impl_path_l]  **)
 
-(* An impressionistic picture of `sbuter_impl_path_l`, analogous to that
-   for `sbuter_impl_path_r`
-
+(** An impressionistic picture of [sbuter_impl_path_l], analogous to that
+    for [sbuter_impl_path_r]
+<<
       (t2,s2) ⋯⋯ (t4,s4)   --
    step  ⋮                     | all dotted lines:
       (ti,si)                 | sbuter_path_l ((t1,s1), (t3,s3))
    step  ⋮     ⋱              |               ((t2,s2), (t4,s4))
       (t1,s1) --- (t3,s3)   --
            sbuter_ex
+>>
 *)
 
-(* `sbuter_path_l ((t1,s1), (t3,s3)) ((t2,s2), (t4,s4))` represents all the
+(** [sbuter_path_l ((t1,s1), (t3,s3)) ((t2,s2), (t4,s4))] represents all the
    dotted lines in the picture above. *)
 Inductive sbuter_path_l {S1 S2 R1 R2} p Q :
   relation ((CompM S1 R1 * S1) * (CompM S2 R2 * S2)) :=
@@ -500,7 +501,7 @@ Inductive sbuter_path_l {S1 S2 R1 R2} p Q :
     sbuter_path_l p Q ((t1,s1),(t3,s3)) ((t2,s2),(t4,s4)).
 Arguments ex_path_l {S1 S2 R1 R2 p Q t1 s1 t2 s2 t3 s3 t4 s4} n ts.
 
-(* Like `sbuter_path_l` but with the endpoints on the left existentially
+(** Like [sbuter_path_l] but with the endpoints on the left existentially
    quantified and the arguments curried. *)
 Definition exists_sbuter_path_l {S1 S2 R1 R2} p Q t1 s1 t3 s3 t4 s4 :=
   exists t2 s2, @sbuter_path_l S1 S2 R1 R2 p Q ((t1,s1),(t3,s3)) ((t2,s2),(t4,s4)).
@@ -509,10 +510,10 @@ Definition sbuter_impl_path_l {S1 S2 R1 R2} p Q t1 s1 t3 s3 t4 s4 :=
   sbuter_ex p Q t1 s1 t3 s3 -> @exists_sbuter_path_l S1 S2 R1 R2 p Q t1 s1 t3 s3 t4 s4.
 
 
-(** * `step_sbuter_r` *)
+(** ** [sbuter_step_r] *)
 
-(* We start with some lemmas about `sbuter_path_l` and `exists_sbuter_path_l`.
-   The proofs here are mostly identical to those for `step_sbuter_l` above. *)
+(** We start with some lemmas about [sbuter_path_l] and [exists_sbuter_path_l].
+   The proofs here are mostly identical to those for [sbuter_step_l] above. *)
 
 Lemma exists_path_l_tau_L {S1 S2 R1 R2} p Q t1 s1 t3 s3 t4 s4 :
   sbuter_ex p Q t1 s1 t3 s3 ->
@@ -561,8 +562,8 @@ Proof.
     + specialize (H1 i); destruct H1; split; eauto.
 Qed.
 
-(* Next we prove `sbuter_impl_path_r` for `step`. Again, the proofs here are
-   mostly identical to those for `step_sbuter_l` above. *)
+(** Next we prove [sbuter_impl_path_r] for [step]. Again, the proofs here are
+   mostly identical to those for [sbuter_step_l] above. *)
 
 Lemma tau_step_sbuter_impl_path_l {S1 S2 R1 R2} p Q t1 s1 t3 s3 t4 s4 :
   tau_step (t3,s3) (t4,s4) ->
@@ -663,7 +664,7 @@ Proof.
 Qed.
 
 
-(** * `eq_sat_sep_sbuter` and basic facts  **)
+(** * [eq_sat_sep_sbuter] **)
 
 Definition TPred S R := CompM S R * S -> Prop.
 
@@ -674,7 +675,7 @@ Definition eq_sat_sep_sbuter {S1 S2 R1 R2} (q:@perm (S1*S2))
     (P1 (t1,s1) <-> P2 (t2,s2)).
 
 
-(** * `eq_sat_sep_sbuter` for state predicates **)
+(** * [eq_sat_sep_sbuter] for state predicates **)
 
 Definition state_pred {S} R P : TPred S R := fun '(_,s) => P s.
 
@@ -690,7 +691,7 @@ Proof.
 Qed.
 
 
-(** * `eq_sat_sep_sbuter` for logical connectives **)
+(** * [eq_sat_sep_sbuter] for logical connectives **)
 
 Lemma eq_sat_and {S1 S2 R1 R2} q (TP1 TP1' : TPred S1 R1) (TP2 TP2' : TPred S2 R2)
   : eq_sat_sep_sbuter q TP1 TP2 -> eq_sat_sep_sbuter q TP1' TP2' ->
@@ -723,7 +724,7 @@ Proof.
 Qed.
 
 
-(** * `eq_sat_sep_sbuter` for `EU`  **)
+(** ** [eq_sat_sep_sbuter] for [EU]  **)
 
 Inductive EU {S R} (P P' : TPred S R) (ts0 : CompM S R * S) : Prop :=
 | EU_here : P' ts0 -> EU P P' ts0
@@ -783,7 +784,7 @@ Proof.
 Qed.
 
 
-(** * `eq_sat_sep_sbuter` for `EF`  **)
+(** ** [eq_sat_sep_sbuter] for [EF]  **)
 
 Definition EF {S R} := @EU S R (fun _ => True).
 
@@ -793,7 +794,7 @@ Lemma eq_sat_EF {S1 S2 R1 R2} q (P1 : TPred S1 R1) (P2 : TPred S2 R2) :
 Proof. eapply eq_sat_EU; easy. Qed.
 
 
-(** * `eq_sat_sep_sbuter` for `AF`  **)
+(** ** [eq_sat_sep_sbuter] for [AG]  **)
 
 Definition AG_gen {S R} (P : TPred S R) (AG : TPred S R) ts0 :=
   P ts0 /\ (forall ts1, step ts0 ts1 -> AG ts1).
@@ -880,22 +881,22 @@ Proof.
 Qed.
 
 
-(** * `stops` and `steps` **)
+(** *** [stops] and [steps] **)
 
-(* The proposition that an itree has a next step *)
+(** The proposition that an itree has a next step *)
 Inductive steps {S R} : TPred S R :=
 | steps_Tau t s : steps (Tau t, s)
 | steps_Modify f k s : steps (vis (Modify f) k, s)
 | steps_Choice k s : steps (vis Or k, s).
 
-(* The proposition that an itree has no next step *)
+(** The proposition that an itree has no next step *)
 Inductive stops {S R} : TPred S R :=
 | stops_Ret r s : stops (Ret r, s)
 | stops_Err k s : stops (vis (Throw tt) k, s).
 
 Hint Constructors steps stops : core.
 
-(* Every itree either stops or steps *)
+(** Every itree either stops or steps *)
 Lemma steps_or_stops {S R} (t' : itree' (sceE R) S) s :
   steps (go t', s) \/ stops (go t', s).
 Proof.
@@ -907,7 +908,7 @@ Proof.
 Qed.
 
 
-(** * `eq_sat_sep_sbuter` for `EG` **)
+(** ** [eq_sat_sep_sbuter] for [EG] **)
 
 Inductive EG_gen {S R} (P : TPred S R) EG ts0 : Prop :=
 | EG_step ts1 : P ts0 -> step ts0 ts1 -> EG ts1 -> EG_gen P EG ts0
@@ -1078,7 +1079,7 @@ Proof.
 Qed.
 
 
-(** * `eq_sat_sep_sbuter` for `AU` **)
+(** ** [eq_sat_sep_sbuter] for [AU] **)
 
 Inductive AU {S R} (P P' : TPred S R) ts0 : Prop :=
 | AU_here : P' ts0 -> AU P P' ts0
@@ -1221,7 +1222,7 @@ Proof.
 Qed.
 
 
-(** * `eq_sat_sep_sbuter` for `AF` **)
+(** ** [eq_sat_sep_sbuter] for [AF] **)
 
 Definition AF {S R} := @AU S R (fun _ => True).
 
@@ -1292,6 +1293,8 @@ Proof.
   - apply eq_sat_EU; assumption.
   - apply eq_sat_AU; assumption.
 Qed.
+
+(** * Soundness *)
 
 Theorem sbuter_preserves_tpreds {S1 R1 S2 R2} p q Q t1 s1 t2 s2 TP1 TP2:
   @sbuter S1 R1 S2 R2 p Q t1 s1 t2 s2 -> no_errors s2 t2 ->
