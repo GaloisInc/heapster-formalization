@@ -31,3 +31,15 @@ lia.cache
 nia.cache
 nlia.cache
 nra.cache
+
+*~
+
+# More coq stuff
+.coqdeps.d
+CoqMakefile*
+*.vok
+*.vos
+.CoqMakefile.d
+*.lia.cache
+html/
+*Makefile.coq*
