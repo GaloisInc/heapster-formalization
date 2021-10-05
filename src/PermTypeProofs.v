@@ -509,7 +509,7 @@ Qed.
 
 (** * Array rules *)
 
-(** Some helper lemmas? TODO *)
+(** Some helper lemmas. *)
 Fixpoint split_leq {A} l1 (v:Vector.t A l1) :
   forall l2, le l2 l1 -> (Vector.t A l2 * Vector.t A (l1 - l2)).
 Proof.
@@ -1013,17 +1013,6 @@ Proof.
   - apply Proper_eq_PermType_ptApp; [ apply mu_fixed_point | | ]; reflexivity.
   - simpl. reflexivity.
 Qed.
-
-(* Program Definition list_reach_perm r rw A (T : VPermType Si Ss A) : VPermType Si Ss (list A) := *)
-(*   @mu _ _ _ (mu_list A) _ (fixed_point_list _) *)
-(*       (fun U => or _ _ (eqp Si Ss r) ((ptr _ _ (rw, 0, T)) ⋆ (ptr _ _ (rw, 1, U)))) _. *)
-(* Next Obligation. *)
-(*   repeat intro. simpl. induction b; simpl in *; auto. *)
-(*   destruct H0 as (? & ? & ? & ? & ?). exists x0, x1. split; [| split]; auto. *)
-(*   clear H0. unfold ptr_Perms in *. destruct (offset a 1); auto. *)
-(*   destruct H1. destruct H0. destruct H0. subst. destruct H1 as (? & ? & ? & ? & ?). *)
-(*   eexists. split; eauto. do 2 eexists. split; eauto. split; eauto. apply H. auto. *)
-(* Qed. *)
 
 Lemma ReflR {A} x rw o (T : VPermType Si Ss A) :
   x :: trueP _ _ ▷ tt ⊨ x :: reach_perm _ _ x rw o T ▷ nil.
