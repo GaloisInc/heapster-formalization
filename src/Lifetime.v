@@ -20,7 +20,7 @@ Definition Lifetimes := list Lifetime.
 (** lifetime helpers **)
 
 Definition lifetime : Lifetimes -> nat -> option Lifetime :=
-  fun l => nth_error l.
+  @nth_error Lifetime.
 
 Definition replace_lifetime (l : Lifetimes) (n : nat) (new : Lifetime) : Lifetimes :=
   replace_list_index l n new.
@@ -28,23 +28,16 @@ Definition replace_lifetime (l : Lifetimes) (n : nat) (new : Lifetime) : Lifetim
 Lemma replace_lifetime_same c n l :
   lifetime c n = Some l -> replace_lifetime c n l = c.
 Proof.
-  intros. unfold lifetime in H. unfold replace_lifetime. f_equal. simpl in *.
-  generalize dependent n. induction c; intros; simpl in *; auto.
-  - assert (@nth_error Lifetime [] n <> None). intro. rewrite H0 in H. discriminate H.
-    apply nth_error_Some in H0. inversion H0.
-  - destruct n; auto.
-    + inversion H. auto.
-    + rewrite IHc; auto.
+  apply replace_list_index_eq.
 Qed.
 
 Lemma lifetime_replace_lifetime c n l :
   lifetime (replace_lifetime c n l) n = Some l.
 Proof.
-  unfold replace_lifetime. simpl. revert n l.
-  induction c; intros; simpl; induction n; auto.
-  unfold lifetime in *. simpl in *. auto.
+  apply nth_error_replace_list_index_eq.
 Qed.
 
+(** Lifetime ordering **)
 Definition lifetime_lte (l1 l2 : option Lifetime) : Prop :=
   match l1, l2 with
   | None, _ => True
@@ -118,7 +111,7 @@ Lemma invariant_l p n (Hinv : invariant_at p n) :
                guar p x y <-> guar p (replace_lifetime x n l1) y.
 Proof.
   intros.
-  rewrite <- (replace_lifetime_same y n l2) at 2; auto.
+  erewrite <- (replace_list_index_eq _ y n l2) at 2; auto.
 Qed.
 
 Lemma invariant_r p n (Hinv : invariant_at p n) :
@@ -126,7 +119,7 @@ Lemma invariant_r p n (Hinv : invariant_at p n) :
                guar p x y <-> guar p x (replace_lifetime y n l2).
 Proof.
   intros.
-  rewrite <- (replace_lifetime_same x n l1) at 2; auto.
+  rewrite <- (replace_list_index_eq _ x n l1) at 2; auto.
 Qed.
 
 Program Definition when (n : nat) (p : perm) : perm :=
@@ -135,6 +128,7 @@ Program Definition when (n : nat) (p : perm) : perm :=
                lifetime x n = Some finished;
   rely := fun x y => lifetime x n = None /\ lifetime y n = None \/
                   lifetime y n = Some finished \/
+                  (* This is similar to [lifetime_lte] but we cannot have [lifetime x n = None /\ lifetime y n = Some current], since that would break transitivity of [rely] *)
                   lifetime x n = Some current /\ lifetime y n = Some current /\ rely p x y;
   guar := fun x y => x = y \/
                   lifetime x n = Some current /\ lifetime y n = Some current /\ guar p x y;

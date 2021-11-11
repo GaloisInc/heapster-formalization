@@ -140,7 +140,7 @@ Proof.
   destruct (allocated m ptr) eqn:?, (nth_error m (fst ptr)) eqn:?;
            try destruct o; try solve [inversion H].
   destruct l. inversion H. clear H H1 m'. unfold allocated in *.
-  rewrite nth_error_replace_list_index_eq; [| eapply allocated_ptr_block; eauto].
+  rewrite nth_error_replace_list_index_eq.
   rewrite Heqo in Heqb. clear Heqo. rewrite Heqb. rewrite Nat.eqb_refl; auto.
 Qed.
 
