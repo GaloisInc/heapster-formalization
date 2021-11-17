@@ -124,8 +124,7 @@ Qed.
 
 Program Definition when (n : nat) (p : perm) : perm :=
   {|
-  pre := fun x => (lifetime x n = Some current /\ pre p x) \/
-               lifetime x n = Some finished;
+  pre := fun x => lifetime x n = Some current -> pre p x;
   rely := fun x y => lifetime x n = None /\ lifetime y n = None \/
                   lifetime y n = Some finished \/
                   (* This is similar to [lifetime_lte] but we cannot have [lifetime x n = None /\ lifetime y n = Some current], since that would break transitivity of [rely] *)
@@ -150,10 +149,9 @@ Next Obligation.
 Qed.
 Next Obligation.
   decompose [and or] H; decompose [or and] H0; subst; auto.
-  - rewrite H2 in H4. discriminate H4.
-  - rewrite H1 in H2. discriminate H2.
-  - left. split; auto. eapply pre_respects; eauto.
+  - rewrite H1 in H4. discriminate H4.
   - rewrite H1 in H3. discriminate H3.
+  - eapply pre_respects; eauto.
 Qed.
 
 Lemma when_monotone n p1 p2 : p1 <= p2 -> when n p1 <= when n p2.
@@ -296,3 +294,104 @@ Proof.
   rewrite <- (sep_conj_perm_bottom p) at 2. apply convert; auto.
   repeat intro. simpl in H. subst. reflexivity.
 Qed.
+
+Definition lcurrent_pre x n1 n2 :=
+  (Some current = lifetime x n2 -> Some current = lifetime x n1) /\
+  (Some finished = lifetime x n1 -> Some finished = lifetime x n2) /\
+  (None = lifetime x n1 -> None = lifetime x n2).
+
+Lemma lcurrent_pre_trans x n1 n2 n3 :
+    lcurrent_pre x n1 n2 ->
+    lcurrent_pre x n2 n3 ->
+    lcurrent_pre x n1 n3.
+Proof.
+  unfold lcurrent_pre. intros (? & ? & ?) (? & ? & ?). split; [| split]; intros.
+  - apply H. apply H2; auto.
+  - apply H3. apply H0; auto.
+  - apply H4. apply H1; auto.
+Qed.
+
+Lemma lcurrent_pre_trans' x n1 n2 n3 :
+    lcurrent_pre x n1 n3 ->
+    lcurrent_pre x n1 n2 /\ lcurrent_pre x n2 n3.
+Proof.
+  unfold lcurrent_pre. split.
+  - split.
+    + intro. apply H.
+Admitted.
+
+(* n1 subsumes n2 *)
+Program Definition lcurrent n1 n2 : perm :=
+  {|
+  pre x := lcurrent_pre x n1 n2;
+  (* some constraint on lifetimes changing? maybe something related to monotonicity *)
+  rely x y := (lcurrent_pre x n1 n2 -> lcurrent_pre y n1 n2) /\
+              lifetime_lte (lifetime x n1) (lifetime y n1) /\
+              lifetime_lte (lifetime x n2) (lifetime y n2);
+  guar x y := x = y;
+  |}.
+Next Obligation.
+  constructor; repeat intro; intuition; etransitivity; eauto.
+Qed.
+Next Obligation.
+  constructor; auto. repeat intro. subst; auto.
+Qed.
+
+Lemma bottom_lcurrent_same n :
+  bottom_perm ≡≡ lcurrent n n.
+Proof.
+  split; constructor; intros; simpl; unfold lcurrent_pre; intuition.
+  admit.
+Abort.
+
+(* Lemma lcurrent_transitive n1 n2 n3 : *)
+(*   lcurrent n1 n2 ** lcurrent n2 n3 <= lcurrent n1 n3. *)
+(* Proof. *)
+(*   constructor; intros; simpl. *)
+(*   - simpl in *. unfold *)
+(* Qed. *)
+
+Lemma lcurrent_transitive n1 n2 n3 :
+  lcurrent n1 n3 <= lcurrent n1 n2 ** lcurrent n2 n3.
+Proof.
+  constructor; intros; simpl.
+  - destruct H as (? & ? & ?). simpl in *. eapply lcurrent_pre_trans; eauto.
+  - destruct H as (H12 & H23). simpl in *.
+    (* eapply lcurrent_pre_trans. apply H12. 2: apply H23. *)
+    (* + intro. apply H0. admit. *)
+    (* + apply H23; auto. intros. apply H23; auto. intros. *)
+Abort.
+
+Lemma lcurrent_sep n1 n2 n3 n4 :
+  lcurrent n1 n2 ⊥ lcurrent n3 n4.
+Proof.
+  (* constructor; intros; simpl in *; subst; reflexivity. *)
+(* Qed. *)
+Admitted.
+
+Lemma lcurrent_duplicate n1 n2 :
+  lcurrent n1 n2 ≡≡ lcurrent n1 n2 ** lcurrent n1 n2.
+Proof.
+  split.
+  - constructor; intros; simpl in *; [apply H | apply H | subst; constructor; left; auto].
+  - constructor; intros; simpl in *; subst; auto.
+    + split; [| split]; auto. apply lcurrent_sep.
+    + induction H; [destruct H |]; subst; auto.
+Qed.
+
+Lemma lcurrent_when n1 n2 p :
+  when n2 p <= lcurrent n1 n2 ** when n1 p.
+Proof.
+  constructor; intros.
+  - simpl. destruct H as (? & ? & ?). simpl in *.
+    intro. symmetry in H2. apply H in H2. auto.
+  - simpl in *. destruct H.
+    destruct H0 as [? | [? | ?]].
+    + destruct H0.
+      left. split. 2: { symmetry. apply H; auto. red.
+      *  (* symmetry. apply H. *)
+        unfold lcurrent_pre in H.
+
+    simpl in *. (* destruct H0 as [? | [? | ?]]. *)
+    (* + left. *)
+Abort.
