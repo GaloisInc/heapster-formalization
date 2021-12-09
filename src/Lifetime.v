@@ -127,9 +127,13 @@ Program Definition when (n : nat) (p : perm) : perm :=
   pre := fun x => lifetime x n = Some current -> pre p x;
   rely := fun x y => lifetime x n = None /\ lifetime y n = None \/
                   lifetime y n = Some finished \/
-                  (* This is similar to [lifetime_lte] but we cannot have [lifetime x n = None /\ lifetime y n = Some current], since that would break transitivity of [rely] *)
+                  (* This is similar to [lifetime_lte] but we cannot have [lifetime x n =
+                  None /\ lifetime y n = Some current], since that would break transitivity
+                  of [rely]. This would allow for an earlier period where the lifetime is
+                  not started, where the rely of p is not true. *)
                   lifetime x n = Some current /\ lifetime y n = Some current /\ rely p x y;
   guar := fun x y => x = y \/
+                  (* state that the guarantee should hold even when you change lifetimes in x, or something like that, kind of like hwat we do in owned *)
                   lifetime x n = Some current /\ lifetime y n = Some current /\ guar p x y;
   |}.
 Next Obligation.
@@ -295,79 +299,80 @@ Proof.
   repeat intro. simpl in H. subst. reflexivity.
 Qed.
 
-Definition lcurrent_pre x n1 n2 :=
+(** [n1] subsumes [n2] in the Lifetime list [x] *)
+Definition subsumes x n1 n2 :=
   (Some current = lifetime x n2 -> Some current = lifetime x n1) /\
   (Some finished = lifetime x n1 -> Some finished = lifetime x n2) /\
   (None = lifetime x n1 -> None = lifetime x n2).
 
-Lemma lcurrent_pre_trans x n1 n2 n3 :
-    lcurrent_pre x n1 n2 ->
-    lcurrent_pre x n2 n3 ->
-    lcurrent_pre x n1 n3.
+Instance subsumes_preorder x : PreOrder (subsumes x).
 Proof.
-  unfold lcurrent_pre. intros (? & ? & ?) (? & ? & ?). split; [| split]; intros.
+  unfold subsumes.
+  constructor; [repeat intro; auto |].
+  intros n1 n2 n3. intros (? & ? & ?) (? & ? & ?). split; [| split]; intros.
   - apply H. apply H2; auto.
   - apply H3. apply H0; auto.
   - apply H4. apply H1; auto.
 Qed.
 
-Lemma lcurrent_pre_trans' x n1 n2 n3 :
-    lcurrent_pre x n1 n3 ->
-    lcurrent_pre x n1 n2 /\ lcurrent_pre x n2 n3.
-Proof.
-  unfold lcurrent_pre. split.
-  - split.
-    + intro. apply H.
-Admitted.
+(* Lemma lcurrent_pre_trans' x n1 n2 n3 : *)
+(*     lcurrent_pre x n1 n3 -> *)
+(*     lcurrent_pre x n1 n2 /\ lcurrent_pre x n2 n3. *)
+(* Proof. *)
+(*   unfold lcurrent_pre. split. *)
+(*   - split. *)
+(*     + intro. apply H. *)
+(* Admitted. *)
 
-(* n1 subsumes n2 *)
+(** n1 subsumes n2, and the rely states that lifetimes don't do weird stuff. **)
 Program Definition lcurrent n1 n2 : perm :=
   {|
-  pre x := lcurrent_pre x n1 n2;
-  (* some constraint on lifetimes changing? maybe something related to monotonicity *)
-  rely x y := (lcurrent_pre x n1 n2 -> lcurrent_pre y n1 n2) /\
+  pre x := subsumes x n1 n2;
+  rely x y := x = y \/ (* add a case for when it doesn't subsume in x, then anything, that lets us weaken the guar. *)
+              ~subsumes x n1 n2 \/
+              (subsumes x n1 n2 /\ subsumes y n1 n2) /\
               lifetime_lte (lifetime x n1) (lifetime y n1) /\
               lifetime_lte (lifetime x n2) (lifetime y n2);
-  guar x y := x = y;
+  guar x y := x = y (* \/ (~subsumes x n1 n2 /\ (* only lifetimes version here *) subsumes y n1 n2) *);
   |}.
 Next Obligation.
-  constructor; repeat intro; intuition; etransitivity; eauto.
+  constructor; repeat intro; intuition; subst; intuition.
+  right. right. intuition; etransitivity; eauto.
 Qed.
 Next Obligation.
-  constructor; auto. repeat intro. subst; auto.
+  constructor; auto. intros ? ? ? [] []; subst; auto.
 Qed.
-
-Lemma bottom_lcurrent_same n :
-  bottom_perm ≡≡ lcurrent n n.
-Proof.
-  split; constructor; intros; simpl; unfold lcurrent_pre; intuition.
-  admit.
-Abort.
-
-(* Lemma lcurrent_transitive n1 n2 n3 : *)
-(*   lcurrent n1 n2 ** lcurrent n2 n3 <= lcurrent n1 n3. *)
-(* Proof. *)
-(*   constructor; intros; simpl. *)
-(*   - simpl in *. unfold *)
-(* Qed. *)
+Next Obligation.
+  destruct H; subst; auto. destruct H; intuition.
+Qed.
 
 Lemma lcurrent_transitive n1 n2 n3 :
   lcurrent n1 n3 <= lcurrent n1 n2 ** lcurrent n2 n3.
 Proof.
-  constructor; intros; simpl.
-  - destruct H as (? & ? & ?). simpl in *. eapply lcurrent_pre_trans; eauto.
-  - destruct H as (H12 & H23). simpl in *.
-    (* eapply lcurrent_pre_trans. apply H12. 2: apply H23. *)
-    (* + intro. apply H0. admit. *)
-    (* + apply H23; auto. intros. apply H23; auto. intros. *)
-Abort.
+  constructor; intros. (* 3: { constructor. auto. } *)
+  - destruct H as (? & ? & ?). simpl in *. etransitivity; eauto.
+  - destruct H. simpl in *. destruct H, H0; subst; auto. right.
+(*     destruct H as (H12 & ? & ?), H0 as (H23 & ? & ?). split; [| split]; auto.
+    destruct H12, H23.
+    split; etransitivity; eauto.
+    (* intros. etransitivity; eauto. apply H12. admit. admit. *)
+    (* (* we don't know anything about n2 *) *)
+  - constructor; auto.
+Qed.*)
+Admitted.
 
 Lemma lcurrent_sep n1 n2 n3 n4 :
   lcurrent n1 n2 ⊥ lcurrent n3 n4.
 Proof.
-  (* constructor; intros; simpl in *; subst; reflexivity. *)
+  constructor; intros ? ? []; reflexivity.
+Qed.
+
+(* Lemma lcurrent_sep_owned n1 n2 p : *)
+(*   lcurrent n1 n2 ⊥ owned n1 p. *)
+(* Proof. *)
+(*   constructor; intros ? ? []; subst; try reflexivity. *)
+(*   destruct H. right. *)
 (* Qed. *)
-Admitted.
 
 Lemma lcurrent_duplicate n1 n2 :
   lcurrent n1 n2 ≡≡ lcurrent n1 n2 ** lcurrent n1 n2.
@@ -379,19 +384,37 @@ Proof.
     + induction H; [destruct H |]; subst; auto.
 Qed.
 
+(* Weaken the lifetime n1 to n2 *)
 Lemma lcurrent_when n1 n2 p :
-  when n2 p <= lcurrent n1 n2 ** when n1 p.
+  (* lcurrent n1 n2 should still be valid too? *)
+  lcurrent n1 n2 ** when n2 p <= lcurrent n1 n2 ** when n1 p.
 Proof.
   constructor; intros.
-  - simpl. destruct H as (? & ? & ?). simpl in *.
-    intro. symmetry in H2. apply H in H2. auto.
-  - simpl in *. destruct H.
-    destruct H0 as [? | [? | ?]].
-    + destruct H0.
-      left. split. 2: { symmetry. apply H; auto. red.
-      *  (* symmetry. apply H. *)
-        unfold lcurrent_pre in H.
-
-    simpl in *. (* destruct H0 as [? | [? | ?]]. *)
-    (* + left. *)
+  - simpl in *. admit.
+  - simpl in *. admit.
+  - simpl in *.
 Abort.
+
+
+ (*  - simpl. destruct H as (? & ? & ?). simpl in *. *)
+ (*    intro. symmetry in H2. apply H in H2. auto. *)
+ (*  - destruct H. destruct H; subst; try reflexivity. destruct H as ((? & ?) & ? & ?). *)
+ (*    destruct H0 as [[? ?] | [? | ?]]. *)
+ (*    + left. split; symmetry; [apply H | apply H1]; auto. *)
+ (*    + right. left. symmetry. apply H1; auto. *)
+ (*    + (* subsumes x n1 n2 gives us the wrong direction here. *) *)
+ (*      right. destruct (lifetime y n2) eqn:?; auto. destruct l. *)
+ (*      * right. destruct H0 as (? & ? & ?). split; [| split]; auto. *)
+ (*        destruct (lifetime x n2) eqn:?. destruct l. all: auto; try contradiction H3. *)
+ (*        red in H. rewrite H0, Heqo0 in H. *)
+ (*        admit. *)
+ (*      * admit. *)
+ (*      * admit. *)
+ (*  (* right. destruct H2 as (? & ? & ?). split; [| split]; admit. *) *)
+ (*  admit. admit. *)
+ (*  - induction H. 2: econstructor 2; eauto. *)
+ (*    destruct H. constructor. left. auto. *)
+
+ (*    destruct H; subst; try reflexivity. destruct H as (? & ? & ?). *)
+ (*    constructor. right. right. split; [| split]; auto. *)
+ (* Abort. *)
