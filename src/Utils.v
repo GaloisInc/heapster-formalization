@@ -34,7 +34,7 @@ Proof.
   - destruct l; auto. inversion Hl.
   - destruct l.
     + inversion Hl.
-    + simpl in Hl. apply Lt.lt_S_n in Hl. simpl. f_equal. auto.
+    + simpl in Hl. apply PeanoNat.Nat.succ_lt_mono in Hl. simpl. f_equal. auto.
 Qed.
 
 Lemma nth_error_replace_list_index_neq A n n' (l : list A) (a : A) :
@@ -45,6 +45,7 @@ Proof.
   revert l n'.
   induction n; intros l n' Hl Hn; (destruct l; [inversion Hl |]);
     simpl; destruct n'; intuition.
+  apply IHn; auto. apply PeanoNat.Nat.succ_lt_mono; auto.
 Qed.
 
 Lemma nth_error_replace_list_index_eq A n (l : list A) (a : A) :
@@ -83,5 +84,5 @@ Proof.
   - destruct l; auto; inversion Hl.
   - destruct l; auto.
     + inversion Hl.
-    + simpl in Hl. apply Lt.lt_S_n in Hl. apply IHn; auto.
+    + simpl in Hl. apply PeanoNat.Nat.succ_lt_mono in Hl. apply IHn; auto.
 Qed.
