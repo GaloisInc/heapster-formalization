@@ -37,6 +37,32 @@ Proof.
   apply nth_error_replace_list_index_eq.
 Qed.
 
+(** [n1] in the lifetime list [x1] subsumes [n2] in the lifetime list [x2] *)
+Definition subsumes n1 n2 x1 x2 :=
+  (Some current = lifetime x2 n2 -> Some current = lifetime x1 n1) /\
+  (Some finished = lifetime x1 n1 -> Some finished = lifetime x2 n2) /\
+  (None = lifetime x1 n1 -> None = lifetime x2 n2).
+
+(* TODO: generalize to a single lemma *)
+Instance subsumes_preorder x : PreOrder (fun a b => subsumes a b x x).
+Proof.
+  unfold subsumes.
+  constructor; [repeat intro; auto |].
+  intros n1 n2 n3. intros (? & ? & ?) (? & ? & ?). split; [| split]; intros.
+  - apply H. apply H2; auto.
+  - apply H3. apply H0; auto.
+  - apply H4. apply H1; auto.
+Qed.
+Instance subsumes_preorder' x : PreOrder (subsumes x x).
+Proof.
+  unfold subsumes.
+  constructor; [repeat intro; auto |].
+  intros n1 n2 n3. intros (? & ? & ?) (? & ? & ?). split; [| split]; intros.
+  - apply H. apply H2; auto.
+  - apply H3. apply H0; auto.
+  - apply H4. apply H1; auto.
+Qed.
+
 (** Lifetime ordering **)
 Definition lifetime_lte (l1 l2 : option Lifetime) : Prop :=
   match l1, l2 with
@@ -187,18 +213,23 @@ Proof.
   right; intuition. intro. rewrite H, H0. reflexivity.
 Qed.
 
-Program Definition owned (n : nat) (p : perm) : perm :=
+Program Definition owned (n : nat) (ls : nat -> Prop) (p : perm) : perm :=
   {|
-  pre := fun x => lifetime x n = Some current;
-  rely := fun x y => lifetime x n = lifetime y n /\ (lifetime x n = Some finished -> rely p x y);
-  guar := fun x y => x = y \/
-                  lifetime y n = Some finished /\ guar p (replace_lifetime x n finished) y;
+    pre := fun x => lifetime x n = Some current;
+    rely := fun x y => lifetime x n = lifetime y n /\
+                      (forall l, ls l -> subsumes l l x y) /\
+                      (lifetime x n = Some finished -> rely p x y);
+    guar := fun x y => x = y \/
+                      lifetime y n = Some finished /\ guar p (replace_lifetime x n finished) y;
   |}.
 Next Obligation.
   constructor; repeat intro; auto.
   - split; intuition.
-  - destruct H, H0.
-    split; etransitivity; eauto. apply H2. rewrite <- H. auto.
+  - decompose [and] H. decompose [and] H0. clear H H0.
+    split; [| split]; intros.
+    + etransitivity; eauto.
+    + etransitivity. apply H3; auto. auto.
+    + etransitivity. eauto. apply H7; auto. rewrite <- H1. auto.
 Qed.
 Next Obligation.
   constructor; repeat intro; auto.
@@ -207,67 +238,73 @@ Next Obligation.
   rewrite <- (replace_lifetime_same y n finished); auto.
 Qed.
 
-Lemma owned_monotone n p1 p2 : p1 <= p2 -> owned n p1 <= owned n p2.
+Lemma owned_monotone n ls p1 p2 : p1 <= p2 -> owned n ls p1 <= owned n ls p2.
 Proof.
   intros. destruct H. constructor; simpl; intros; decompose [and or] H; auto 6.
 Qed.
 
 Instance Proper_lte_perm_owned :
-  Proper (eq ==> lte_perm ==> lte_perm) owned.
+  Proper (eq ==> eq ==> lte_perm ==> lte_perm) owned.
 Proof.
   repeat intro; subst. apply owned_monotone; auto.
 Qed.
 
 Instance Proper_eq_perm_owned :
-  Proper (eq ==> eq_perm ==> eq_perm) owned.
+  Proper (eq ==> eq ==> eq_perm ==> eq_perm) owned.
 Proof.
   repeat intro; subst. split; apply owned_monotone; auto.
 Qed.
 
-Lemma restrict_monotonic_at_owned p n : owned n p ≡≡ restrict_monotonic_at (owned n p) n.
+Lemma restrict_monotonic_at_owned n ls p : owned n ls p ≡≡ restrict_monotonic_at (owned n ls p) n.
 Proof.
   split; [constructor; intros; simpl in *; auto | apply restrict_monotonic_at_lte].
   decompose [and or] H; subst; try solve [intuition]. split; auto. clear H.
   intro. rewrite H1. destruct (lifetime x n) as [[] |]; simpl; auto.
 Qed.
-Lemma owned_restrict_monotonic_at p n : owned n p ≡≡ owned n (restrict_monotonic_at p n).
+Lemma owned_restrict_monotonic_at n ls p : owned n ls p ≡≡ owned n ls (restrict_monotonic_at p n).
 Proof.
   split; constructor; intros; simpl in *; intuition.
   right; intuition. intro. rewrite H. rewrite lifetime_replace_lifetime. reflexivity.
 Qed.
 
 (* trivial direction *)
-Lemma foo' p q n :
-  owned n (restrict_monotonic_at p n ** restrict_monotonic_at q n) <=
-  owned n (restrict_monotonic_at (p ** q) n).
+Lemma foo' n ls p q :
+  owned n ls (restrict_monotonic_at p n ** restrict_monotonic_at q n) <=
+  owned n ls (restrict_monotonic_at (p ** q) n).
 Proof.
   rewrite <- owned_restrict_monotonic_at. apply owned_monotone.
   apply sep_conj_perm_monotone; apply restrict_monotonic_at_lte.
 Qed.
 
-Lemma lifetimes_sep_gen p q n :
-  p ⊥ owned n q -> when n p ⊥ owned n (p ** q).
+Lemma lifetimes_sep_gen p q n ls :
+  p ⊥ owned n ls q -> when n p ⊥ owned n ls (p ** q).
 Proof.
   split; intros.
-  - simpl in H0. decompose [and or] H0. subst; intuition.
+  - simpl in H0. decompose [and or] H0; [subst; intuition |].
     simpl. right; left; auto.
-  - simpl in H0. decompose [and or] H0. subst; intuition.
-    simpl. split. rewrite H1, H2; auto.
-    intros. rewrite H2 in H3. discriminate H3.
+  - simpl in H0. decompose [and or] H0; [subst; intuition |].
+    simpl. split; [| split].
+    + rewrite H1, H2; auto.
+    + intros. destruct H. apply sep_r; auto.
+    + intros. rewrite H2 in H3. discriminate H3.
 Qed.
 
+(* no longer true after adding [ls]. Fortunately it's not used. *)
 (* not actually a special case of the above *)
-Lemma lifetimes_sep n p : when n p ⊥ owned n p.
-Proof.
-  constructor; intros; simpl in H; auto.
-  - decompose [and or] H; subst; try reflexivity.
-    simpl. right; left; auto.
-  - decompose [and or] H; subst; try reflexivity.
-    simpl. split. rewrite H1, H0. auto. intros. rewrite H1 in H2. discriminate H2.
-Qed.
+(* Lemma lifetimes_sep n p ls : when n p ⊥ owned n ls p. *)
+(* Proof. *)
+(*   constructor; intros; simpl in H; auto. *)
+(*   - decompose [and or] H; subst; try reflexivity. *)
+(*     simpl. right; left; auto. *)
+(*   - decompose [and or] H; subst; try reflexivity. *)
+(*     simpl. split; [| split]. *)
+(*     + rewrite H1, H0. auto. *)
+(*     + intros. *)
+(*     + intros. rewrite H1 in H2. discriminate H2. *)
+(* Qed. *)
 
-Lemma convert p q n (Hmon : forall x y, monotonic_at p n x y) (Hmon' : forall x y, monotonic_at q n x y) :
-  when n p ** owned n (p ** q) <= p ** owned n q.
+Lemma convert p q n ls (Hmon : forall x y, monotonic_at p n x y) (Hmon' : forall x y, monotonic_at q n x y) :
+  when n p ** owned n ls (p ** q) <= p ** owned n ls q.
 Proof.
   split; intros.
   - simpl in *. decompose [and or] H; auto. split; auto. split; auto.
@@ -292,27 +329,11 @@ Proof.
 Qed.
 
 (* special case of convert *)
-Lemma convert_bottom p n (Hmon : forall x y, monotonic_at p n x y) :
-  when n p ** owned n p <= p ** owned n bottom_perm.
+Lemma convert_bottom p n ls (Hmon : forall x y, monotonic_at p n x y) :
+  when n p ** owned n ls p <= p ** owned n ls bottom_perm.
 Proof.
   rewrite <- (sep_conj_perm_bottom p) at 2. apply convert; auto.
   repeat intro. simpl in H. subst. reflexivity.
-Qed.
-
-(** [n1] subsumes [n2] in the Lifetime list [x] *)
-Definition subsumes x n1 n2 :=
-  (Some current = lifetime x n2 -> Some current = lifetime x n1) /\
-  (Some finished = lifetime x n1 -> Some finished = lifetime x n2) /\
-  (None = lifetime x n1 -> None = lifetime x n2).
-
-Instance subsumes_preorder x : PreOrder (subsumes x).
-Proof.
-  unfold subsumes.
-  constructor; [repeat intro; auto |].
-  intros n1 n2 n3. intros (? & ? & ?) (? & ? & ?). split; [| split]; intros.
-  - apply H. apply H2; auto.
-  - apply H3. apply H0; auto.
-  - apply H4. apply H1; auto.
 Qed.
 
 (* Lemma lcurrent_pre_trans' x n1 n2 n3 : *)
@@ -327,10 +348,10 @@ Qed.
 (** n1 subsumes n2, and the rely states that lifetimes don't do weird stuff. **)
 Program Definition lcurrent n1 n2 : perm :=
   {|
-  pre x := subsumes x n1 n2;
+  pre x := subsumes n1 n2 x x;
   rely x y := x = y \/ (* add a case for when it doesn't subsume in x, then anything, that lets us weaken the guar. *)
-              ~subsumes x n1 n2 \/
-              (subsumes x n1 n2 /\ subsumes y n1 n2) /\
+              ~subsumes n1 n2 x x \/
+              (subsumes n1 n2 x x /\ subsumes n1 n2 y y) /\
               lifetime_lte (lifetime x n1) (lifetime y n1) /\
               lifetime_lte (lifetime x n2) (lifetime y n2);
   guar x y := x = y (* \/ (~subsumes x n1 n2 /\ (* only lifetimes version here *) subsumes y n1 n2) *);
@@ -350,7 +371,7 @@ Lemma lcurrent_transitive n1 n2 n3 :
   lcurrent n1 n3 <= lcurrent n1 n2 ** lcurrent n2 n3.
 Proof.
   constructor; intros. (* 3: { constructor. auto. } *)
-  - destruct H as (? & ? & ?). simpl in *. etransitivity; eauto.
+  - destruct H as (? & ? & ?). simpl in *. (* etransitivity; eauto. *) admit.
   - destruct H. simpl in *. destruct H, H0; subst; auto. right.
 (*     destruct H as (H12 & ? & ?), H0 as (H23 & ? & ?). split; [| split]; auto.
     destruct H12, H23.
