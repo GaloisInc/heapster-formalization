@@ -148,19 +148,21 @@ Proof.
   rewrite <- (replace_list_index_eq _ x n l1) at 2; auto.
 Qed.
 
+(* Note: does not have permission to start or end the lifetime [n] *)
 Program Definition when (n : nat) (p : perm) : perm :=
   {|
-  pre := fun x => lifetime x n = Some current -> pre p x;
-  rely := fun x y => lifetime x n = None /\ lifetime y n = None \/
-                  lifetime y n = Some finished \/
-                  (* This is similar to [lifetime_lte] but we cannot have [lifetime x n =
+    pre := fun x => lifetime x n = Some current -> pre p x;
+    rely := fun x y => lifetime x n = None /\ lifetime y n = None \/
+                      lifetime y n = Some finished \/
+                      (* This is similar to [lifetime_lte] but we cannot have [lifetime x n =
                   None /\ lifetime y n = Some current], since that would break transitivity
                   of [rely]. This would allow for an earlier period where the lifetime is
                   not started, where the rely of p is not true. *)
                   lifetime x n = Some current /\ lifetime y n = Some current /\ rely p x y;
-  guar := fun x y => x = y \/
-                  (* state that the guarantee should hold even when you change lifetimes in x, or something like that, kind of like hwat we do in owned *)
-                  lifetime x n = Some current /\ lifetime y n = Some current /\ guar p x y;
+    guar := fun x y => x = y \/
+                    (* state that the guarantee should hold even when you change lifetimes in x, or something like that, kind of like what we do in owned *)
+                    (forall n n', subsumes n' n x x -> subsumes n' n y y) /\
+                    lifetime x n = Some current /\ lifetime y n = Some current /\ guar p x y;
   |}.
 Next Obligation.
   constructor; repeat intro.
@@ -175,7 +177,7 @@ Qed.
 Next Obligation.
   constructor; repeat intro; auto.
   decompose [and or] H; decompose [and or] H0; subst; auto.
-  right. split; [| split]; auto. etransitivity; eauto.
+  right. split; [| split; [| split]]; auto; etransitivity; eauto.
 Qed.
 Next Obligation.
   decompose [and or] H; decompose [or and] H0; subst; auto.
@@ -205,12 +207,12 @@ Lemma restrict_monotonic_at_when p n : when n p ≡≡ restrict_monotonic_at (wh
 Proof.
   split; [constructor; intros; simpl in *; auto | apply restrict_monotonic_at_lte].
   decompose [and or] H; subst; try solve [intuition]. split; auto.
-  intro. rewrite H1, H0. reflexivity.
+  intro. rewrite H0, H2. reflexivity.
 Qed.
 Lemma when_restrict_monotonic_at p n : when n p ≡≡ when n (restrict_monotonic_at p n).
 Proof.
   split; constructor; intros; simpl in *; intuition.
-  right; intuition. intro. rewrite H, H0. reflexivity.
+  right; intuition. intro. rewrite H0, H1. reflexivity.
 Qed.
 
 Program Definition owned (n : nat) (ls : nat -> Prop) (p : perm) : perm :=
@@ -284,9 +286,9 @@ Proof.
     simpl. right; left; auto.
   - simpl in H0. decompose [and or] H0; [subst; intuition |].
     simpl. split; [| split].
-    + rewrite H1, H2; auto.
-    + intros. destruct H. apply sep_r; auto.
-    + intros. rewrite H2 in H3. discriminate H3.
+    + rewrite H1, H3; auto.
+    + intros. destruct H. simpl in sep_r. apply sep_r; auto.
+    + intros. rewrite H1 in H4. discriminate H4.
 Qed.
 
 (* no longer true after adding [ls]. Fortunately it's not used. *)
@@ -348,13 +350,13 @@ Qed.
 (** n1 subsumes n2, and the rely states that lifetimes don't do weird stuff. **)
 Program Definition lcurrent n1 n2 : perm :=
   {|
-  pre x := subsumes n1 n2 x x;
-  rely x y := x = y \/ (* add a case for when it doesn't subsume in x, then anything, that lets us weaken the guar. *)
-              ~subsumes n1 n2 x x \/
-              (subsumes n1 n2 x x /\ subsumes n1 n2 y y) /\
-              lifetime_lte (lifetime x n1) (lifetime y n1) /\
-              lifetime_lte (lifetime x n2) (lifetime y n2);
-  guar x y := x = y (* \/ (~subsumes x n1 n2 /\ (* only lifetimes version here *) subsumes y n1 n2) *);
+    pre x := subsumes n1 n2 x x;
+    rely x y := x = y \/ (* add a case for when it doesn't subsume in x, then anything, that lets us weaken the guar. *)
+                  ~subsumes n1 n2 x x \/
+                  (subsumes n1 n2 x x /\ subsumes n1 n2 y y) /\
+                    lifetime_lte (lifetime x n1) (lifetime y n1) /\
+                    lifetime_lte (lifetime x n2) (lifetime y n2);
+    guar x y := x = y \/ ~subsumes n1 n2 x x;
   |}.
 Next Obligation.
   constructor; repeat intro; intuition; subst; intuition.
@@ -362,6 +364,7 @@ Next Obligation.
 Qed.
 Next Obligation.
   constructor; auto. intros ? ? ? [] []; subst; auto.
+  (* right. destruct H, H0; auto. *)
 Qed.
 Next Obligation.
   destruct H; subst; auto. destruct H; intuition.
@@ -385,8 +388,8 @@ Admitted.
 Lemma lcurrent_sep n1 n2 n3 n4 :
   lcurrent n1 n2 ⊥ lcurrent n3 n4.
 Proof.
-  constructor; intros ? ? []; reflexivity.
-Qed.
+  constructor; intros ? ? []; subst; try reflexivity.
+Abort.
 
 (* Lemma lcurrent_sep_owned n1 n2 p : *)
 (*   lcurrent n1 n2 ⊥ owned n1 p. *)
@@ -401,9 +404,10 @@ Proof.
   split.
   - constructor; intros; simpl in *; [apply H | apply H | subst; constructor; left; auto].
   - constructor; intros; simpl in *; subst; auto.
-    + split; [| split]; auto. apply lcurrent_sep.
-    + induction H; [destruct H |]; subst; auto.
-Qed.
+    + split; [| split]; auto. (* apply lcurrent_sep. *)
+      (* + induction H; [destruct H |]; subst; auto. *)
+      Abort.
+
 
 (* Weaken the lifetime n1 to n2 *)
 Lemma lcurrent_when n1 n2 p :
@@ -413,7 +417,18 @@ Proof.
   constructor; intros.
   - simpl in *. admit.
   - simpl in *. admit.
-  - simpl in *.
+  - simpl in *. induction H.
+    + destruct H; subst; auto. constructor. destruct H; subst; auto.
+      destruct H; subst; auto. constructor; auto.
+      destruct H as (? & ? & ? & ?).
+      assert (subsumes n1 n2 x x \/ ~subsumes n1 n2 x x) by admit.
+      destruct H3.
+      * pose proof (H _ _ H3).
+        symmetry in H0. apply H3 in H0.
+        symmetry in H1. apply H4 in H1.
+        constructor; auto. right. right. split; auto.
+      * constructor; auto.
+    + econstructor 2; eauto.
 Abort.
 
 
