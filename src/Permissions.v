@@ -428,14 +428,14 @@ Section Permissions.
   Lemma separate_antimonotone : forall p q r, p ⊥ q -> r <= q -> p ⊥ r.
   Proof.
     intros. constructor.
-    - intros. apply H. apply H0. auto.
-    - intros. apply H0. apply H. auto.
+    - intros. apply H; auto. apply H0; auto.
+    - intros. apply H0. apply H; auto.
   Qed.
 
   (** ** Separating conjunction for permissions *)
   Program Definition sep_conj_perm (p q: perm) : perm :=
     {|
-    pre := fun x => pre p x /\ pre q x /\ separate p q;
+    pre := fun x => pre p x /\ pre q x /\ p ⊥ q;
     rely := fun x y => rely p x y /\ rely q x y;
     guar  := clos_trans _ (fun x y => (guar p x y) \/ (guar q x y))
     |}.

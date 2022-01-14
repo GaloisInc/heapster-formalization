@@ -2,6 +2,7 @@
 From Coq Require Import
      Arith.PeanoNat
      Logic.FunctionalExtensionality
+     Logic.Decidable
      Lists.List
      Lia
      Classes.RelationClasses
@@ -62,6 +63,11 @@ Proof.
   - apply H3. apply H0; auto.
   - apply H4. apply H1; auto.
 Qed.
+
+Lemma subsumes_decidable n1 n2 l1 l2 : decidable (subsumes n1 n2 l1 l2).
+Proof.
+  unfold subsumes.
+Admitted.
 
 (** Lifetime ordering **)
 Definition lifetime_lte (l1 l2 : option Lifetime) : Prop :=
@@ -217,7 +223,7 @@ Qed.
 
 Program Definition owned (n : nat) (ls : nat -> Prop) (p : perm) : perm :=
   {|
-    pre := fun x => lifetime x n = Some current;
+    pre := fun x => lifetime x n = Some current; (* probably need soemthing with subsumes *)
     rely := fun x y => lifetime x n = lifetime y n /\
                       (forall l, ls l -> subsumes l l x y) /\
                       (lifetime x n = Some finished -> rely p x y);
@@ -352,8 +358,9 @@ Program Definition lcurrent n1 n2 : perm :=
   {|
     pre x := subsumes n1 n2 x x;
     rely x y := x = y \/ (* add a case for when it doesn't subsume in x, then anything, that lets us weaken the guar. *)
-                  ~subsumes n1 n2 x x \/
-                  (subsumes n1 n2 x x /\ subsumes n1 n2 y y) /\
+                  ~subsumes n1 n2 x x \/ (* no longer needed if ⊥ changes *)
+                    subsumes n1 n2 x x /\
+                    subsumes n1 n2 y y /\
                     lifetime_lte (lifetime x n1) (lifetime y n1) /\
                     lifetime_lte (lifetime x n2) (lifetime y n2);
     guar x y := x = y \/ ~subsumes n1 n2 x x;
@@ -373,9 +380,10 @@ Qed.
 Lemma lcurrent_transitive n1 n2 n3 :
   lcurrent n1 n3 <= lcurrent n1 n2 ** lcurrent n2 n3.
 Proof.
-  constructor; intros. (* 3: { constructor. auto. } *)
-  - destruct H as (? & ? & ?). simpl in *. (* etransitivity; eauto. *) admit.
-  - destruct H. simpl in *. destruct H, H0; subst; auto. right.
+  constructor; intros.
+  - destruct H as (? & ? & ?). simpl in *. eapply subsumes_preorder; eauto.
+  - destruct H. simpl in *. destruct H, H0; subst; auto. right. admit.
+  - simpl in *. (* should be easy *)
 (*     destruct H as (H12 & ? & ?), H0 as (H23 & ? & ?). split; [| split]; auto.
     destruct H12, H23.
     split; etransitivity; eauto.
@@ -385,11 +393,11 @@ Proof.
 Qed.*)
 Admitted.
 
-Lemma lcurrent_sep n1 n2 n3 n4 :
-  lcurrent n1 n2 ⊥ lcurrent n3 n4.
+Lemma lcurrent_sep n1 n2 :
+  lcurrent n1 n2 ⊥ lcurrent n1 n2.
 Proof.
-  constructor; intros ? ? []; subst; try reflexivity.
-Abort.
+  constructor; intros ? ? []; subst; try reflexivity; simpl; intuition.
+Qed.
 
 (* Lemma lcurrent_sep_owned n1 n2 p : *)
 (*   lcurrent n1 n2 ⊥ owned n1 p. *)
@@ -404,10 +412,10 @@ Proof.
   split.
   - constructor; intros; simpl in *; [apply H | apply H | subst; constructor; left; auto].
   - constructor; intros; simpl in *; subst; auto.
-    + split; [| split]; auto. (* apply lcurrent_sep. *)
-      (* + induction H; [destruct H |]; subst; auto. *)
-      Abort.
-
+    + split; [| split]; auto. apply lcurrent_sep.
+    + induction H. intuition.
+      destruct IHclos_trans1; subst; auto.
+Qed.
 
 (* Weaken the lifetime n1 to n2 *)
 Lemma lcurrent_when n1 n2 p :
@@ -415,13 +423,19 @@ Lemma lcurrent_when n1 n2 p :
   lcurrent n1 n2 ** when n2 p <= lcurrent n1 n2 ** when n1 p.
 Proof.
   constructor; intros.
-  - simpl in *. admit.
+  - simpl in *. destruct H as (? & ? & ?). split; [| split]; auto.
+    + intro. apply H0. symmetry. apply H. auto.
+    + admit.
+      (* split; intros. *)
+      (* * apply H1. destruct H2; subst; intuition. *)
+      (*   right. split; [| split; [| split]]; auto; symmetry. *)
+      (*   apply H. ; auto. *)
   - simpl in *. admit.
   - simpl in *. induction H.
     + destruct H; subst; auto. constructor. destruct H; subst; auto.
       destruct H; subst; auto. constructor; auto.
       destruct H as (? & ? & ? & ?).
-      assert (subsumes n1 n2 x x \/ ~subsumes n1 n2 x x) by admit.
+      pose proof (subsumes_decidable n1 n2 x x).
       destruct H3.
       * pose proof (H _ _ H3).
         symmetry in H0. apply H3 in H0.
