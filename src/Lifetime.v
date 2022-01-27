@@ -69,6 +69,27 @@ Proof.
   unfold subsumes.
 Admitted.
 
+Lemma not_subsumes n1 n2 n3 l :
+  ~subsumes n1 n3 l l -> ~subsumes n1 n2 l l \/ ~subsumes n2 n3 l l.
+Proof.
+  intro H. red in H.
+  destruct (lifetime l n1) eqn:Hl1; [destruct l0 |];
+    (destruct (lifetime l n2) eqn:Hl2; [destruct l0 |]);
+    (destruct (lifetime l n3) eqn:Hl3; [destruct l0 |]).
+  all: try solve [exfalso; apply H; split; [| split];
+                  rewrite Hl1, Hl3; auto; intro Hc; discriminate Hc].
+  all: try solve [left; intro H'; red in H'; rewrite Hl1, Hl2 in H';
+                  destruct H' as (H1 & H2 & H3);
+                  try solve [discriminate H1; auto];
+                  try solve [discriminate H2; auto];
+                  try solve [discriminate H3; auto]].
+  all: try solve [right; intro H'; red in H'; rewrite Hl2, Hl3 in H';
+                  destruct H' as (H1 & H2 & H3);
+                  try solve [discriminate H1; auto];
+                  try solve [discriminate H2; auto];
+                  try solve [discriminate H3; auto]].
+Qed.
+
 (** Lifetime ordering **)
 Definition lifetime_lte (l1 l2 : option Lifetime) : Prop :=
   match l1, l2 with
@@ -231,12 +252,13 @@ Section LifetimePerms.
     right; intuition. intro. rewrite H0, H1. reflexivity.
   Qed.
 
+  (* Gives us permission to end the lifetime [n], which gives us back [p] *)
   Program Definition owned (n : nat) (ls : nat -> Prop) (p : perm) : @perm C :=
     {|
       (* TODO: probably need soemthing with subsumes *)
       pre := fun x => lifetime (lget x) n = Some current;
       rely := fun x y => lifetime (lget x) n = lifetime (lget y) n /\
-                        (forall l, ls l -> subsumes l l (lget x) (lget y)) /\
+                        (forall l, ls l -> subsumes l l (lget x) (lget y)) /\ (* TODO: double check this *)
                         (lifetime (lget x) n = Some finished -> rely p x y);
       guar := fun x y => x = y \/
                         lifetime (lget y) n = Some finished /\
@@ -307,7 +329,7 @@ Section LifetimePerms.
     - simpl in H0. decompose [and or] H0; [subst; intuition |].
       simpl. split; [| split].
       + rewrite H1, H3; auto.
-      + intros. destruct H. simpl in sep_r. apply sep_r; auto.
+      + intros. destruct H. apply sep_r; auto.
       + intros. rewrite H1 in H4. discriminate H4.
   Qed.
 
@@ -320,7 +342,7 @@ Section LifetimePerms.
   (*     simpl. right; left; auto. *)
   (*   - decompose [and or] H; subst; try reflexivity. *)
   (*     simpl. split; [| split]. *)
-  (*     + rewrite H1, H0. auto. *)
+  (*     + rewrite H2, H0. auto. *)
   (*     + intros. *)
   (*     + intros. rewrite H1 in H2. discriminate H2. *)
   (* Qed. *)
@@ -334,7 +356,7 @@ Section LifetimePerms.
     - simpl in *. decompose [and or] H; auto.
       destruct (lifetime (lget x) n) as [[] | ]; auto 7.
     - simpl in H. induction H. 2: { econstructor 2; eauto. }
-                             decompose [and or] H; simpl; subst; try solve [constructor; auto].
+      decompose [and or] H; simpl; subst; try solve [constructor; auto].
       clear H.
       apply Operators_Properties.clos_trans_t1n_iff.
       apply Operators_Properties.clos_trans_t1n_iff in H2.
@@ -399,16 +421,18 @@ Section LifetimePerms.
   Proof.
     constructor; intros.
     - destruct H as (? & ? & ?). simpl in *. eapply subsumes_preorder; eauto.
-    - destruct H. simpl in *. destruct H, H0; subst; auto. right. admit.
-    - simpl in *. (* should be easy *)
-  (*     destruct H as (H12 & ? & ?), H0 as (H23 & ? & ?). split; [| split]; auto.
-    destruct H12, H23.
-    split; etransitivity; eauto.
-    (* intros. etransitivity; eauto. apply H12. admit. admit. *)
-    (* (* we don't know anything about n2 *) *)
-  - constructor; auto.
-Qed.*)
-  Admitted.
+    - destruct H. simpl in *. destruct H, H0; subst; auto. right.
+      destruct H, H0.
+      4: { right. decompose [and] H. decompose [and] H0.
+           split; [| split; [| split]].
+           eapply subsumes_preorder; eauto.
+           eapply subsumes_preorder; eauto.
+           etransitivity; eauto. reflexivity.
+           etransitivity; eauto. reflexivity. }
+      all: left; admit.
+    - simpl in *. destruct H; subst; constructor; auto.
+      eapply not_subsumes in H. destruct H; [left | right]; right; eauto.
+  Abort.
 
   Lemma lcurrent_sep n1 n2 :
     lcurrent n1 n2 ⊥ lcurrent n1 n2.
@@ -416,12 +440,24 @@ Qed.*)
     constructor; intros ? ? []; subst; try reflexivity; simpl; intuition.
   Qed.
 
-  (* Lemma lcurrent_sep_owned n1 n2 p : *)
-  (*   lcurrent n1 n2 ⊥ owned n1 p. *)
-  (* Proof. *)
-  (*   constructor; intros ? ? []; subst; try reflexivity. *)
-  (*   destruct H. right. *)
-  (* Qed. *)
+  Lemma lcurrent_sep_owned n1 n2 (ns : nat -> Prop) p :
+    ns n2 ->
+    lcurrent n1 n2 ⊥ owned n1 ns p.
+  Proof.
+    constructor; intros ? ? []; subst; try reflexivity.
+    - destruct H0. right. admit.
+    - simpl in *.
+  Abort.
+
+  Lemma lcurrent_sep_when n1 n2 p :
+    lcurrent n1 n2 ⊥ p ->
+    lcurrent n1 n2 ⊥ when n1 p.
+  Proof.
+    intros Hsep. split; intros.
+    - apply Hsep; auto. destruct H; subst; intuition.
+    - destruct H; subst; [reflexivity |].
+      destruct Hsep as [_ ?]. simpl.
+  Admitted.
 
   Lemma lcurrent_duplicate n1 n2 :
     lcurrent n1 n2 ≡≡ lcurrent n1 n2 ** lcurrent n1 n2.
@@ -442,30 +478,26 @@ Qed.*)
     constructor; intros.
     - simpl in *. destruct H as (? & ? & ?). split; [| split]; auto.
       + intro. apply H0. symmetry. apply H. auto.
-      + admit.
-    (* split; intros. *)
-    (* * apply H1. destruct H2; subst; intuition. *)
-    (*   right. split; [| split; [| split]]; auto; symmetry. *)
-    (* apply H. ; auto. *)
+      + destruct H1. simpl in sep_r. admit.
     - simpl in *. destruct H; subst. destruct H; subst.
       {
         split; auto. destruct (lifetime (lget y) n2) eqn:?; auto.
         destruct l; auto. right; right. split; [| split]; intuition.
       }
-      (* destruct H. red in H. *)
+      destruct H. red in H.
       + admit.
-    - simpl in *. induction H.
-      + destruct H; subst; auto. constructor. destruct H; subst; auto.
-        destruct H; subst; auto. constructor; auto.
-        destruct H as (? & ? & ? & ?).
-        pose proof (subsumes_decidable n1 n2 (lget x) (lget x)).
-        destruct H3.
-        * pose proof (H _ _ H3).
-          symmetry in H0. apply H3 in H0.
-          symmetry in H1. apply H4 in H1.
-          constructor; auto. right. right. split; auto.
-        * constructor; auto.
-      + econstructor 2; eauto.
+      + admit.
+    - simpl in *. induction H. 2: econstructor 2; eauto.
+      destruct H; subst; [constructor; destruct H; subst; auto |].
+      destruct H; subst; [constructor; auto |].
+      destruct H as (? & ? & ? & ?).
+      pose proof (subsumes_decidable n1 n2 (lget x) (lget x)).
+      destruct H3.
+      + pose proof (H _ _ H3).
+        symmetry in H0. apply H3 in H0.
+        symmetry in H1. apply H4 in H1.
+        constructor; auto. right. right. auto.
+      + constructor; auto.
   Abort.
 
 
