@@ -112,6 +112,17 @@ Section LifetimePerms.
   Context {C : Type}.
   Context `{Hlens: Lens C Lifetimes}.
 
+  Definition lifetime_invariant x y :=
+    (forall n n', subsumes n' n (lget x) (lget x) ->
+             subsumes n' n (lget y) (lget y)) /\
+      (forall n, lifetime_lte (lifetime (lget x) n) (lifetime (lget y) n)).
+
+  Instance lifetime_invariant_preorder : PreOrder lifetime_invariant.
+  Proof.
+    split; [split; intuition |].
+    - intros ? ? ? [] []. split; auto; etransitivity; eauto.
+  Qed.
+
   Definition monotonic_at (p : @perm C) (n : nat) x y : Prop :=
     guar p x y -> lifetime_lte (lifetime (lget x) n) (lifetime (lget y) n).
 
@@ -186,30 +197,36 @@ Section LifetimePerms.
       pre := fun x =>
                lifetime (lget x) n = Some current -> pre p x;
       rely := fun x y =>
-                lifetime (lget x) n = None /\ lifetime (lget y) n = None \/
-                lifetime (lget y) n = Some finished \/
-                (* This is similar to [lifetime_lte] but we cannot have [lifetime x n =
-                   None /\ lifetime y n = Some current], since that would break transitivity
-                   of [rely]. This would allow for an earlier period where the lifetime is
-                   not started, where the rely of p is not true. *)
-                lifetime (lget x) n = Some current /\ lifetime (lget y) n = Some current /\ rely p x y;
+                lifetime_lte (lifetime (lget x) n) (lifetime (lget y) n) /\
+                  (lifetime (lget x) n = Some current ->
+                   lifetime (lget y) n = Some current ->
+                   rely p x y) /\
+                  (lifetime (lget x) n = None ->
+                   lifetime (lget y) n = Some current ->
+                   pre p y);
       guar := fun x y => x = y \/
-                       (* state that the guarantee should hold even when you change lifetimes in x, or something like that, kind of like what we do in owned *)
-                       (forall n n', subsumes n' n (lget x) (lget x) ->
-                                subsumes n' n (lget y) (lget y)) /\
-                       lifetime (lget x) n = Some current /\
-                       lifetime (lget y) n = Some current /\
-                       guar p x y;
+                        lifetime_lte (lifetime (lget x) n) (lifetime (lget y) n) /\
+                          lifetime (lget x) n = Some current /\
+                          lifetime (lget y) n = Some current /\
+                          guar p x y;
     |}.
   Next Obligation.
     constructor; repeat intro.
-    - destruct (lifetime (lget x) n) as [[] |]; intuition.
-    - decompose [and or] H; decompose [and or] H0; subst; auto.
-      + rewrite H1 in H3. discriminate H3.
-      + rewrite H2 in H3. discriminate H3.
-      + rewrite H1 in H2. discriminate H2.
-      + rewrite H2 in H5. discriminate H5.
-      + right; right. split; [| split]; auto. etransitivity; eauto.
+    - destruct (lifetime (lget x) n) as [[] |]; intuition;
+        try discriminate H; try discriminate H0.
+    - destruct H as (? & ? & ?), H0 as (? & ? & ?). split; [etransitivity; eauto | split].
+      + intros. assert (lifetime (lget y) n = Some current).
+        {
+          rewrite H5 in H. rewrite H6 in H0.
+          destruct (lifetime (lget y) n); [destruct l |]; auto.
+          - inversion H0.
+          - inversion H.
+        }
+        etransitivity; eauto.
+      + intros. destruct (lifetime (lget y) n); [destruct l |]; auto.
+        * eapply pre_respects. apply H3; auto.
+          destruct (lifetime (lget x) n); [destruct l |]; auto.
+        * rewrite H6 in H0. inversion H0.
   Qed.
   Next Obligation.
     constructor; repeat intro; auto.
@@ -217,10 +234,9 @@ Section LifetimePerms.
     right. split; [| split; [| split]]; auto; etransitivity; eauto.
   Qed.
   Next Obligation.
-    decompose [and or] H; decompose [or and] H0; subst; auto.
-    - rewrite H1 in H4. discriminate H4.
-    - rewrite H1 in H3. discriminate H3.
+    rewrite H1 in H. destruct (lifetime (lget x) n); [destruct l |]; auto.
     - eapply pre_respects; eauto.
+    - inversion H.
   Qed.
 
   Lemma when_monotone n p1 p2 : p1 <= p2 -> when n p1 <= when n p2.
@@ -261,8 +277,9 @@ Section LifetimePerms.
                         (forall l, ls l -> subsumes l l (lget x) (lget y)) /\ (* TODO: double check this *)
                         (lifetime (lget x) n = Some finished -> rely p x y);
       guar := fun x y => x = y \/
-                        lifetime (lget y) n = Some finished /\
-                          guar p (lput x (replace_lifetime (lget x) n finished)) y;
+                        lifetime_lte (lifetime (lget x) n) (lifetime (lget y) n) /\
+                          lifetime (lget y) n = Some finished /\
+                          guar p x y;
     |}.
   Next Obligation.
     constructor; repeat intro; auto.
@@ -276,9 +293,7 @@ Section LifetimePerms.
   Next Obligation.
     constructor; repeat intro; auto.
     decompose [and or] H; decompose [and or] H0; subst; auto.
-    right. split; auto. etransitivity; eauto.
-    rewrite (replace_lifetime_same (lget y) n finished) in H5; auto.
-    rewrite lPutGet in H5; auto.
+    right. split; [| split]; auto; etransitivity; eauto.
   Qed.
 
   Lemma owned_monotone n ls p1 p2 : p1 <= p2 -> owned n ls p1 <= owned n ls p2.
@@ -302,13 +317,12 @@ Section LifetimePerms.
   Proof.
     split; [constructor; intros; simpl in *; auto | apply restrict_monotonic_at_lte].
     decompose [and or] H; subst; try solve [intuition]. split; auto. clear H.
-    intro. rewrite H1. destruct (lifetime (lget x) n) as [[] |]; simpl; auto.
+    intro. rewrite H0. destruct (lifetime (lget x) n) as [[] |]; simpl; auto.
   Qed.
   Lemma owned_restrict_monotonic_at n ls p : owned n ls p ≡≡ owned n ls (restrict_monotonic_at p n).
   Proof.
     split; constructor; intros; simpl in *; intuition.
-    right; intuition. intro. rewrite H. rewrite lGetPut.
-    rewrite lifetime_replace_lifetime. reflexivity.
+    right; intuition. intro. auto.
   Qed.
 
   (* trivial direction *)
@@ -324,8 +338,10 @@ Section LifetimePerms.
     p ⊥ owned n ls q -> when n p ⊥ owned n ls (p ** q).
   Proof.
     split; intros.
-    - simpl in H0. decompose [and or] H0; [subst; intuition |].
-      simpl. right; left; auto.
+    - simpl in H0. decompose [and or] H0; [subst; intuition |]. clear H0.
+      simpl. split; [| split]; auto.
+      + intros. rewrite H1 in H3. inversion H3.
+      + intros. rewrite H1 in H3. inversion H3.
     - simpl in H0. decompose [and or] H0; [subst; intuition |].
       simpl. split; [| split].
       + rewrite H1, H3; auto.
@@ -353,27 +369,31 @@ Section LifetimePerms.
     split; intros.
     - simpl in *. decompose [and or] H; auto. split; auto. split; auto.
       eapply lifetimes_sep_gen; eauto.
-    - simpl in *. decompose [and or] H; auto.
+    - simpl in *. destruct H as (? & ? & ? & ?). split; auto.
       destruct (lifetime (lget x) n) as [[] | ]; auto 7.
+      + split; [| split]; auto.
+        rewrite <- H0. constructor. intros. inversion H3.
+      + split; [| split]; auto.
+        rewrite <- H0. constructor. intros. inversion H3.
+      + split; [| split]; auto.
+        rewrite <- H0. constructor. intros. rewrite H4 in H0. inversion H0.
     - simpl in H. induction H. 2: { econstructor 2; eauto. }
       decompose [and or] H; simpl; subst; try solve [constructor; auto].
-      clear H.
+      clear H. rename H0 into Hlte, H1 into Hy, H3 into Hguar.
       apply Operators_Properties.clos_trans_t1n_iff.
-      apply Operators_Properties.clos_trans_t1n_iff in H2.
-      constructor 2 with (y:=lput x (replace_lifetime (lget x) n finished)).
-      { right; right. split; [rewrite lGetPut; apply lifetime_replace_lifetime | reflexivity]. }
-      pose proof (lifetime_replace_lifetime (lget x) n finished).
-      erewrite <- (lGetPut x (replace_lifetime _ _ _)) in H.
-      induction H2; intros; subst.
-      + constructor. destruct H1; auto. right; right. split; auto.
-        rewrite replace_lifetime_same; auto. rewrite lPutGet; auto.
-      + assert (lifetime (lget y) n = Some finished).
-        { destruct H1; [apply Hmon in H1 | apply Hmon' in H1]; rewrite H in H1; simpl in H1;
-            destruct (lifetime (lget y) n) as [[] |]; inversion H1; auto. }
-        econstructor 2. 2: apply IHclos_trans_1n; auto.
-        destruct H1; auto. right; right. split; auto. rewrite replace_lifetime_same; auto.
-        rewrite lPutGet; auto.
-  Qed.
+      apply Operators_Properties.clos_trans_t1n_iff in Hguar.
+
+      induction Hguar.
+      + constructor 1. destruct H; [left | right]; auto.
+      + econstructor 2.
+        2: { apply IHHguar; auto. rewrite Hy.
+             destruct (lifetime (lget y) n); [destruct l |]; constructor.
+        }
+        destruct H.
+        left; auto. right; right; auto. split; [| split]; auto.
+        (* TODO: q should not be able to change lifetimes *) admit.
+        (* TODO: similarly, p and q should not be able to change lifetimes *) admit.
+  Admitted.
 
   (* special case of convert *)
   Lemma convert_bottom p n ls (Hmon : forall x y, monotonic_at p n x y) :
@@ -390,27 +410,24 @@ Section LifetimePerms.
 (*   unfold lcurrent_pre. split. *)
 (*   - split. *)
 (*     + intro. apply H. *)
-(* Admitted. *)
+  (* Admitted. *)
 
-  (** n1 subsumes n2, and the rely states that lifetimes don't do weird stuff. **)
-  Program Definition lcurrent n1 n2 : @perm C :=
+  (** The naive defn is transitive, at least *)
+(*    Program Definition lcurrent n1 n2 : @perm C :=
     {|
       pre x := subsumes n1 n2 (lget x) (lget x);
-      rely x y := x = y \/ (* add a case for when it doesn't subsume in x, then anything, that lets us weaken the guar. *)
-                    ~subsumes n1 n2 (lget x) (lget x) \/ (* no longer needed if ⊥ changes *)
+      rely x y := x = y \/
                     subsumes n1 n2 (lget x) (lget x) /\
-                      subsumes n1 n2 (lget y) (lget y) /\
-                      lifetime_lte (lifetime (lget x) n1) (lifetime (lget y) n1) /\
-                      lifetime_lte (lifetime (lget x) n2) (lifetime (lget y) n2);
-      guar x y := x = y \/ ~subsumes n1 n2 (lget x) (lget x);
+                    subsumes n1 n2 (lget y) (lget y);
+      guar x y := x = y;
     |}.
   Next Obligation.
-    constructor; repeat intro; intuition; subst; intuition.
-    right. right. intuition; etransitivity; eauto.
+    constructor; repeat intro; try solve [intuition].
+    destruct H, H0; subst; auto.
+    right. destruct H, H0. split; eapply subsumes_preorder; eauto; reflexivity.
   Qed.
   Next Obligation.
-    constructor; auto. intros ? ? ? [] []; subst; auto.
-    (* right. destruct H, H0; auto. *)
+    constructor; repeat intro; subst; intuition.
   Qed.
   Next Obligation.
     destruct H; subst; auto. destruct H; intuition.
@@ -419,87 +436,125 @@ Section LifetimePerms.
   Lemma lcurrent_transitive n1 n2 n3 :
     lcurrent n1 n3 <= lcurrent n1 n2 ** lcurrent n2 n3.
   Proof.
-    constructor; intros.
+    constructor; intros; cbn; intuition.
     - destruct H as (? & ? & ?). simpl in *. eapply subsumes_preorder; eauto.
     - destruct H. simpl in *. destruct H, H0; subst; auto. right.
-      destruct H, H0.
-      4: { right. decompose [and] H. decompose [and] H0.
-           split; [| split; [| split]].
-           eapply subsumes_preorder; eauto.
-           eapply subsumes_preorder; eauto.
-           etransitivity; eauto. reflexivity.
-           etransitivity; eauto. reflexivity. }
-      all: left; admit.
-    - simpl in *. destruct H; subst; constructor; auto.
-      eapply not_subsumes in H. destruct H; [left | right]; right; eauto.
-  Abort.
+      destruct H, H0. split; auto; eapply subsumes_preorder; eauto.
+  Qed.
+*)
 
-  Lemma lcurrent_sep n1 n2 :
-    lcurrent n1 n2 ⊥ lcurrent n1 n2.
+  (** n1 subsumes n2, and the rely states that lifetimes don't do weird stuff. **)
+  Program Definition lcurrent n1 n2 (H : forall x, subsumes n1 n2 x x) : @perm C :=
+    {|
+      pre x := True;
+      rely x y := True;
+      guar x y := x = y;
+    |}.
+  Next Obligation.
+    constructor; repeat intro; auto.
+  Qed.
+  Next Obligation.
+    constructor; repeat intro; subst; auto.
+  Qed.
+  (* Next Obligation. *)
+  (*   destruct H; subst; auto. eapply absurd; eauto. *)
+  (* Qed. *)
+
+  (* Program Definition lcurrent n1 n2 : @perm C := *)
+  (*   {| *)
+  (*     pre x := subsumes n1 n2 (lget x) (lget x); *)
+  (*     rely x y := x = y \/ *)
+  (*                   lifetime_invariant x y /\ *)
+  (*                     (~subsumes n1 n2 (lget x) (lget x) \/ *)
+  (*                        subsumes n1 n2 (lget x) (lget x) /\ *)
+  (*                        subsumes n1 n2 (lget y) (lget y)); *)
+  (*     guar x y := x = y \/ lifetime_invariant x y /\ *)
+  (*                         ~subsumes n1 n2 (lget x) (lget x) /\ *)
+  (*                         lifetime (lget x) n2 = lifetime (lget y) n2; *)
+  (*   |}. *)
+  (* Next Obligation. *)
+  (*   constructor; repeat intro; try solve [intuition]. *)
+  (*   destruct H, H0; subst; auto. *)
+  (*   right. destruct H, H0. split; [etransitivity; eauto | intuition]. *)
+  (* Qed. *)
+  (* Next Obligation. *)
+  (*   constructor; auto. intros ? ? ? [? | [? [? ?]]] [? | [? [? ?]]]; subst; auto. *)
+  (*   right. split; [| split]; auto; etransitivity; eauto. *)
+  (* Qed. *)
+  (* Next Obligation. *)
+  (*   destruct H; subst; auto. destruct H; intuition. *)
+  (* Qed. *)
+
+  Lemma lcurrent_sep n1 n2 H :
+    lcurrent n1 n2 H ⊥ lcurrent n1 n2 H.
   Proof.
-    constructor; intros ? ? []; subst; try reflexivity; simpl; intuition.
+    constructor; intros ? ? []; reflexivity.
   Qed.
 
-  Lemma lcurrent_sep_owned n1 n2 (ns : nat -> Prop) p :
-    ns n2 ->
-    lcurrent n1 n2 ⊥ owned n1 ns p.
+  Lemma lcurrent_transitive n1 n2 n3 H12 H23 H13 :
+    lcurrent n1 n3 H13 <= lcurrent n1 n2 H12 ** lcurrent n2 n3 H23.
   Proof.
-    constructor; intros ? ? []; subst; try reflexivity.
-    - destruct H0. right. admit.
-    - simpl in *.
-  Abort.
-
-  Lemma lcurrent_sep_when n1 n2 p :
-    lcurrent n1 n2 ⊥ p ->
-    lcurrent n1 n2 ⊥ when n1 p.
-  Proof.
-    intros Hsep. split; intros.
-    - apply Hsep; auto. destruct H; subst; intuition.
-    - destruct H; subst; [reflexivity |].
-      destruct Hsep as [_ ?]. simpl.
-  Admitted.
-
-  Lemma lcurrent_duplicate n1 n2 :
-    lcurrent n1 n2 ≡≡ lcurrent n1 n2 ** lcurrent n1 n2.
-  Proof.
-    split.
-    - constructor; intros; simpl in *; [apply H | apply H | subst; constructor; left; auto].
-    - constructor; intros; simpl in *; subst; auto.
-      + split; [| split]; auto. apply lcurrent_sep.
-      + induction H. intuition.
-        destruct IHclos_trans1; subst; auto.
+    constructor; intros; cbn in *; intuition.
   Qed.
+
+  (* Lemma lcurrent_sep_owned n1 n2 (ns : nat -> Prop) p : *)
+  (*   ns n2 -> *)
+  (*   lcurrent n1 n2 ⊥ owned n1 ns p. *)
+  (* Proof. *)
+  (*   constructor; intros ? ? []; subst; try reflexivity. *)
+  (*   - destruct H0. right. admit. *)
+  (*   - simpl in *. *)
+  (* Abort. *)
+
+  (* Lemma lcurrent_sep_when n1 n2 p : *)
+  (*   lcurrent n1 n2 ⊥ p -> *)
+  (*   lcurrent n1 n2 ⊥ when n1 p. *)
+  (* Proof. *)
+  (*   intros Hsep. split; intros. *)
+  (*   - apply Hsep; auto. destruct H; subst; intuition. *)
+  (*   - destruct H; subst; [reflexivity |]. *)
+  (*     destruct Hsep as [_ ?]. simpl. *)
+  (* Admitted. *)
+
+  (* Lemma lcurrent_duplicate n1 n2 : *)
+  (*   lcurrent n1 n2 ≡≡ lcurrent n1 n2 ** lcurrent n1 n2. *)
+  (* Proof. *)
+  (*   split. *)
+  (*   - constructor; intros; simpl in *; [apply H | apply H | subst; constructor; left; auto]. *)
+  (*   - constructor; intros; simpl in *; subst; auto. *)
+  (*     + split; [| split]; auto. apply lcurrent_sep. *)
+  (*     + induction H. intuition. *)
+  (*       destruct IHclos_trans1 as [? | (? & ? & ?)]; subst; auto. *)
+  (*       destruct IHclos_trans2 as [? | (? & ? & ?)]; subst; auto. *)
+  (*       right; split; [| split]; auto; etransitivity; eauto. *)
+  (* Qed. *)
 
   (* Weaken the lifetime n1 to n2 *)
-  Lemma lcurrent_when n1 n2 p :
-    (* lcurrent n1 n2 should still be valid too? *)
-    lcurrent n1 n2 ** when n2 p <= lcurrent n1 n2 ** when n1 p.
+  Lemma lcurrent_when n1 n2 p H :
+    lcurrent n1 n2 H ** when n2 p <= lcurrent n1 n2 H ** when n1 p.
   Proof.
     constructor; intros.
-    - simpl in *. destruct H as (? & ? & ?). split; [| split]; auto.
+    - simpl in *. destruct H0 as (_ & ? & ?). split; [| split]; auto.
       + intro. apply H0. symmetry. apply H. auto.
-      + destruct H1. simpl in sep_r. admit.
-    - simpl in *. destruct H; subst. destruct H; subst.
-      {
-        split; auto. destruct (lifetime (lget y) n2) eqn:?; auto.
-        destruct l; auto. right; right. split; [| split]; intuition.
-      }
-      destruct H. red in H.
       + admit.
-      + admit.
-    - simpl in *. induction H. 2: econstructor 2; eauto.
-      destruct H; subst; [constructor; destruct H; subst; auto |].
-      destruct H; subst; [constructor; auto |].
-      destruct H as (? & ? & ? & ?).
-      pose proof (subsumes_decidable n1 n2 (lget x) (lget x)).
-      destruct H3.
-      + pose proof (H _ _ H3).
-        symmetry in H0. apply H3 in H0.
-        symmetry in H1. apply H4 in H1.
-        constructor; auto. right. right. auto.
-      + constructor; auto.
-  Abort.
-
+    - simpl in *. split; auto. destruct H0 as [_ ?].
+      destruct H0 as (? & ? & ?). split; [| split].
+      + (* TODO: add invariant here *) admit.
+      + intros. apply H1; auto; symmetry; apply H; auto.
+      + intros. symmetry in H3, H4. apply H in H4. rewrite <- H4 in H0.
+        destruct (lifetime (lget x) n1) eqn:?; [destruct l |].
+        * symmetry in Heqo. eapply pre_respects; eauto. (* TODO *) admit.
+        * inversion H0.
+        * apply H2; auto.
+    - simpl in *. induction H0. 2: econstructor 2; eauto.
+      destruct H0; subst; try solve [constructor; auto].
+      destruct H0; subst; try solve [constructor; auto].
+      destruct H0 as (? & ? & ? & ?).
+      constructor 1. right. right.
+      split; [| split; [| split]]; auto.
+      2, 3: symmetry; apply H; auto.
+      (* TODO invariant *) admit.
+  Admitted.
 
   (*  - simpl. destruct H as (? & ? & ?). simpl in *. *)
   (*    intro. symmetry in H2. apply H in H2. auto. *)

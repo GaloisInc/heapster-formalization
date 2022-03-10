@@ -437,7 +437,7 @@ Section Permissions.
     {|
     pre := fun x => pre p x /\ pre q x /\ p ⊥ q;
     rely := fun x y => rely p x y /\ rely q x y;
-    guar  := clos_trans _ (fun x y => (guar p x y) \/ (guar q x y))
+    guar := clos_trans _ (fun x y => (guar p x y) \/ (guar q x y))
     |}.
   Next Obligation.
     constructor; repeat intro.
