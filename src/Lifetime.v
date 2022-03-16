@@ -195,15 +195,18 @@ Section LifetimePerms.
   Program Definition when (n : nat) (p : @perm C) : perm :=
     {|
       pre := fun x =>
-               lifetime (lget x) n = Some current -> pre p x;
+               (lifetime (lget x) n = None \/ lifetime (lget x) n = Some current) ->
+               pre p x;
       rely := fun x y =>
                 lifetime_lte (lifetime (lget x) n) (lifetime (lget y) n) /\
-                  (lifetime (lget x) n = Some current ->
-                   lifetime (lget y) n = Some current ->
-                   rely p x y) /\
-                  (lifetime (lget x) n = None ->
-                   lifetime (lget y) n = Some current ->
-                   pre p y);
+                  ((lifetime (lget y) n = None \/
+                      lifetime (lget y) n = Some current) ->
+                   rely p x y);
+                   (* \/ *)
+                   (*   y = lput x (replace_lifetime (lget x) n current)); *)
+                  (* (lifetime (lget x) n = None -> *)
+                  (*  lifetime (lget y) n = Some current -> *)
+                  (*  pre p y); *)
       guar := fun x y => x = y \/
                         lifetime_lte (lifetime (lget x) n) (lifetime (lget y) n) /\
                           lifetime (lget x) n = Some current /\
@@ -214,29 +217,40 @@ Section LifetimePerms.
     constructor; repeat intro.
     - destruct (lifetime (lget x) n) as [[] |]; intuition;
         try discriminate H; try discriminate H0.
-    - destruct H as (? & ? & ?), H0 as (? & ? & ?). split; [etransitivity; eauto | split].
-      + intros. assert (lifetime (lget y) n = Some current).
-        {
-          rewrite H5 in H. rewrite H6 in H0.
-          destruct (lifetime (lget y) n); [destruct l |]; auto.
-          - inversion H0.
-          - inversion H.
-        }
-        etransitivity; eauto.
-      + intros. destruct (lifetime (lget y) n); [destruct l |]; auto.
-        * eapply pre_respects. apply H3; auto.
-          destruct (lifetime (lget x) n); [destruct l |]; auto.
-        * rewrite H6 in H0. inversion H0.
-  Qed.
+    - destruct H as (? & ?), H0 as (? & ?). split; [etransitivity; eauto |].
+      intros [].
+      + admit.
+      + admit.
+
+      (* split; auto. *)
+      (* + intros. *)
+      (*   assert (lifetime (lget y) n = Some current). *)
+      (*   { *)
+      (*     rewrite H5 in H. rewrite H6 in H0. *)
+      (*     destruct (lifetime (lget y) n); [destruct l |]; auto. *)
+      (*     - inversion H0. *)
+      (*     - inversion H. *)
+      (*   } *)
+      (*   etransitivity; eauto. *)
+      (* + intros. *)
+      (*   destruct (lifetime (lget y) n); [destruct l |]; auto. *)
+      (*   * eapply pre_respects; eauto. *)
+        (*   * rewrite H6 in H0. inversion H0. *)
+  Admitted.
   Next Obligation.
     constructor; repeat intro; auto.
     decompose [and or] H; decompose [and or] H0; subst; auto.
     right. split; [| split; [| split]]; auto; etransitivity; eauto.
   Qed.
   Next Obligation.
-    rewrite H1 in H. destruct (lifetime (lget x) n); [destruct l |]; auto.
-    - eapply pre_respects; eauto.
-    - inversion H.
+    destruct H1.
+    - rewrite H1 in H.
+      destruct (lifetime (lget x) n); [destruct l |]; auto; inversion H.
+      eapply pre_respects; eauto.
+    - rewrite H1 in H.
+      destruct (lifetime (lget x) n); [destruct l |]; auto; inversion H.
+      + eapply pre_respects; eauto.
+      + eapply pre_respects; eauto.
   Qed.
 
   Lemma when_monotone n p1 p2 : p1 <= p2 -> when n p1 <= when n p2.
@@ -339,9 +353,9 @@ Section LifetimePerms.
   Proof.
     split; intros.
     - simpl in H0. decompose [and or] H0; [subst; intuition |]. clear H0.
-      simpl. split; [| split]; auto.
-      + intros. rewrite H1 in H3. inversion H3.
-      + intros. rewrite H1 in H3. inversion H3.
+      simpl. split; auto. intros [].
+      + rewrite H0 in H1. inversion H1.
+      + rewrite H0 in H1. inversion H1.
     - simpl in H0. decompose [and or] H0; [subst; intuition |].
       simpl. split; [| split].
       + rewrite H1, H3; auto.
@@ -370,13 +384,7 @@ Section LifetimePerms.
     - simpl in *. decompose [and or] H; auto. split; auto. split; auto.
       eapply lifetimes_sep_gen; eauto.
     - simpl in *. destruct H as (? & ? & ? & ?). split; auto.
-      destruct (lifetime (lget x) n) as [[] | ]; auto 7.
-      + split; [| split]; auto.
-        rewrite <- H0. constructor. intros. inversion H3.
-      + split; [| split]; auto.
-        rewrite <- H0. constructor. intros. inversion H3.
-      + split; [| split]; auto.
-        rewrite <- H0. constructor. intros. rewrite H4 in H0. inversion H0.
+      destruct (lifetime (lget x) n) as [[] | ]; split; auto; rewrite <- H0; constructor.
     - simpl in H. induction H. 2: { econstructor 2; eauto. }
       decompose [and or] H; simpl; subst; try solve [constructor; auto].
       clear H. rename H0 into Hlte, H1 into Hy, H3 into Hguar.
@@ -535,17 +543,16 @@ Section LifetimePerms.
   Proof.
     constructor; intros.
     - simpl in *. destruct H0 as (_ & ? & ?). split; [| split]; auto.
-      + intro. apply H0. symmetry. apply H. auto.
+      + intro. apply H0. destruct H2.
+        * admit. (* TODO write lemma about this *)
+        * right. symmetry. apply H. auto.
       + admit.
     - simpl in *. split; auto. destruct H0 as [_ ?].
-      destruct H0 as (? & ? & ?). split; [| split].
+      destruct H0 as (? & ?). split.
       + (* TODO: add invariant here *) admit.
-      + intros. apply H1; auto; symmetry; apply H; auto.
-      + intros. symmetry in H3, H4. apply H in H4. rewrite <- H4 in H0.
-        destruct (lifetime (lget x) n1) eqn:?; [destruct l |].
-        * symmetry in Heqo. eapply pre_respects; eauto. (* TODO *) admit.
-        * inversion H0.
-        * apply H2; auto.
+      + intros [].
+        * apply H1; auto. admit. (* as above *)
+        * apply H1. right. symmetry. apply H. auto.
     - simpl in *. induction H0. 2: econstructor 2; eauto.
       destruct H0; subst; try solve [constructor; auto].
       destruct H0; subst; try solve [constructor; auto].
