@@ -36,9 +36,9 @@ Import ITreeNotations.
 Import SumNotations.
 Open Scope sum_scope.
 
-Hint Constructors stepsF stepF : core.
-Hint Resolve no_errors_gen_mon : paco.
-Hint Resolve sbuter_gen_mon : paco.
+#[local] Hint Constructors stepsF stepF : core.
+#[local] Hint Resolve no_errors_gen_mon : paco.
+#[local] Hint Resolve sbuter_gen_mon : paco.
 
 
 (** * `eq_sat_sep_sbuter` **)
@@ -51,7 +51,7 @@ Definition eq_sat_sep_sbuter {S1 S2 R1 R2} (q:@perm (S1*S2)) Q
   forall p t1 s1 t2 s2, pre q (s1,s2) -> p ⊥ q ->
     sbuter p Q t1 s1 t2 s2 -> no_errors t2 s2 ->
     (P1 t1 s1 <-> P2 t2 s2).
-Hint Unfold eq_sat_sep_sbuter : core.
+#[local] Hint Unfold eq_sat_sep_sbuter : core.
 
 
 (** * `eq_sat_sep_sbuter` for state predicates **)
@@ -186,7 +186,7 @@ Definition AG {S R} P := paco2 (@AG_gen S R P) bot2.
 
 Lemma is_path_gen_mon {S R P} : monotone2 (@AG_gen S R P).
 Proof. repeat intro; induction IN; econstructor; eauto. Qed.
-Hint Resolve is_path_gen_mon : paco.
+#[local] Hint Resolve is_path_gen_mon : paco.
 
 Lemma eq_sat_AG {S1 S2 R1 R2} q Q (P1 : TPred S1 R1) (P2 : TPred S2 R2) :
     eq_sat_sep_sbuter q Q P1 P2 ->
@@ -325,7 +325,7 @@ Definition EG {S R} P := paco2 (@EG_gen S R P) bot2.
 
 Lemma EG_gen_mon {S R P} : monotone2 (@EG_gen S R P).
 Proof. repeat intro; induction IN; subst; solve [econstructor; eauto]. Qed.
-Hint Resolve EG_gen_mon : paco.
+#[local] Hint Resolve EG_gen_mon : paco.
 
 Definition EG_pf {S R P t0 s0} : @EG S R P t0 s0 -> P t0 s0.
 Proof. intro; punfold H; destruct H; eauto. Defined.

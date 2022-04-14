@@ -114,9 +114,6 @@ Section Permissions.
   Next Obligation.
     constructor; repeat intro; subst; auto.
   Qed.
-  Next Obligation.
-    constructor; repeat intro; subst; auto.
-  Qed.
 
   Lemma bottom_perm_is_bottom : forall p, bottom_perm <= p.
   Proof.
@@ -129,9 +126,6 @@ Section Permissions.
     rely := fun x y => x = y;
     guar  := fun x y => True;
     |}.
-  Next Obligation.
-    constructor; repeat intro; subst; auto.
-  Qed.
   Next Obligation.
     constructor; repeat intro; subst; auto.
   Qed.

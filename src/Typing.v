@@ -170,7 +170,7 @@ Section bisim.
     - destruct (H1 b1). eexists; eauto.
     - destruct (H2 b2). eexists; eauto.
   Qed.
-  Hint Resolve sbuter_gen_mon : paco.
+  #[local] Hint Resolve sbuter_gen_mon : paco.
 
   Definition sbuter {R1 R2} := paco6 (@sbuter_gen R1 R2) bot6.
 
@@ -508,7 +508,7 @@ Section bisim.
   Proof.
     repeat intro. inversion IN; subst; try solve [constructor; auto].
   Qed.
-  Hint Resolve no_errors_gen_mon : paco.
+  #[local] Hint Resolve no_errors_gen_mon : paco.
 
   Definition no_errors {R C : Type} :=
     paco2 (@no_errors_gen R C) bot2.

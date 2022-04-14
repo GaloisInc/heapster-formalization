@@ -39,8 +39,8 @@ Import ITreeNotations.
 Import SumNotations.
 Import VectorNotations.
 
-Hint Resolve no_errors_gen_mon : paco.
-Hint Resolve sbuter_gen_mon : paco.
+#[local] Hint Resolve no_errors_gen_mon : paco.
+#[local] Hint Resolve sbuter_gen_mon : paco.
 
 (* end hide *)
 
@@ -158,9 +158,9 @@ Inductive step {S R} : relation (CompM S R * S) :=
 | step_Choice b k s : step (vis Or k, s) (k b, s)
 | step_Modify f k s : step (vis (Modify f) k, s) (k s, f s).
 
-Hint Extern 0 (step (Tau ?t, ?s) (?t, ?s)) => eapply step_Tau : core.
-Hint Extern 0 (step (vis Or ?k, ?s) (?k ?b, ?s)) => eapply step_Choice : core.
-Hint Extern 0 (step (vis (Modify ?f) ?k, ?s) (?k ?s, ?f ?s)) => eapply step_Modify : core.
+#[local] Hint Extern 0 (step (Tau ?t, ?s) (?t, ?s)) => eapply step_Tau : core.
+#[local] Hint Extern 0 (step (vis Or ?k, ?s) (?k ?b, ?s)) => eapply step_Choice : core.
+#[local] Hint Extern 0 (step (vis (Modify ?f) ?k, ?s) (?k ?s, ?f ?s)) => eapply step_Modify : core.
 
 (** Finite paths with a special case for the length 0 case *)
 Fixpoint is_gen_finite_path0 {A} (r0 r : relation A) n x ys z :=
@@ -803,7 +803,7 @@ Definition AG {S R} P := paco1 (@AG_gen S R P) bot1.
 
 Lemma is_path_gen_mon {S R P} : monotone1 (@AG_gen S R P).
 Proof. repeat intro; induction IN; econstructor; eauto. Qed.
-Hint Resolve is_path_gen_mon : paco.
+#[local] Hint Resolve is_path_gen_mon : paco.
 
 Lemma AG_step {S1 R1} (P : TPred S1 R1) ts0 ts1 :
   step ts0 ts1 -> AG P ts0 -> AG P ts1.
@@ -894,7 +894,7 @@ Inductive stops {S R} : TPred S R :=
 | stops_Ret r s : stops (Ret r, s)
 | stops_Err k s : stops (vis (Throw tt) k, s).
 
-Hint Constructors steps stops : core.
+#[local] Hint Constructors steps stops : core.
 
 (** Every itree either stops or steps *)
 Lemma steps_or_stops {S R} (t' : itree' (sceE R) S) s :
@@ -920,7 +920,7 @@ Definition EG {S R} P := paco1 (@EG_gen S R P) bot1.
 
 Lemma EG_gen_mon {S R P} : monotone1 (@EG_gen S R P).
 Proof. repeat intro; induction IN; subst; solve [econstructor; eauto]. Qed.
-Hint Resolve EG_gen_mon : paco.
+#[local] Hint Resolve EG_gen_mon : paco.
 
 Definition EG_gen_pf {S R P EG ts0} : @EG_gen S R P EG ts0 -> P ts0.
 Proof. destruct 1; eauto. Defined.

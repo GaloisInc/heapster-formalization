@@ -672,7 +672,7 @@ Fixpoint guar_post_malloc n b size x y : Prop :=
                           guar (@write_perm Si Ss _ (b, size - S n) (VNum 0)) x y \/
                           guar_post_malloc n b size x y) x y
   end.
-Instance PO_guar_post_malloc n b size :
+#[local] Instance PO_guar_post_malloc n b size :
   PreOrder (guar_post_malloc n b size).
 Proof.
   constructor.

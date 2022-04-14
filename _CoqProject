@@ -9,6 +9,7 @@ src/SepStep.v
 src/Typing.v
 
 src/MemoryPerms.v
+src/LifetimePerms.v
 src/PermType.v
 src/PermTypeProofs.v
 src/Temporal.v

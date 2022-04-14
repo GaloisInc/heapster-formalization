@@ -6,16 +6,382 @@ From Coq Require Import
      Lists.List
      Lia
      Classes.RelationClasses
-     Classes.Morphisms.
+     Classes.Morphisms
+     FSets.FMaps.
 
 From Heapster Require Import
      Utils
      Permissions.
 
 Import ListNotations.
+Open Scope list_scope.
 (* end hide *)
 
+(* Lifetime keys *)
+Variant status := current | finished.
+
+Definition status_lte (s1 s2 : status) : Prop :=
+  match s1, s2 with
+  | finished, current => False
+  | _, _ => True
+  end.
+
+(* (** [s1] subsumes [s2]: [s1] cannot finish before [s2] *) *)
+(* Definition status_subsumes (s1 s2 : status) : Prop := *)
+(*   match s1, s2 with *)
+(*   | finished, current => False *)
+(*   | _, _ => True *)
+(*   end. *)
+
+Global Instance status_lte_preorder : PreOrder status_lte.
+Proof.
+  constructor; repeat intro; subst; auto.
+  - destruct x; constructor.
+  - destruct x, y, z; auto.
+Qed.
+
+Definition statusOf_lte (s1 s2 : option status) : Prop :=
+  match s1, s2 with
+  | Some s1, Some s2 => status_lte s1 s2
+  | Some _, None => False
+  | _, _ => True
+  end.
+Global Instance statusOf_lte_preorder : PreOrder statusOf_lte.
+Proof.
+  constructor; repeat intro; subst; auto.
+  - destruct x; cbn; auto. reflexivity.
+  - destruct x, y, z; cbn in *; intuition.
+    etransitivity; eauto.
+Qed.
+
+(** [s1] subsumes [s2], now with unstarted lifetimes (None) *)
+Definition statusOf_subsumes (s1 s2 : option status) : Prop :=
+  match s1, s2 with
+  (* [s1] can't end before [s2] *)
+  | Some finished, Some finished => True
+  | Some finished, _ => False
+    (* [s2] can't start before [s1] *)
+  | None, Some _ => False
+  | _, _ => True
+  end.
+
+Global Instance statusOf_subsumes_preorder : PreOrder statusOf_subsumes.
+Proof.
+  constructor; repeat intro; subst; auto.
+  - destruct x; [destruct s |]; cbn; auto.
+  - destruct x, y, z; cbn in *; intuition; destruct s, s0; intuition.
+Qed.
+
+(** a [Lifetime] contains an index into the [Lifetimes] structure and its direct parent [Lifetime]s *)
+Inductive Lifetime :=
+  node : nat -> Parents -> Lifetime
+with Parents :=
+| nil_p : Parents
+| cons_p : Lifetime -> Parents -> Parents
+.
+Scheme Lifetime_Parents_mut := Induction for Lifetime Sort Set
+    with Parents_Lifetime_mut := Induction for Parents Sort Set.
+
+Lemma eq_Lifetime_dec :
+  forall (x y : Lifetime), { x = y } + { x <> y }.
+Proof.
+  apply (Lifetime_Parents_mut (fun l => forall l',
+                                   { l = l' } + { l <> l' })
+                              (fun p => forall p',
+                                   { p = p' } + { p <> p' })); intros.
+  - destruct l'.
+    pose proof (Nat.eq_dec n n0). destruct H0; subst.
+    + destruct (H p0); subst; auto. right. intro. inversion H0. contradiction.
+    + right. intro. inversion H0. contradiction.
+  - destruct p'; auto. right. intro. inversion H.
+  - destruct p'. { right. intro. inversion H1. }
+    destruct (H l0); subst; auto.
+    + destruct (H0 p'); subst; auto.
+      right. intro. inversion H1. contradiction.
+    + right. intro. inversion H1. contradiction.
+Qed.
+
+Definition eqb_Lifetime l1 l2 : bool :=
+  proj1_sig (Sumbool.bool_of_sumbool (eq_Lifetime_dec l1 l2)).
+
+(* Fixpoint eqb_Lifetime (l1 l2 : Lifetime) : bool := *)
+(*   match l1, l2 with *)
+(*   | node n1 p1, node n2 p2 => Nat.eqb n1 n2 && eqb_Parents p1 p2 *)
+(*   end *)
+(* with *)
+(* eqb_Parents (p1 p2 : Parents) : bool := *)
+(*   match p1, p2 with *)
+(*   | nil_p, nil_p => true *)
+(*   | cons_p l1 p1, cons_p l2 p2 => eqb_Lifetime l1 l2 && eqb_Parents p1 p2 *)
+(*   | _, _ => false *)
+(*   end. *)
+
+(* Lemma eq_Lifetime_eqb_Lifetime l1 l2 : l1 = l2 -> eqb_Lifetime l1 l2 = true. *)
+(* Proof. *)
+(*   intros. subst. revert l2. *)
+(*   apply (Lifetime_Parents_mut *)
+(*            (fun l => eqb_Lifetime l l = true) *)
+(*            (fun p => eqb_Parents p p = true)); intros; cbn; auto. *)
+(*   - rewrite Nat.eqb_refl. cbn. apply H. *)
+(*   - rewrite H, H0. auto. *)
+(* Qed. *)
+(* Lemma eqb_Lifetime_eq_Lifetime l1 l2 : eqb_Lifetime l1 l2 = true -> l1 = l2. *)
+(* Proof. *)
+(*   intros. subst. revert l1 l2 H. *)
+(*   apply (Lifetime_Parents_mut *)
+(*            (fun l1 => forall l2, eqb_Lifetime l1 l2 = true -> l1 = l2) *)
+(*            (fun p1 => forall p2, eqb_Parents p1 p2 = true -> p1 = p2)); intros; cbn; auto. *)
+(*   - destruct l2. inversion H0. apply andb_prop in H2. destruct H2. *)
+(*     specialize (H _ H2). apply Nat.eqb_eq in H1. subst. reflexivity. *)
+(*   - destruct p2. constructor. inversion H. *)
+(*   - destruct p2; inversion H1. apply andb_prop in H3. destruct H3. *)
+(*     erewrite H, H0; eauto. *)
+(* Qed. *)
+
+Lemma eqb_Lifetime_spec : forall l1 l2, reflect (eq l1 l2) (eqb_Lifetime l1 l2).
+Proof.
+  intros. unfold eqb_Lifetime. destruct (eq_Lifetime_dec l1 l2); cbn; intuition.
+Qed.
+
+Fixpoint in_Parents (l : Lifetime) (ps : Parents) : Prop :=
+  match ps with
+  | nil_p => False
+  | cons_p l' ps' => l = l' \/ in_Parents l ps'
+  end.
+
+(** [l1] is a parent of [l2] *)
+
+Fixpoint isParent (l1 l2 : Lifetime) : bool :=
+  eqb_Lifetime l1 l2 ||
+  match l2 with
+  | node index parents => inParents l1 parents
+  end
+with inParents (l : Lifetime) (ps : Parents) : bool :=
+  match ps with
+  | nil_p => false
+  | cons_p l' ps' => isParent l l' || inParents l ps'
+  end.
+
+Lemma isParent_trans : forall l1 l2 l3,
+    isParent l1 l2 = true ->
+    isParent l2 l3 = true ->
+    isParent l1 l3 = true.
+Proof.
+  intros l1 l2. revert l2 l1.
+  apply (Lifetime_Parents_mut
+           (fun l2 => forall l1 l3,
+                isParent l1 l2 = true ->
+                isParent l2 l3 = true ->
+                isParent l1 l3 = true)
+           (fun p2 => forall n1 n2 p1 p3,
+                (inParents (node n1 p1) p2 = true ->
+                 inParents (node n2 p2) p3 = true ->
+                 inParents (node n1 p1) p3 = true) /\
+                  (isParent (node n1 p1) (node n2 p2) = true ->
+                   inParents (node n2 p2) p3 = true ->
+                   inParents (node n1 p1) p3 = true))); intros.
+  - destruct l1 as [n1 p1], l3 as [n3 p3]. cbn in *. admit.
+  - split; intros.
+    + inversion H.
+    + cbn in *. admit.
+  - cbn. split; intros.
+    +
+Abort.
+
+Fixpoint parent_of (l1 l2 : Lifetime) : Prop :=
+  l1 = l2 \/
+  match l2 with
+  | node index parents => in_Parents_rec l1 parents
+  end
+with in_Parents_rec (l : Lifetime) (ps : Parents) : Prop :=
+  match ps with
+  | nil_p => False
+  | cons_p l' ps' => parent_of l l' \/ in_Parents_rec l ps'
+  end.
+
+Global Instance parent_of_trans : Transitive parent_of.
+Proof.
+  red. intros x y. revert y x.
+  eapply (Lifetime_Parents_mut (fun l2 => forall l1 l3,
+                                   parent_of l1 l2 ->
+                                   parent_of l2 l3 ->
+                                   parent_of l1 l3)
+                               (fun p2 => forall l n2 p3,
+                                    in_Parents_rec l p2 ->
+                                    in_Parents_rec (node n2 p2) p3 ->
+                                    in_Parents_rec l p3)); intros.
+  - destruct l1, l3.
+    destruct H0; [inversion H0; clear H0; subst |]; auto.
+    destruct H1; [inversion H1; clear H1; subst |].
+    + cbn. right. auto.
+    + cbn. right. eapply H; eauto.
+  - inversion H.
+  - destruct H1.
+    + specialize (H l0 (node 0 p3) H1). cbn in H.
+      destruct H.
+      * right. destruct p3. inversion H2. destruct H2.
+        -- left. destruct l1. simpl in H. destruct H.
+           ++ inversion H. subst. right. left. destruct l; cbn; auto.
+           ++ right. eapply H0; eauto.
+    (* destruct l. cbn in H1. destruct H1. *)
+    (* + subst. destruct p3. inversion H2. destruct H2. *)
+    (*   * destruct l. destruct H1. *)
+    (*     -- rewrite <- H1. left. right. left. left. reflexivity. *)
+    (*     -- simpl in H1. left. right. *)
+    (* cbn in *. destruct H1. ; [destruct H1 |]. *)
+    (* + clear H0. destruct p3. inversion H2. *)
+    (*   destruct H2 as [? | [? | ?]]. *)
+    (*   * subst. right. left. cbn. left. auto. *)
+    (*   * cbn. right. left. apply H. *)
+    (*   simpl in H2. *)
+
+
+    (*   destruct p3; cbn in H2; try contradiction. *)
+    (*   admit. *)
+    (*   (* destruct H2 as [? | [? | ?]]. *) *)
+    (*   (* * subst. right. left. cbn. left. auto. *) *)
+    (*   (* * cbn. right. left. apply H. *) *)
+    (* + clear H0. destruct p3. inversion H2. *)
+    (*   simpl in H2. admit. *)
+    (* + destruct p3. inversion H2. destruct H2 as [? | [? | ?]]. *)
+    (*   * subst. eapply H0; auto. *)
+    (*     right. left. cbn. *)
+    (*     right. right. cbn. *)
+Admitted.
+
+(** A crucial invariant is that [Lifetime]s are [acyclic] *)
+Fixpoint acyclic_helper_Parents (i : nat) (ps : Parents) : Prop :=
+  match ps with
+  | nil_p => True
+  | cons_p l ps' => acyclic_helper_Lifetime i l /\ acyclic_helper_Parents i ps'
+  end
+with acyclic_helper_Lifetime (i : nat) (l : Lifetime) : Prop :=
+  match l with
+  | node index parents => index < i /\ acyclic_helper_Parents index parents
+  end.
+
+Definition acyclic (l : Lifetime) :=
+  match l with
+  | node index parents => acyclic_helper_Lifetime (index + 1) l
+  end.
+
+Definition index (l : Lifetime) : nat :=
+  match l with
+  | node index _ => index
+  end.
+
+Definition parents (l : Lifetime) : Parents :=
+  match l with
+  | node _ parents => parents
+  end.
+
+Module K <: DecidableType.
+  Definition t := Lifetime.
+  Definition eq := @eq Lifetime.
+  Definition eq_refl := @eq_refl Lifetime.
+  Definition eq_sym := @eq_sym Lifetime.
+  Definition eq_trans := @eq_trans Lifetime.
+  Definition eq_dec := eq_Lifetime_dec.
+End K.
+
+Module Import M := FMapWeakList.Make(K).
+Module P := WProperties_fun K M.
+Module F := P.F.
+
+Definition mapT := M.t status.
+
+Record Lifetimes : Type :=
+  {
+    m : mapT;
+
+    (** Properties *)
+    (* maybe not needed *)
+    acyclic_keys : forall l, In l m -> acyclic l;
+
+    (* TODO: uniqueness of nats *)
+
+    parents_exist : forall l p, In l m ->
+                           parent_of p l ->
+                           In p m;
+
+    parents_subsume : forall l p, In l m ->
+                             parent_of p l ->
+                             statusOf_subsumes (find p m) (find l m);
+  }.
+
+Definition Lifetimes_In (l : Lifetime) (ls : Lifetimes) : Prop :=
+    In l (m ls).
+
+(* Maybe do a lookup on l for its parents' statuses. This will implicitly end all children lifetimes hwen you end a parent lifetime *)
+
+(* Alternatively make ls a total map, so we can keep track of *all* children *)
+Definition statusOf (l : Lifetime) (ls : Lifetimes) : option status :=
+  (* map through the parnets of l, and look for any that are in ls. If any of those are finished, then we should return finished too *)
+  find l (m ls).
+
+Definition Lifetimes_lte (ls ls' : Lifetimes) : Prop :=
+  forall l, (In l (m ls) -> In l (m ls')) /\ statusOf_lte (statusOf l ls) (statusOf l ls').
+
+Global Instance Lifetimes_lte_preorder : PreOrder Lifetimes_lte.
+Proof.
+  constructor; repeat intro.
+  - split; auto. reflexivity.
+  - split.
+    + intros. apply H0. apply H; auto.
+    + edestruct H, H0. etransitivity; eauto.
+Qed.
+
+(*
+  Program Definition newLifetime (ls : Lifetimes) (ps : list Lifetime) (H : forall p, In p parents -> inL p ls) :
+    (Lifetime * Lifetimes) :=
+    let i := length (lst ls) in
+    let parentIndices := map index parents in
+    (
+      node i parents,
+      {|
+        lst := lst ls ++ [(current, parentIndices)];
+      |}
+    ).
+  Next Obligation.
+  Admitted.
+  Next Obligation.
+    pose proof parents_subsumption.
+  Admitted.
+  Next Obligation.
+  Admitted.
+ *)
+
+Program Definition endLifetime (l : Lifetime) (ls : Lifetimes) (* and some proof that all the parents are finished? *) : Lifetimes.
+Admitted.
+
+(** [l1] subsumes [l2] *)
+Definition subsumes (l1 l2 : Lifetime) : Prop :=
+  l1 = l2 \/ parent_of l1 l2.
+
+#[global] Instance subsumes_preorder : PreOrder subsumes.
+Proof.
+  constructor; repeat intro; cbn; auto.
+  - left; auto.
+  - unfold subsumes in *. destruct H, H0; subst; auto. right.
+    etransitivity; eauto.
+Qed.
+
+Lemma subsumes_status l :
+  forall l1 l2, subsumes l1 l2 ->
+           statusOf_subsumes (statusOf l1 l) (statusOf l2 l).
+Proof.
+    intros. unfold subsumes in H. destruct H; subst; auto.
+    reflexivity.
+    destruct (F.In_dec (m l) l2).
+    - apply parents_subsume; auto.
+    - unfold statusOf. apply F.not_find_in_iff in n. rewrite n.
+      destruct (find l1 (m l)) eqn:?; cbn; auto.
+      destruct s; auto. admit.
+Admitted.
+
+(*
 Variant Lifetime := current | finished.
+
 Definition Lifetimes := list Lifetime.
 
 (** lifetime helpers **)
@@ -23,20 +389,20 @@ Definition Lifetimes := list Lifetime.
 Definition lifetime : Lifetimes -> nat -> option Lifetime :=
   @nth_error Lifetime.
 
-Definition replace_lifetime (l : Lifetimes) (n : nat) (new : Lifetime) : Lifetimes :=
-  replace_list_index l n new.
+(* Definition replace_lifetime (l : Lifetimes) (n : nat) (new : Lifetime) : Lifetimes := *)
+(*   replace_list_index l n new. *)
 
-Lemma replace_lifetime_same c n l :
-  lifetime c n = Some l -> replace_lifetime c n l = c.
-Proof.
-  apply replace_list_index_eq.
-Qed.
+(* Lemma replace_lifetime_same c n l : *)
+(*   lifetime c n = Some l -> replace_lifetime c n l = c. *)
+(* Proof. *)
+(*   apply replace_list_index_eq. *)
+(* Qed. *)
 
-Lemma lifetime_replace_lifetime c n l :
-  lifetime (replace_lifetime c n l) n = Some l.
-Proof.
-  apply nth_error_replace_list_index_eq.
-Qed.
+(* Lemma lifetime_replace_lifetime c n l : *)
+(*   lifetime (replace_lifetime c n l) n = Some l. *)
+(* Proof. *)
+(*   apply nth_error_replace_list_index_eq. *)
+(* Qed. *)
 
 (** [n1] in the lifetime list [x1] subsumes [n2] in the lifetime list [x2] *)
 Definition subsumes n1 n2 x1 x2 :=
@@ -107,481 +473,4 @@ Proof.
   - destruct x as [[] |], y as [[] |], z as [[] |]; simpl; intuition.
 Qed.
 
-Section LifetimePerms.
-
-  Context {C : Type}.
-  Context `{Hlens: Lens C Lifetimes}.
-
-  Definition lifetime_invariant x y :=
-    (forall n n', subsumes n' n (lget x) (lget x) ->
-             subsumes n' n (lget y) (lget y)) /\
-      (forall n, lifetime_lte (lifetime (lget x) n) (lifetime (lget y) n)).
-
-  Instance lifetime_invariant_preorder : PreOrder lifetime_invariant.
-  Proof.
-    split; [split; intuition |].
-    - intros ? ? ? [] []. split; auto; etransitivity; eauto.
-  Qed.
-
-  Definition monotonic_at (p : @perm C) (n : nat) x y : Prop :=
-    guar p x y -> lifetime_lte (lifetime (lget x) n) (lifetime (lget y) n).
-
-  Instance monotonic_at_reflexive p n : Reflexive (monotonic_at p n).
-  Proof.
-    repeat intro. reflexivity.
-  Qed.
-
-  Lemma bottom_monotonic_at n : forall x y, monotonic_at bottom_perm n x y.
-  Proof.
-    repeat intro. simpl in H. subst. reflexivity.
-  Qed.
-
-  Definition monotonic (P : Perms) (n : nat) : Prop :=
-    forall p, p ∈ P -> exists p', p' <= p /\ p' ∈ P /\ forall x y, monotonic_at p' n x y.
-
-  Lemma monotonic_bottom n : monotonic bottom_Perms n.
-  Proof.
-    repeat intro. exists bottom_perm. split; [| split].
-    apply bottom_perm_is_bottom. auto. apply bottom_monotonic_at.
-  Qed.
-
-  Program Definition restrict_monotonic_at (p : perm) (n : nat) : @perm C :=
-    {|
-      pre := pre p;
-      rely := rely p;
-      guar := fun x y => guar p x y /\ monotonic_at p n x y;
-    |}.
-  Next Obligation.
-    constructor; repeat intro.
-    - split; intuition.
-    - destruct H, H0. split; [etransitivity; eauto |]. intro. etransitivity; eauto.
-  Qed.
-  Next Obligation.
-    respects.
-  Qed.
-
-  Lemma restrict_monotonic_at_monotone p p' n :
-    p <= p' -> restrict_monotonic_at p n <= restrict_monotonic_at p' n.
-  Proof.
-    intros []. constructor; intros; simpl; auto. destruct H.
-    split; auto. intro. auto.
-  Qed.
-
-  Lemma restrict_monotonic_at_lte p n : restrict_monotonic_at p n <= p.
-  Proof.
-    constructor; intros; simpl in *; intuition.
-  Qed.
-
-  Definition invariant_at (p : perm) (n : nat) : Prop :=
-    forall l1 l2 x y, guar p x y <-> guar p (replace_lifetime x n l1) (replace_lifetime y n l2).
-
-  Lemma invariant_l p n (Hinv : invariant_at p n) :
-    forall l1 l2 x y, lifetime y n = Some l2 ->
-                 guar p x y <-> guar p (replace_lifetime x n l1) y.
-  Proof.
-    intros.
-    erewrite <- (replace_list_index_eq _ y n l2) at 2; auto.
-  Qed.
-
-  Lemma invariant_r p n (Hinv : invariant_at p n) :
-    forall l1 l2 x y, lifetime x n = Some l1 ->
-                 guar p x y <-> guar p x (replace_lifetime y n l2).
-  Proof.
-    intros.
-    rewrite <- (replace_list_index_eq _ x n l1) at 2; auto.
-  Qed.
-
-  (* Note: does not have permission to start or end the lifetime [n] *)
-  Program Definition when (n : nat) (p : @perm C) : perm :=
-    {|
-      pre := fun x =>
-               (lifetime (lget x) n = None \/ lifetime (lget x) n = Some current) ->
-               pre p x;
-      rely := fun x y =>
-                lifetime_lte (lifetime (lget x) n) (lifetime (lget y) n) /\
-                  ((lifetime (lget y) n = None \/
-                      lifetime (lget y) n = Some current) ->
-                   rely p x y);
-                   (* \/ *)
-                   (*   y = lput x (replace_lifetime (lget x) n current)); *)
-                  (* (lifetime (lget x) n = None -> *)
-                  (*  lifetime (lget y) n = Some current -> *)
-                  (*  pre p y); *)
-      guar := fun x y => x = y \/
-                        lifetime_lte (lifetime (lget x) n) (lifetime (lget y) n) /\
-                          lifetime (lget x) n = Some current /\
-                          lifetime (lget y) n = Some current /\
-                          guar p x y;
-    |}.
-  Next Obligation.
-    constructor; repeat intro.
-    - destruct (lifetime (lget x) n) as [[] |]; intuition;
-        try discriminate H; try discriminate H0.
-    - destruct H as (? & ?), H0 as (? & ?). split; [etransitivity; eauto |].
-      intros [].
-      + admit.
-      + admit.
-
-      (* split; auto. *)
-      (* + intros. *)
-      (*   assert (lifetime (lget y) n = Some current). *)
-      (*   { *)
-      (*     rewrite H5 in H. rewrite H6 in H0. *)
-      (*     destruct (lifetime (lget y) n); [destruct l |]; auto. *)
-      (*     - inversion H0. *)
-      (*     - inversion H. *)
-      (*   } *)
-      (*   etransitivity; eauto. *)
-      (* + intros. *)
-      (*   destruct (lifetime (lget y) n); [destruct l |]; auto. *)
-      (*   * eapply pre_respects; eauto. *)
-        (*   * rewrite H6 in H0. inversion H0. *)
-  Admitted.
-  Next Obligation.
-    constructor; repeat intro; auto.
-    decompose [and or] H; decompose [and or] H0; subst; auto.
-    right. split; [| split; [| split]]; auto; etransitivity; eauto.
-  Qed.
-  Next Obligation.
-    destruct H1.
-    - rewrite H1 in H.
-      destruct (lifetime (lget x) n); [destruct l |]; auto; inversion H.
-      eapply pre_respects; eauto.
-    - rewrite H1 in H.
-      destruct (lifetime (lget x) n); [destruct l |]; auto; inversion H.
-      + eapply pre_respects; eauto.
-      + eapply pre_respects; eauto.
-  Qed.
-
-  Lemma when_monotone n p1 p2 : p1 <= p2 -> when n p1 <= when n p2.
-  Proof.
-    intros. destruct H. constructor; simpl; intros; decompose [and or] H; auto 7.
-  Qed.
-
-  Instance Proper_lte_perm_when :
-    Proper (eq ==> lte_perm ==> lte_perm) when.
-  Proof.
-    repeat intro; subst. apply when_monotone; auto.
-  Qed.
-
-  Instance Proper_eq_perm_when :
-    Proper (eq ==> eq_perm ==> eq_perm) when.
-  Proof.
-    repeat intro; subst. split; apply when_monotone; auto.
-  Qed.
-
-  Lemma restrict_monotonic_at_when p n : when n p ≡≡ restrict_monotonic_at (when n p) n.
-  Proof.
-    split; [constructor; intros; simpl in *; auto | apply restrict_monotonic_at_lte].
-    decompose [and or] H; subst; try solve [intuition]. split; auto.
-    intro. rewrite H0, H2. reflexivity.
-  Qed.
-  Lemma when_restrict_monotonic_at p n : when n p ≡≡ when n (restrict_monotonic_at p n).
-  Proof.
-    split; constructor; intros; simpl in *; intuition.
-    right; intuition. intro. rewrite H0, H1. reflexivity.
-  Qed.
-
-  (* Gives us permission to end the lifetime [n], which gives us back [p] *)
-  Program Definition owned (n : nat) (ls : nat -> Prop) (p : perm) : @perm C :=
-    {|
-      (* TODO: probably need soemthing with subsumes *)
-      pre := fun x => lifetime (lget x) n = Some current;
-      rely := fun x y => lifetime (lget x) n = lifetime (lget y) n /\
-                        (forall l, ls l -> subsumes l l (lget x) (lget y)) /\ (* TODO: double check this *)
-                        (lifetime (lget x) n = Some finished -> rely p x y);
-      guar := fun x y => x = y \/
-                        lifetime_lte (lifetime (lget x) n) (lifetime (lget y) n) /\
-                          lifetime (lget y) n = Some finished /\
-                          guar p x y;
-    |}.
-  Next Obligation.
-    constructor; repeat intro; auto.
-    - split; intuition.
-    - decompose [and] H. decompose [and] H0. clear H H0.
-      split; [| split]; intros.
-      + etransitivity; eauto.
-      + etransitivity. apply H3; auto. auto.
-      + etransitivity. eauto. apply H7; auto. rewrite <- H1. auto.
-  Qed.
-  Next Obligation.
-    constructor; repeat intro; auto.
-    decompose [and or] H; decompose [and or] H0; subst; auto.
-    right. split; [| split]; auto; etransitivity; eauto.
-  Qed.
-
-  Lemma owned_monotone n ls p1 p2 : p1 <= p2 -> owned n ls p1 <= owned n ls p2.
-  Proof.
-    intros. destruct H. constructor; simpl; intros; decompose [and or] H; auto 6.
-  Qed.
-
-  Instance Proper_lte_perm_owned :
-    Proper (eq ==> eq ==> lte_perm ==> lte_perm) owned.
-  Proof.
-    repeat intro; subst. apply owned_monotone; auto.
-  Qed.
-
-  Instance Proper_eq_perm_owned :
-    Proper (eq ==> eq ==> eq_perm ==> eq_perm) owned.
-  Proof.
-    repeat intro; subst. split; apply owned_monotone; auto.
-  Qed.
-
-  Lemma restrict_monotonic_at_owned n ls p : owned n ls p ≡≡ restrict_monotonic_at (owned n ls p) n.
-  Proof.
-    split; [constructor; intros; simpl in *; auto | apply restrict_monotonic_at_lte].
-    decompose [and or] H; subst; try solve [intuition]. split; auto. clear H.
-    intro. rewrite H0. destruct (lifetime (lget x) n) as [[] |]; simpl; auto.
-  Qed.
-  Lemma owned_restrict_monotonic_at n ls p : owned n ls p ≡≡ owned n ls (restrict_monotonic_at p n).
-  Proof.
-    split; constructor; intros; simpl in *; intuition.
-    right; intuition. intro. auto.
-  Qed.
-
-  (* trivial direction *)
-  Lemma foo' n ls p q :
-    owned n ls (restrict_monotonic_at p n ** restrict_monotonic_at q n) <=
-      owned n ls (restrict_monotonic_at (p ** q) n).
-  Proof.
-    rewrite <- owned_restrict_monotonic_at. apply owned_monotone.
-    apply sep_conj_perm_monotone; apply restrict_monotonic_at_lte.
-  Qed.
-
-  Lemma lifetimes_sep_gen p q n ls :
-    p ⊥ owned n ls q -> when n p ⊥ owned n ls (p ** q).
-  Proof.
-    split; intros.
-    - simpl in H0. decompose [and or] H0; [subst; intuition |]. clear H0.
-      simpl. split; auto. intros [].
-      + rewrite H0 in H1. inversion H1.
-      + rewrite H0 in H1. inversion H1.
-    - simpl in H0. decompose [and or] H0; [subst; intuition |].
-      simpl. split; [| split].
-      + rewrite H1, H3; auto.
-      + intros. destruct H. apply sep_r; auto.
-      + intros. rewrite H1 in H4. discriminate H4.
-  Qed.
-
-  (* no longer true after adding [ls]. Fortunately it's not used. *)
-  (* not actually a special case of the above *)
-  (* Lemma lifetimes_sep n p ls : when n p ⊥ owned n ls p. *)
-  (* Proof. *)
-  (*   constructor; intros; simpl in H; auto. *)
-  (*   - decompose [and or] H; subst; try reflexivity. *)
-  (*     simpl. right; left; auto. *)
-  (*   - decompose [and or] H; subst; try reflexivity. *)
-  (*     simpl. split; [| split]. *)
-  (*     + rewrite H2, H0. auto. *)
-  (*     + intros. *)
-  (*     + intros. rewrite H1 in H2. discriminate H2. *)
-  (* Qed. *)
-
-  Lemma convert p q n ls (Hmon : forall x y, monotonic_at p n x y) (Hmon' : forall x y, monotonic_at q n x y) :
-    when n p ** owned n ls (p ** q) <= p ** owned n ls q.
-  Proof.
-    split; intros.
-    - simpl in *. decompose [and or] H; auto. split; auto. split; auto.
-      eapply lifetimes_sep_gen; eauto.
-    - simpl in *. destruct H as (? & ? & ? & ?). split; auto.
-      destruct (lifetime (lget x) n) as [[] | ]; split; auto; rewrite <- H0; constructor.
-    - simpl in H. induction H. 2: { econstructor 2; eauto. }
-      decompose [and or] H; simpl; subst; try solve [constructor; auto].
-      clear H. rename H0 into Hlte, H1 into Hy, H3 into Hguar.
-      apply Operators_Properties.clos_trans_t1n_iff.
-      apply Operators_Properties.clos_trans_t1n_iff in Hguar.
-
-      induction Hguar.
-      + constructor 1. destruct H; [left | right]; auto.
-      + econstructor 2.
-        2: { apply IHHguar; auto. rewrite Hy.
-             destruct (lifetime (lget y) n); [destruct l |]; constructor.
-        }
-        destruct H.
-        left; auto. right; right; auto. split; [| split]; auto.
-        (* TODO: q should not be able to change lifetimes *) admit.
-        (* TODO: similarly, p and q should not be able to change lifetimes *) admit.
-  Admitted.
-
-  (* special case of convert *)
-  Lemma convert_bottom p n ls (Hmon : forall x y, monotonic_at p n x y) :
-    when n p ** owned n ls p <= p ** owned n ls bottom_perm.
-  Proof.
-    rewrite <- (sep_conj_perm_bottom p) at 2. apply convert; auto.
-    repeat intro. simpl in H. subst. reflexivity.
-  Qed.
-
-(* Lemma lcurrent_pre_trans' x n1 n2 n3 : *)
-(*     lcurrent_pre x n1 n3 -> *)
-(*     lcurrent_pre x n1 n2 /\ lcurrent_pre x n2 n3. *)
-(* Proof. *)
-(*   unfold lcurrent_pre. split. *)
-(*   - split. *)
-(*     + intro. apply H. *)
-  (* Admitted. *)
-
-  (** The naive defn is transitive, at least *)
-(*    Program Definition lcurrent n1 n2 : @perm C :=
-    {|
-      pre x := subsumes n1 n2 (lget x) (lget x);
-      rely x y := x = y \/
-                    subsumes n1 n2 (lget x) (lget x) /\
-                    subsumes n1 n2 (lget y) (lget y);
-      guar x y := x = y;
-    |}.
-  Next Obligation.
-    constructor; repeat intro; try solve [intuition].
-    destruct H, H0; subst; auto.
-    right. destruct H, H0. split; eapply subsumes_preorder; eauto; reflexivity.
-  Qed.
-  Next Obligation.
-    constructor; repeat intro; subst; intuition.
-  Qed.
-  Next Obligation.
-    destruct H; subst; auto. destruct H; intuition.
-  Qed.
-
-  Lemma lcurrent_transitive n1 n2 n3 :
-    lcurrent n1 n3 <= lcurrent n1 n2 ** lcurrent n2 n3.
-  Proof.
-    constructor; intros; cbn; intuition.
-    - destruct H as (? & ? & ?). simpl in *. eapply subsumes_preorder; eauto.
-    - destruct H. simpl in *. destruct H, H0; subst; auto. right.
-      destruct H, H0. split; auto; eapply subsumes_preorder; eauto.
-  Qed.
 *)
-
-  (** n1 subsumes n2, and the rely states that lifetimes don't do weird stuff. **)
-  Program Definition lcurrent n1 n2 (H : forall x, subsumes n1 n2 x x) : @perm C :=
-    {|
-      pre x := True;
-      rely x y := True;
-      guar x y := x = y;
-    |}.
-  Next Obligation.
-    constructor; repeat intro; auto.
-  Qed.
-  Next Obligation.
-    constructor; repeat intro; subst; auto.
-  Qed.
-  (* Next Obligation. *)
-  (*   destruct H; subst; auto. eapply absurd; eauto. *)
-  (* Qed. *)
-
-  (* Program Definition lcurrent n1 n2 : @perm C := *)
-  (*   {| *)
-  (*     pre x := subsumes n1 n2 (lget x) (lget x); *)
-  (*     rely x y := x = y \/ *)
-  (*                   lifetime_invariant x y /\ *)
-  (*                     (~subsumes n1 n2 (lget x) (lget x) \/ *)
-  (*                        subsumes n1 n2 (lget x) (lget x) /\ *)
-  (*                        subsumes n1 n2 (lget y) (lget y)); *)
-  (*     guar x y := x = y \/ lifetime_invariant x y /\ *)
-  (*                         ~subsumes n1 n2 (lget x) (lget x) /\ *)
-  (*                         lifetime (lget x) n2 = lifetime (lget y) n2; *)
-  (*   |}. *)
-  (* Next Obligation. *)
-  (*   constructor; repeat intro; try solve [intuition]. *)
-  (*   destruct H, H0; subst; auto. *)
-  (*   right. destruct H, H0. split; [etransitivity; eauto | intuition]. *)
-  (* Qed. *)
-  (* Next Obligation. *)
-  (*   constructor; auto. intros ? ? ? [? | [? [? ?]]] [? | [? [? ?]]]; subst; auto. *)
-  (*   right. split; [| split]; auto; etransitivity; eauto. *)
-  (* Qed. *)
-  (* Next Obligation. *)
-  (*   destruct H; subst; auto. destruct H; intuition. *)
-  (* Qed. *)
-
-  Lemma lcurrent_sep n1 n2 H :
-    lcurrent n1 n2 H ⊥ lcurrent n1 n2 H.
-  Proof.
-    constructor; intros ? ? []; reflexivity.
-  Qed.
-
-  Lemma lcurrent_transitive n1 n2 n3 H12 H23 H13 :
-    lcurrent n1 n3 H13 <= lcurrent n1 n2 H12 ** lcurrent n2 n3 H23.
-  Proof.
-    constructor; intros; cbn in *; intuition.
-  Qed.
-
-  (* Lemma lcurrent_sep_owned n1 n2 (ns : nat -> Prop) p : *)
-  (*   ns n2 -> *)
-  (*   lcurrent n1 n2 ⊥ owned n1 ns p. *)
-  (* Proof. *)
-  (*   constructor; intros ? ? []; subst; try reflexivity. *)
-  (*   - destruct H0. right. admit. *)
-  (*   - simpl in *. *)
-  (* Abort. *)
-
-  (* Lemma lcurrent_sep_when n1 n2 p : *)
-  (*   lcurrent n1 n2 ⊥ p -> *)
-  (*   lcurrent n1 n2 ⊥ when n1 p. *)
-  (* Proof. *)
-  (*   intros Hsep. split; intros. *)
-  (*   - apply Hsep; auto. destruct H; subst; intuition. *)
-  (*   - destruct H; subst; [reflexivity |]. *)
-  (*     destruct Hsep as [_ ?]. simpl. *)
-  (* Admitted. *)
-
-  (* Lemma lcurrent_duplicate n1 n2 : *)
-  (*   lcurrent n1 n2 ≡≡ lcurrent n1 n2 ** lcurrent n1 n2. *)
-  (* Proof. *)
-  (*   split. *)
-  (*   - constructor; intros; simpl in *; [apply H | apply H | subst; constructor; left; auto]. *)
-  (*   - constructor; intros; simpl in *; subst; auto. *)
-  (*     + split; [| split]; auto. apply lcurrent_sep. *)
-  (*     + induction H. intuition. *)
-  (*       destruct IHclos_trans1 as [? | (? & ? & ?)]; subst; auto. *)
-  (*       destruct IHclos_trans2 as [? | (? & ? & ?)]; subst; auto. *)
-  (*       right; split; [| split]; auto; etransitivity; eauto. *)
-  (* Qed. *)
-
-  (* Weaken the lifetime n1 to n2 *)
-  Lemma lcurrent_when n1 n2 p H :
-    lcurrent n1 n2 H ** when n2 p <= lcurrent n1 n2 H ** when n1 p.
-  Proof.
-    constructor; intros.
-    - simpl in *. destruct H0 as (_ & ? & ?). split; [| split]; auto.
-      + intro. apply H0. destruct H2.
-        * admit. (* TODO write lemma about this *)
-        * right. symmetry. apply H. auto.
-      + admit.
-    - simpl in *. split; auto. destruct H0 as [_ ?].
-      destruct H0 as (? & ?). split.
-      + (* TODO: add invariant here *) admit.
-      + intros [].
-        * apply H1; auto. admit. (* as above *)
-        * apply H1. right. symmetry. apply H. auto.
-    - simpl in *. induction H0. 2: econstructor 2; eauto.
-      destruct H0; subst; try solve [constructor; auto].
-      destruct H0; subst; try solve [constructor; auto].
-      destruct H0 as (? & ? & ? & ?).
-      constructor 1. right. right.
-      split; [| split; [| split]]; auto.
-      2, 3: symmetry; apply H; auto.
-      (* TODO invariant *) admit.
-  Admitted.
-
-  (*  - simpl. destruct H as (? & ? & ?). simpl in *. *)
-  (*    intro. symmetry in H2. apply H in H2. auto. *)
-  (*  - destruct H. destruct H; subst; try reflexivity. destruct H as ((? & ?) & ? & ?). *)
-  (*    destruct H0 as [[? ?] | [? | ?]]. *)
-  (*    + left. split; symmetry; [apply H | apply H1]; auto. *)
-  (*    + right. left. symmetry. apply H1; auto. *)
-  (*    + (* subsumes x n1 n2 gives us the wrong direction here. *) *)
-  (*      right. destruct (lifetime y n2) eqn:?; auto. destruct l. *)
-  (*      * right. destruct H0 as (? & ? & ?). split; [| split]; auto. *)
-  (*        destruct (lifetime x n2) eqn:?. destruct l. all: auto; try contradiction H3. *)
-  (*        red in H. rewrite H0, Heqo0 in H. *)
-  (*        admit. *)
-  (*      * admit. *)
-  (*      * admit. *)
-  (*  (* right. destruct H2 as (? & ? & ?). split; [| split]; admit. *) *)
-  (*  admit. admit. *)
-  (*  - induction H. 2: econstructor 2; eauto. *)
-  (*    destruct H. constructor. left. auto. *)
-
-  (*    destruct H; subst; try reflexivity. destruct H as (? & ? & ?). *)
-  (*    constructor. right. right. split; [| split]; auto. *)
-  (* Abort. *)
