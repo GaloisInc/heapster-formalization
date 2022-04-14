@@ -623,9 +623,6 @@ Program Definition read_perm (ptr : addr) (v : SByte) : perm :=
 Next Obligation.
   constructor; repeat intro; auto. etransitivity; eauto.
 Qed.
-Next Obligation.
-  constructor; repeat intro; subst; auto.
-Qed.
 
 Program Definition write_perm (ptr : addr) (v : SByte) : perm :=
   {|

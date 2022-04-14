@@ -10,7 +10,8 @@ From Coq Require Import
      Classes.RelationClasses
      Relations.Relation_Operators
      Relations.Operators_Properties
-     Program.Equality.
+     Program.Equality
+     Logic.Eqdep.
 
 From ExtLib Require Import
      Structures.Functor
@@ -24,6 +25,7 @@ From ITree Require Import
      Events.State
      Events.Nondeterminism
      Eq.Eq
+     Eq.Shallow
      Eq.UpToTaus
      Eq.EqAxiom.
 
@@ -32,7 +34,9 @@ From Paco Require Import
 
 Import ITreeNotations.
 (* Import CatNotations. *)
-(* Import MonadNotation. *)Open Scope monad_scope.
+(* Import MonadNotation. *)
+Open Scope itree_scope.
+Open Scope monad_scope.
 
 Definition sep_step p q : Prop :=
   forall r, p ⊥ r -> q ⊥ r.
@@ -343,6 +347,12 @@ Section ts.
 End ts.
 
 Hint Resolve typing_gen_mon : paco.
+
+
+Ltac auto_inj_pair2 :=
+  repeat (match goal with
+          | [ H : _ |- _ ] => apply inj_pair2 in H
+          end).
 
 Lemma typing_bind {R1 R2} : forall P Q R (t : itree E R1) (k : R1 -> itree E R2),
     typing P Q t ->

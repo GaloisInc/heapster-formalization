@@ -29,6 +29,7 @@ From Paco Require Import
      paco.
 
 Import ITreeNotations.
+Open Scope itree_scope.
 Open Scope monad_scope.
 
 Variant MemoryE : Type -> Type :=

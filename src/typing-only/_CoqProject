@@ -1,5 +1,4 @@
 -R . Heapster
--R ../../../../InteractionTrees/theories ITree
 
 Permissions.v
 Memory.v
