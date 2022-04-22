@@ -11,7 +11,7 @@ From Coq Require Import
 
 From Heapster Require Import
      Utils
-     Permissions.
+     RoseTree.
 
 Import ListNotations.
 Open Scope list_scope.

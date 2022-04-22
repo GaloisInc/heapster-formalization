@@ -1,6 +1,7 @@
 -R src Heapster
 
 src/Utils.v
+src/RoseTree.v
 
 src/Permissions.v
 src/Memory.v
