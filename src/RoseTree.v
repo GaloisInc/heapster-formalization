@@ -8,7 +8,8 @@ From Equations Require Import Equations.
 Require Import Lia Utf8 List.
 
 From Coq Require Import
-     Arith.PeanoNat.
+     Arith.PeanoNat
+     Bool.
 
 Import ListNotations.
 Set Keyed Unification.
@@ -149,12 +150,20 @@ Section RoseTree.
         specialize (H2 _ H0). inversion H2. auto.
   Qed.
 
-  (* TODO *)
-  Axiom eq_rose : rose -> rose -> bool.
-  Axiom eq_rose_refl : forall a, eq_rose a a = true.
-  Axiom eq_rose_trans : forall a b c, eq_rose a b = true ->
-                                 eq_rose b c = true ->
-                                 eq_rose a c = true.
+  Lemma rose_eqb_spec : forall a b, reflect (a = b) (rose_eqb a b).
+  Proof.
+    intros. destruct (rose_eqb a b) eqn:?.
+    - constructor 1. apply rose_eqb_eq; auto.
+    - constructor 2. intro. subst. rewrite rose_eqb_refl in Heqb0. inversion Heqb0.
+  Qed.
+
+  Lemma rose_eqb_trans : forall a b c,
+      rose_eqb a b = true ->
+      rose_eqb b c = true ->
+      rose_eqb a c = true.
+  Proof.
+    intros. apply rose_eqb_eq in H, H0. subst. apply rose_eqb_refl.
+  Qed.
 
   Equations parent (r1 : rose) (r2 : rose) : bool by wf (size r2) lt :=
     parent a (node _ l) := match find (rose_eqb a) l with
