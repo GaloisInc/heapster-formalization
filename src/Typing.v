@@ -427,7 +427,7 @@ Section bisim.
     - unfold ITree.map. rewritebisim @bind_vis. econstructor 6; eauto; admit.
     - unfold ITree.map. rewritebisim @bind_vis. econstructor 7; eauto; admit.
     - unfold ITree.map. do 2 rewritebisim @bind_vis. econstructor 8; eauto.
-      + admit.
+      + apply Hlte. constructor 1. right. auto.
       + admit.
       + right. eapply CIH; eauto; admit.
     - unfold ITree.map. rewritebisim @bind_vis. econstructor 9; eauto; admit.
@@ -468,7 +468,22 @@ Section bisim.
       + pstep. do 2 rewrite rewrite_par. unfold par_match.
         econstructor 9; eauto. reflexivity.
         intros. econstructor 10; eauto. reflexivity.
-        intros. simpl. (* apply IHHt2. *)
+        intros. simpl. admit.
+      + pstep. do 2 rewrite rewrite_par. unfold par_match.
+        econstructor 9; eauto. reflexivity.
+        intros. econstructor 10; eauto. reflexivity.
+        intros. simpl. admit.
+      + pstep. do 2 rewrite rewrite_par. unfold par_match.
+        econstructor 9; eauto. reflexivity.
+        intros. econstructor 10; eauto. reflexivity.
+        intros. simpl. admit.
+      + pstep. do 2 rewrite rewrite_par. unfold par_match.
+        econstructor 9; eauto. reflexivity.
+        intros. econstructor 10; eauto. reflexivity.
+        intros. simpl. admit.
+      +
+
+        (* apply IHHt2. *)
     (* econstructor 11; eauto. reflexivity. *)
     (* { *)
     (*   intros b; exists b; destruct b. *)

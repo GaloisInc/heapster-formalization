@@ -72,208 +72,28 @@ Proof.
   - destruct x, y, z; cbn in *; intuition; destruct s, s0; intuition.
 Qed.
 
-(** a [Lifetime] contains an index into the [Lifetimes] structure and its direct parent [Lifetime]s *)
-Inductive Lifetime :=
-  node : nat -> Parents -> Lifetime
-with Parents :=
-| nil_p : Parents
-| cons_p : Lifetime -> Parents -> Parents
-.
-Scheme Lifetime_Parents_mut := Induction for Lifetime Sort Set
-    with Parents_Lifetime_mut := Induction for Parents Sort Set.
+(** a [Lifetime] contains a number for disambiguation and its direct parent [Lifetime]s *)
+Definition Lifetime := rose.
 
-Lemma eq_Lifetime_dec :
-  forall (x y : Lifetime), { x = y } + { x <> y }.
-Proof.
-  apply (Lifetime_Parents_mut (fun l => forall l',
-                                   { l = l' } + { l <> l' })
-                              (fun p => forall p',
-                                   { p = p' } + { p <> p' })); intros.
-  - destruct l'.
-    pose proof (Nat.eq_dec n n0). destruct H0; subst.
-    + destruct (H p0); subst; auto. right. intro. inversion H0. contradiction.
-    + right. intro. inversion H0. contradiction.
-  - destruct p'; auto. right. intro. inversion H.
-  - destruct p'. { right. intro. inversion H1. }
-    destruct (H l0); subst; auto.
-    + destruct (H0 p'); subst; auto.
-      right. intro. inversion H1. contradiction.
-    + right. intro. inversion H1. contradiction.
-Qed.
-
-Definition eqb_Lifetime l1 l2 : bool :=
-  proj1_sig (Sumbool.bool_of_sumbool (eq_Lifetime_dec l1 l2)).
-
-(* Fixpoint eqb_Lifetime (l1 l2 : Lifetime) : bool := *)
-(*   match l1, l2 with *)
-(*   | node n1 p1, node n2 p2 => Nat.eqb n1 n2 && eqb_Parents p1 p2 *)
-(*   end *)
-(* with *)
-(* eqb_Parents (p1 p2 : Parents) : bool := *)
-(*   match p1, p2 with *)
-(*   | nil_p, nil_p => true *)
-(*   | cons_p l1 p1, cons_p l2 p2 => eqb_Lifetime l1 l2 && eqb_Parents p1 p2 *)
-(*   | _, _ => false *)
-(*   end. *)
-
-(* Lemma eq_Lifetime_eqb_Lifetime l1 l2 : l1 = l2 -> eqb_Lifetime l1 l2 = true. *)
-(* Proof. *)
-(*   intros. subst. revert l2. *)
-(*   apply (Lifetime_Parents_mut *)
-(*            (fun l => eqb_Lifetime l l = true) *)
-(*            (fun p => eqb_Parents p p = true)); intros; cbn; auto. *)
-(*   - rewrite Nat.eqb_refl. cbn. apply H. *)
-(*   - rewrite H, H0. auto. *)
-(* Qed. *)
-(* Lemma eqb_Lifetime_eq_Lifetime l1 l2 : eqb_Lifetime l1 l2 = true -> l1 = l2. *)
-(* Proof. *)
-(*   intros. subst. revert l1 l2 H. *)
-(*   apply (Lifetime_Parents_mut *)
-(*            (fun l1 => forall l2, eqb_Lifetime l1 l2 = true -> l1 = l2) *)
-(*            (fun p1 => forall p2, eqb_Parents p1 p2 = true -> p1 = p2)); intros; cbn; auto. *)
-(*   - destruct l2. inversion H0. apply andb_prop in H2. destruct H2. *)
-(*     specialize (H _ H2). apply Nat.eqb_eq in H1. subst. reflexivity. *)
-(*   - destruct p2. constructor. inversion H. *)
-(*   - destruct p2; inversion H1. apply andb_prop in H3. destruct H3. *)
-(*     erewrite H, H0; eauto. *)
-(* Qed. *)
-
-Lemma eqb_Lifetime_spec : forall l1 l2, reflect (eq l1 l2) (eqb_Lifetime l1 l2).
-Proof.
-  intros. unfold eqb_Lifetime. destruct (eq_Lifetime_dec l1 l2); cbn; intuition.
-Qed.
-
-Fixpoint in_Parents (l : Lifetime) (ps : Parents) : Prop :=
-  match ps with
-  | nil_p => False
-  | cons_p l' ps' => l = l' \/ in_Parents l ps'
-  end.
-
-(** [l1] is a parent of [l2] *)
-
-Fixpoint isParent (l1 l2 : Lifetime) : bool :=
-  eqb_Lifetime l1 l2 ||
-  match l2 with
-  | node index parents => inParents l1 parents
-  end
-with inParents (l : Lifetime) (ps : Parents) : bool :=
-  match ps with
-  | nil_p => false
-  | cons_p l' ps' => isParent l l' || inParents l ps'
-  end.
-
-Lemma isParent_trans : forall l1 l2 l3,
-    isParent l1 l2 = true ->
-    isParent l2 l3 = true ->
-    isParent l1 l3 = true.
-Proof.
-  intros l1 l2. revert l2 l1.
-  apply (Lifetime_Parents_mut
-           (fun l2 => forall l1 l3,
-                isParent l1 l2 = true ->
-                isParent l2 l3 = true ->
-                isParent l1 l3 = true)
-           (fun p2 => forall n1 n2 p1 p3,
-                (inParents (node n1 p1) p2 = true ->
-                 inParents (node n2 p2) p3 = true ->
-                 inParents (node n1 p1) p3 = true) /\
-                  (isParent (node n1 p1) (node n2 p2) = true ->
-                   inParents (node n2 p2) p3 = true ->
-                   inParents (node n1 p1) p3 = true))); intros.
-  - destruct l1 as [n1 p1], l3 as [n3 p3]. cbn in *. admit.
-  - split; intros.
-    + inversion H.
-    + cbn in *. admit.
-  - cbn. split; intros.
-    +
-Abort.
-
-Fixpoint parent_of (l1 l2 : Lifetime) : Prop :=
+Definition parent_of (l1 l2 : Lifetime) : Prop :=
   l1 = l2 \/
-  match l2 with
-  | node index parents => in_Parents_rec l1 parents
-  end
-with in_Parents_rec (l : Lifetime) (ps : Parents) : Prop :=
-  match ps with
-  | nil_p => False
-  | cons_p l' ps' => parent_of l l' \/ in_Parents_rec l ps'
-  end.
+    parent l1 l2 = true.
 
 Global Instance parent_of_trans : Transitive parent_of.
 Proof.
-  red. intros x y. revert y x.
-  eapply (Lifetime_Parents_mut (fun l2 => forall l1 l3,
-                                   parent_of l1 l2 ->
-                                   parent_of l2 l3 ->
-                                   parent_of l1 l3)
-                               (fun p2 => forall l n2 p3,
-                                    in_Parents_rec l p2 ->
-                                    in_Parents_rec (node n2 p2) p3 ->
-                                    in_Parents_rec l p3)); intros.
-  - destruct l1, l3.
-    destruct H0; [inversion H0; clear H0; subst |]; auto.
-    destruct H1; [inversion H1; clear H1; subst |].
-    + cbn. right. auto.
-    + cbn. right. eapply H; eauto.
-  - inversion H.
-  - destruct H1.
-    + specialize (H l0 (node 0 p3) H1). cbn in H.
-      destruct H.
-      * right. destruct p3. inversion H2. destruct H2.
-        -- left. destruct l1. simpl in H. destruct H.
-           ++ inversion H. subst. right. left. destruct l; cbn; auto.
-           ++ right. eapply H0; eauto.
-    (* destruct l. cbn in H1. destruct H1. *)
-    (* + subst. destruct p3. inversion H2. destruct H2. *)
-    (*   * destruct l. destruct H1. *)
-    (*     -- rewrite <- H1. left. right. left. left. reflexivity. *)
-    (*     -- simpl in H1. left. right. *)
-    (* cbn in *. destruct H1. ; [destruct H1 |]. *)
-    (* + clear H0. destruct p3. inversion H2. *)
-    (*   destruct H2 as [? | [? | ?]]. *)
-    (*   * subst. right. left. cbn. left. auto. *)
-    (*   * cbn. right. left. apply H. *)
-    (*   simpl in H2. *)
-
-
-    (*   destruct p3; cbn in H2; try contradiction. *)
-    (*   admit. *)
-    (*   (* destruct H2 as [? | [? | ?]]. *) *)
-    (*   (* * subst. right. left. cbn. left. auto. *) *)
-    (*   (* * cbn. right. left. apply H. *) *)
-    (* + clear H0. destruct p3. inversion H2. *)
-    (*   simpl in H2. admit. *)
-    (* + destruct p3. inversion H2. destruct H2 as [? | [? | ?]]. *)
-    (*   * subst. eapply H0; auto. *)
-    (*     right. left. cbn. *)
-    (*     right. right. cbn. *)
-Admitted.
-
-(** A crucial invariant is that [Lifetime]s are [acyclic] *)
-Fixpoint acyclic_helper_Parents (i : nat) (ps : Parents) : Prop :=
-  match ps with
-  | nil_p => True
-  | cons_p l ps' => acyclic_helper_Lifetime i l /\ acyclic_helper_Parents i ps'
-  end
-with acyclic_helper_Lifetime (i : nat) (l : Lifetime) : Prop :=
-  match l with
-  | node index parents => index < i /\ acyclic_helper_Parents index parents
-  end.
-
-Definition acyclic (l : Lifetime) :=
-  match l with
-  | node index parents => acyclic_helper_Lifetime (index + 1) l
-  end.
+  repeat intro. destruct H, H0; subst; unfold parent_of; auto.
+  right. eapply parent_trans; eauto.
+Qed.
 
 Definition index (l : Lifetime) : nat :=
   match l with
   | node index _ => index
   end.
 
-Definition parents (l : Lifetime) : Parents :=
-  match l with
-  | node _ parents => parents
-  end.
+(* Definition parents (l : Lifetime) : Parents := *)
+(*   match l with *)
+(*   | node _ parents => parents *)
+(*   end. *)
 
 Module K <: DecidableType.
   Definition t := Lifetime.
@@ -281,7 +101,7 @@ Module K <: DecidableType.
   Definition eq_refl := @eq_refl Lifetime.
   Definition eq_sym := @eq_sym Lifetime.
   Definition eq_trans := @eq_trans Lifetime.
-  Definition eq_dec := eq_Lifetime_dec.
+  Definition eq_dec := rose_eq_dec.
 End K.
 
 Module Import M := FMapWeakList.Make(K).
@@ -295,10 +115,8 @@ Record Lifetimes : Type :=
     m : mapT;
 
     (** Properties *)
-    (* maybe not needed *)
-    acyclic_keys : forall l, In l m -> acyclic l;
-
-    (* TODO: uniqueness of nats *)
+    (* (* maybe not needed *) *)
+    (* acyclic_keys : forall l, In l m -> acyclic l; *)
 
     parents_exist : forall l p, In l m ->
                            parent_of p l ->
@@ -366,6 +184,15 @@ Proof.
     etransitivity; eauto.
 Qed.
 
+Lemma parent_find l1 l2 l s :
+  parent_of l1 l2 ->
+  @find status l1 (m l) = Some s ->
+  @find status l2 (m l) = Some s.
+Proof.
+  intros.
+  destruct l. cbn in *.
+Admitted.
+
 Lemma subsumes_status l :
   forall l1 l2, subsumes l1 l2 ->
            statusOf_subsumes (statusOf l1 l) (statusOf l2 l).
@@ -376,8 +203,8 @@ Proof.
     - apply parents_subsume; auto.
     - unfold statusOf. apply F.not_find_in_iff in n. rewrite n.
       destruct (find l1 (m l)) eqn:?; cbn; auto.
-      destruct s; auto. admit.
-Admitted.
+      destruct s; auto. erewrite parent_find in n; eauto. inversion n.
+Qed.
 
 (*
 Variant Lifetime := current | finished.

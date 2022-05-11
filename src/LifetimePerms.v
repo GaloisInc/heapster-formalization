@@ -155,9 +155,13 @@ Section LifetimePerms.
   Qed.
   Next Obligation.
     destruct H1.
-    - eapply pre_respects; eauto. apply H0. left. edestruct H. rewrite H1 in H4.
-      destruct (statusOf l (lget x)); auto; inversion H4.
-    - eapply pre_respects; eauto. apply H0. edestruct H. rewrite H1 in H4.
+    - eapply pre_respects; eauto.
+      + apply H. left; auto.
+      + apply H0. left. destruct H. edestruct H. rewrite H1 in H4.
+        destruct (statusOf l (lget x)); auto; inversion H4.
+    - eapply pre_respects; eauto.
+      + apply H. right; auto.
+      + apply H0. destruct H. edestruct H. rewrite H1 in H4.
       destruct (statusOf l (lget x)); [destruct s |]; auto; inversion H4.
   Qed.
 
@@ -209,6 +213,9 @@ Section LifetimePerms.
     constructor; repeat intro; auto.
     decompose [and or] H; decompose [and or] H0; subst; auto. clear H H0.
     right. split; [| split]; auto; etransitivity; eauto.
+  Qed.
+  Next Obligation.
+    destruct H as (? & ? & ?). rewrite <- H1. auto.
   Qed.
 
   Lemma owned_monotone l ls p1 p2 Hls Hp1 Hp2 :

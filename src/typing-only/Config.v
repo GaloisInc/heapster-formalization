@@ -617,7 +617,7 @@ Program Definition read_perm (ptr : addr) (v : SByte) : perm :=
   pre x := read x ptr = Some v;
   (* only checks if the memory ptr points to in the 2 configs are equal *)
   rely x y := read x ptr = read y ptr;
-  (* no guarates allowed *)
+  (* no updates allowed *)
   guar x y := x = y;
   |}.
 Next Obligation.
