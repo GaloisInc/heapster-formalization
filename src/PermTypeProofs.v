@@ -29,7 +29,7 @@ From ITree Require Import
      Basics.MonadProp
      Events.State
      Events.Exception
-     Eq.Eq
+     Eq.Eqit
      Eq.UpToTaus
      Eq.EqAxiom.
 

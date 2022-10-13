@@ -486,10 +486,38 @@ Section LifetimePerms.
     symmetry. apply H. symmetry. auto.
   Qed.
 
+  Definition when_Perms l P : Perms :=
+    meet_Perms (fun R => exists p Hp, p ∈ P /\ R = singleton_Perms (when l p Hp)).
+
   Definition lowned_Perms l ls Hsub P Q : Perms :=
     meet_Perms (fun R => exists r q Hq, R = singleton_Perms (r ** owned l ls Hsub q Hq) /\
                                q ∈ Q /\
                                (forall p, p ∈ P -> forall s, pre r s -> pre p s -> pre q s)).
+
+  Lemma foo l ls Hsub P Q R :
+    R * lowned_Perms l ls Hsub P Q ⊨
+    lowned_Perms l ls Hsub (P * when_Perms l R) (Q * R).
+  Proof.
+    repeat intro. cbn in H.
+    destruct H as (r & p' & Hr & (P' & (r' & q & Hq' & ? & Hq & Hpre) & Hp') & Hp).
+    subst. cbn in Hp'.
+    cbn.
+    eexists. split.
+    - do 3 eexists. split. reflexivity. split.
+      + do 2 eexists. split; eauto. split; eauto. reflexivity.
+      + intros p''' (p'' & ? & (? & (? & (? & ? & ? & ?) & ?) & ?)). subst.
+        cbn in H2.
+        split.
+        * eapply Hpre; auto.
+          apply H. apply Hp'. apply Hp. apply H1.
+          apply H3. apply H4.
+        * split; auto. apply Hp. auto.
+          apply Hp in H1. destruct H1 as (? & ? & ?).
+          symmetry. eapply separate_antimonotone. apply H6.
+          apply Hp'.
+          apply Hp' in H5. destruct H5 as (? & ? & ?).
+          cbn in H8.
+  Qed.
 
   (* Require Import Heapster.Typing. *)
 

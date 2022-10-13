@@ -27,7 +27,7 @@ From ITree Require Import
      Events.State
      Events.Exception
      Events.Nondeterminism
-     Eq.Eq
+     Eq.Eqit
      Eq.UpToTaus
      Eq.EqAxiom.
 

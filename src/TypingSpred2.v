@@ -9,7 +9,9 @@ From Coq Require Import
 
 From Heapster Require Import
      Permissions
-     SepStep.
+     PermissionsSpred2
+     SepStepSpred2
+     PermS.
 
 From ExtLib Require Import
      Structures.Functor
@@ -62,40 +64,6 @@ Proof.
   unfold throw. rewritebisim @bind_vis. apply throw_vis.
 Qed.
 
-(** * Parallel composition *)
-Section Parallel.
-
-  Definition par_match {E R1 R2} `{nondetE -< E}
-             (par : itree E R1 -> itree E R2 -> itree E (R1 * R2))
-             (t1 : itree E R1)
-             (t2 : itree E R2)
-    : itree E (R1 * R2) :=
-    vis Or (fun b : bool =>
-              if b then
-                match (observe t1) with
-                | RetF r1 => fmap (fun r2 => (r1, r2)) t2
-                | TauF t => Tau (par t t2)
-                | VisF o k => vis o (fun x => par (k x) t2)
-                end
-              else
-                match (observe t2) with
-                | RetF r2 => fmap (fun r1 => (r1, r2)) t1
-                | TauF t => Tau (par t1 t)
-                | VisF o k => vis o (fun x => par t1 (k x))
-                end).
-
-  CoFixpoint par {E R1 R2} `{nondetE -< E} (t1 : itree E R1) (t2 : itree E R2) :=
-    par_match par t1 t2.
-
-  Lemma rewrite_par : forall {E R1 R2} `{nondetE -< E} (t1 : itree E R1) (t2 : itree E R2),
-      par t1 t2 = par_match par t1 t2.
-  Proof.
-    intros. apply bisimulation_is_eq. revert t1 t2.
-    ginit. gcofix CIH. intros. gstep. unfold par. constructor. red. intros.
-    apply Reflexive_eqit_gen_eq. (* not sure why reflexivity doesn't work here *)
-  Qed.
-End Parallel.
-
 (** * Stuttering bisimulation *)
 Section bisim.
   Variant modifyE C : Type -> Type :=
@@ -106,112 +74,202 @@ Section bisim.
 
   Context {config specConfig : Type}.
 
-  Inductive sbuter_gen {R1 R2 : Type} (sbuter : perm -> (R1 -> R2 -> Perms) -> itree (sceE config) R1 -> config -> itree (sceE specConfig) R2 -> specConfig -> Prop)
-            (p : perm) (Q : R1 -> R2 -> Perms) :
-    itree (sceE config) R1 -> config -> itree (sceE specConfig) R2 -> specConfig -> Prop :=
-  | sbuter_gen_ret r1 c1 r2 c2 :
-      pre p (c1, c2) ->
-      p ∈ Q r1 r2 ->
-      sbuter_gen sbuter p Q (Ret r1) c1 (Ret r2) c2
-  | sbuter_gen_err t1 c1 c2 :
-      sbuter_gen sbuter p Q t1 c1 (throw tt) c2
-  | sbuter_gen_tau_L t1 c1 t2 c2 :
-      pre p (c1, c2) ->
-      sbuter_gen sbuter p Q t1 c1 t2 c2 ->
-      sbuter_gen sbuter p Q (Tau t1) c1 t2 c2
-  | sbuter_gen_tau_R t1 c1 t2 c2 :
-      pre p (c1, c2) ->
-      sbuter_gen sbuter p Q t1 c1 t2 c2 ->
-      sbuter_gen sbuter p Q t1 c1 (Tau t2) c2
-  | sbuter_gen_tau t1 c1 t2 c2 :
-      pre p (c1, c2) ->
-      sbuter p Q t1 c1 t2 c2 ->
-      sbuter_gen sbuter p Q (Tau t1) c1 (Tau t2) c2
-  | sbuter_gen_modify_L f k c1 t2 c2 p' :
-      pre p (c1, c2) ->
-      guar p (c1, c2) (f c1, c2) ->
-      sep_step p p' ->
-      sbuter_gen sbuter p' Q (k c1) (f c1) t2 c2 ->
-      sbuter_gen sbuter p Q (vis (Modify f) k) c1 t2 c2
-  | sbuter_gen_modify_R t1 c1 f k c2 p' :
-      pre p (c1, c2) ->
-      guar p (c1, c2) (c1, f c2) ->
-      sep_step p p' ->
-      sbuter_gen sbuter p' Q t1 c1 (k c2) (f c2) ->
-      sbuter_gen sbuter p Q t1 c1 (vis (Modify f) k) c2
-  | sbuter_gen_modify f1 k1 c1 f2 k2 c2 p' :
-      pre p (c1, c2) ->
-      guar p (c1, c2) (f1 c1, f2 c2) ->
-      sep_step p p' ->
-      (* TODO: f1 c1 satisfies the spred *)
-      sbuter p' Q (k1 c1) (f1 c1) (k2 c2) (f2 c2) ->
-      sbuter_gen sbuter p Q (vis (Modify f1) k1) c1 (vis (Modify f2) k2) c2
-  | sbuter_gen_choice_L k c1 t2 c2 p' :
-      pre p (c1, c2) ->
-      sep_step p p' ->
-      (forall b, sbuter_gen sbuter p' Q (k b) c1 t2 c2) ->
-      sbuter_gen sbuter p Q (vis Or k) c1 t2 c2
-  | sbuter_gen_choice_R t1 c1 k c2 p' :
-      pre p (c1, c2) ->
-      sep_step p p' ->
-      (forall b, sbuter_gen sbuter p' Q t1 c1 (k b) c2) ->
-      sbuter_gen sbuter p Q t1 c1 (vis Or k) c2
-  | sbuter_gen_choice k1 c1 k2 c2 p' :
-      pre p (c1, c2) ->
-      sep_step p p' ->
-      (forall b1, exists b2, sbuter p' Q (k1 b1) c1 (k2 b2) c2) ->
-      (forall b2, exists b1, sbuter p' Q (k1 b1) c1 (k2 b2) c2) ->
-      sbuter_gen sbuter p Q (vis Or k1) c1 (vis Or k2) c2
+  Inductive bisim_gen {R1 R2 : Type}
+            (bisim : forall (spred : config * specConfig -> Prop),
+                @perm {x | spred x} ->
+                (R1 -> R2 -> Perms2) ->
+                itree (sceE config) R1 ->
+                config ->
+                itree (sceE specConfig) R2 ->
+                specConfig ->
+                Prop)
+            (spred : config * specConfig -> Prop)
+            (p : @perm {x | spred x})
+            (Q : R1 -> R2 -> Perms2) :
+    itree (sceE config) R1 ->
+    config ->
+    itree (sceE specConfig) R2 ->
+    specConfig ->
+    Prop :=
+  | bisim_gen_ret r1 c1 r2 c2 (Hspred : spred (c1, c2)):
+      pre p (exist _ (c1, c2) Hspred) ->
+      in_Perms2 (Q r1 r2) p ->
+      bisim_gen bisim spred p Q (Ret r1) c1 (Ret r2) c2
+  | bisim_gen_err t1 c1 c2 :
+      bisim_gen bisim spred p Q t1 c1 (throw tt) c2
+  | bisim_gen_tau_L t1 c1 t2 c2 (Hspred : spred (c1, c2)) :
+      pre p (exist _ (c1, c2) Hspred) ->
+      bisim_gen bisim spred p Q t1 c1 t2 c2 ->
+      bisim_gen bisim spred p Q (Tau t1) c1 t2 c2
+  | bisim_gen_tau_R t1 c1 t2 c2 (Hspred : spred (c1, c2)) :
+      pre p (exist _ (c1, c2) Hspred) ->
+      bisim_gen bisim spred p Q t1 c1 t2 c2 ->
+      bisim_gen bisim spred p Q t1 c1 (Tau t2) c2
+  | bisim_gen_tau t1 c1 t2 c2 (Hspred : spred (c1, c2)) :
+      pre p (exist _ (c1, c2) Hspred) ->
+      bisim spred p Q t1 c1 t2 c2 ->
+      bisim_gen bisim spred p Q (Tau t1) c1 (Tau t2) c2
+  | bisim_gen_modify_L (spred' : config * specConfig -> Prop)
+                       (Hspred' : forall x, spred' x -> spred x)
+                       (f : config -> config) k c1 t2 c2
+                       (p' : perm)
+                       (Hspred : spred (c1, c2))
+                       (Hf : spred' (f c1, c2)) :
+      pre p (exist _ (c1, c2) Hspred) ->
+      guar p (exist _ (c1, c2) Hspred) (exist _ (f c1, c2) (Hspred' _ Hf)) ->
+      sep_step _ _ _ Hspred' p p' ->
+      bisim_gen bisim spred' p' Q (k c1) (f c1) t2 c2 ->
+      bisim_gen bisim spred p Q (vis (Modify f) k) c1 t2 c2
+  | bisim_gen_modify_R (spred' : config * specConfig -> Prop)
+                        (Hspred' : forall x, spred' x -> spred x)
+                        t1 c1 f k c2 p'
+                        (Hspred : spred (c1, c2))
+                        (Hf : spred' (c1, f c2)):
+      pre p (exist _ (c1, c2) Hspred) ->
+      guar p (exist _ (c1, c2) Hspred) (exist _ (c1, f c2) (Hspred' _ Hf)) ->
+      sep_step _ _ _ Hspred' p p' ->
+      bisim_gen bisim spred' p' Q t1 c1 (k c2) (f c2) ->
+      bisim_gen bisim spred p Q t1 c1 (vis (Modify f) k) c2
+  | bisim_gen_modify (spred' : config * specConfig -> Prop)
+                      (Hspred' : forall x, spred' x -> spred x)
+                      f1 k1 c1 f2 k2 c2 p'
+                      (Hspred : spred (c1, c2))
+                      (Hf : spred' (f1 c1, f2 c2)) :
+      pre p (exist _ (c1, c2) Hspred) ->
+      guar p (exist _ (c1, c2) Hspred) (exist _ (f1 c1, f2 c2) (Hspred' _ Hf)) ->
+      sep_step _ _ _ Hspred' p p' ->
+      bisim spred' p' Q (k1 c1) (f1 c1) (k2 c2) (f2 c2) ->
+      bisim_gen bisim spred p Q (vis (Modify f1) k1) c1 (vis (Modify f2) k2) c2
+  | bisim_gen_choice_L k c1 t2 c2 (Hspred : spred (c1, c2)) :
+      pre p (exist _ (c1, c2) Hspred) ->
+      (* sep_step p p' -> *)
+      (forall b, bisim_gen bisim spred p Q (k b) c1 t2 c2) ->
+      bisim_gen bisim spred p Q (vis Or k) c1 t2 c2
+  | bisim_gen_choice_R t1 c1 k c2 (Hspred : spred (c1, c2)) :
+      pre p (exist _ (c1, c2) Hspred) ->
+      (* sep_step p p' -> *)
+      (forall b, bisim_gen bisim spred p Q t1 c1 (k b) c2) ->
+      bisim_gen bisim spred p Q t1 c1 (vis Or k) c2
+  | bisim_gen_choice k1 c1 k2 c2 (Hspred : spred (c1, c2)):
+      pre p (exist _ (c1, c2) Hspred) ->
+      (* sep_step p p' -> *)
+      (forall b1, exists b2, bisim spred p Q (k1 b1) c1 (k2 b2) c2) ->
+      (forall b2, exists b1, bisim spred p Q (k1 b1) c1 (k2 b2) c2) ->
+      bisim_gen bisim spred p Q (vis Or k1) c1 (vis Or k2) c2
   .
 
-  Lemma sbuter_gen_mon {R1 R2} : monotone6 (@sbuter_gen R1 R2).
+  Lemma bisim_gen_mon {R1 R2} : monotone7 (@bisim_gen R1 R2).
   Proof.
     repeat intro. induction IN; subst; try solve [econstructor; eauto]; auto.
     econstructor 11; eauto; intros.
-    - destruct (H1 b1). eexists; eauto.
-    - destruct (H2 b2). eexists; eauto.
+    - destruct (H0 b1). eexists; eauto.
+    - destruct (H1 b2). eexists; eauto.
   Qed.
-  #[local] Hint Resolve sbuter_gen_mon : paco.
+  #[local] Hint Resolve bisim_gen_mon : paco.
 
-  Definition sbuter {R1 R2} := paco6 (@sbuter_gen R1 R2) bot6.
+  Definition bisim {R1 R2} := paco7 (@bisim_gen R1 R2) bot7.
 
-  Lemma sbuter_gen_pre {R1 R2} r p (Q : R1 -> R2 -> Perms) t s c1 c2 :
-    sbuter_gen r p Q t c1 s c2 ->
-    s = throw tt \/ pre p (c1, c2).
+  Lemma bisim_gen_pre {R1 R2} spred r p (Q : R1 -> R2 -> Perms2) t s c1 c2 Hspred :
+    bisim_gen r spred p Q t c1 s c2 ->
+    s = throw tt \/ pre p (exist _ (c1, c2) Hspred).
   Proof.
-    inversion 1; auto.
+    inversion 1; subst; eauto; erewrite (proof_irrelevance _ Hspred); eauto.
   Qed.
 
-  Lemma sbuter_lte {R1 R2} p Q Q' (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) c1 c2 :
-    sbuter p Q t c1 s c2 -> (forall r1 r2, Q r1 r2 ⊨ Q' r1 r2) -> sbuter p Q' t c1 s c2.
+  Lemma bisim_lte {R1 R2} spred p Q Q' (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) c1 c2 :
+    bisim spred p Q t c1 s c2 ->
+    (forall r1 r2, lte_Perms2 (Q' r1 r2) (Q r1 r2)) ->
+    bisim spred p Q' t c1 s c2.
   Proof.
-    revert p Q Q' t s c1 c2. pcofix CIH. intros p Q Q' t s c1 c2 Htyping Hlte.
+    revert spred p Q Q' t s c1 c2. pcofix CIH. intros spred p Q Q' t s c1 c2 Htyping Hlte.
     punfold Htyping. pstep.
     induction Htyping; pclearbot; try solve [econstructor; eauto].
-    - constructor; eauto. apply Hlte. auto.
+    - econstructor; eauto. apply Hlte. auto.
     - econstructor 11; eauto; intros.
-      + destruct (H1 b1). eexists. right. eapply CIH; eauto. pclearbot. apply H3.
-      + destruct (H2 b2). eexists. right. eapply CIH; eauto. pclearbot. apply H3.
+      + destruct (H0 b1). eexists. right. eapply CIH; eauto. pclearbot. apply H2.
+      + destruct (H1 b2). eexists. right. eapply CIH; eauto. pclearbot. apply H2.
   Qed.
+
+  Lemma bisim_spred_lte {R1 R2} (spred spred' : config * specConfig -> Prop) p Q
+        (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2)
+        c1 c2 (Hspred': forall x, spred' x -> spred x) :
+    bisim spred' (restrict _ _ _ Hspred' p) Q t c1 s c2 ->
+    spred' (c1, c2) ->
+    bisim spred
+          p
+          Q
+          (* (fun spred'' Hspred'' r1 r2 => Restrict _ _ _ Hspred'' (Restrict _ _ _ Hspred' (Q r1 r2))) *)
+                                                 (* Q spred'' (fun x Hx => (Hspred' x (Hspred'' x Hx)))) *)
+          t c1 s c2.
+  Proof.
+    (* Set Printing All. *)
+    revert spred p Q t s c1 c2 spred' Hspred'. pcofix CIH.
+    intros spred p Q t s c1 c2 spred' Hspred' Hbisim Hc1c2.
+    punfold Hbisim. pstep.
+    remember (restrict _ _ _ _ p).
+    revert spred p Hspred' Heqp0.
+    revert Hc1c2 CIH.
+    induction Hbisim; intros; subst.
+    - econstructor 1. Unshelve. 3: auto.
+      + cbn. erewrite (proof_irrelevance _ (Hspred' (c1, c2) _)). apply H.
+      + eapply Perms_upwards_closed1; eauto. unfold hlte_perm1. reflexivity.
+    - constructor 2.
+    - econstructor 3. apply H.
+      eapply IHHbisim; eauto.
+      (* erewrite (proof_irrelevance _ (Hspred' (c1, c2) _)). apply H. *)
+    - econstructor 4. apply H.
+      eapply IHHbisim; eauto.
+    - econstructor 5.
+      + cbn. apply H.
+      + pclearbot. right. eapply CIH; eauto.
+    - econstructor 6.
+      + clear IHHbisim CIH. apply H.
+      + clear IHHbisim CIH. apply H0.
+      + clear IHHbisim. cbn. repeat intro. admit.
+      + eapply IHHbisim. apply Hf. auto. admit.
+    - econstructor 7.
+      + clear IHHbisim CIH. apply H.
+      + clear IHHbisim CIH. apply H0.
+      + clear IHHbisim. cbn. repeat intro. admit.
+      + eapply IHHbisim; auto. admit.
+    - econstructor 8; eauto.
+      + clear CIH. apply H.
+      + clear CIH. apply H0.
+      + cbn. repeat intro. admit.
+      + pclearbot. right. eapply CIH; eauto. admit.
+    - econstructor 9; eauto.
+    (*   cbn. erewrite (proof_irrelevance _ (Hspred' (c1, c2) _)). apply H. *)
+    (* - econstructor 10; eauto. *)
+    (*   cbn. erewrite (proof_irrelevance _ (Hspred' (c1, c2) _)). apply H. *)
+    (* - econstructor 11; eauto. *)
+    (*   + cbn. erewrite (proof_irrelevance _ (Hspred' (c1, c2) _)). apply H. *)
+    (*   + intros b. destruct (H0 b). pclearbot. eauto. *)
+    (*   + intros b. destruct (H1 b). pclearbot. eauto. *)
+
+    (*     Unshelve. all: auto. *)
+  Admitted.
 
   (** * Typing *)
   Definition typing {R1 R2} P Q (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) :=
-    forall p c1 c2, p ∈ P -> pre p (c1, c2) -> sbuter p Q t c1 s c2.
+    forall spred (p : @perm {x | spred x}) c1 c2 (Hspred : spred (c1, c2)),
+      in_Perms2 P p ->
+      pre p (exist _ (c1, c2) Hspred) ->
+      bisim spred p Q t c1 s c2.
 
-  Lemma typing_lte {R1 R2} P P' Q Q' (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) :
+  Lemma typing_lte {R1 R2} (spred : config * specConfig -> Prop) P P' Q Q' (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) :
     typing P Q t s ->
-    P' ⊨ P ->
-    (forall r1 r2, Q r1 r2 ⊨ Q' r1 r2) ->
+    lte_Perms2 P P' ->
+    (forall r1 r2, lte_Perms2 (Q' r1 r2) (Q r1 r2)) ->
     typing P' Q' t s.
   Proof.
     repeat intro.
-    eapply sbuter_lte; eauto.
+    eapply bisim_lte; eauto.
   Qed.
 
   Lemma typing_ret {R1 R2} P Q (r1 : R1) (r2 : R2) :
-    P ⊨ Q r1 r2 -> typing P Q (Ret r1) (Ret r2).
+    lte_Perms2 (Q r1 r2) P -> typing P Q (Ret r1) (Ret r2).
   Proof.
-    repeat intro. pstep. constructor; auto.
+    repeat intro. pstep. econstructor; eauto.
   Qed.
 
   Lemma rewrite_spin {E R} : (ITree.spin : itree E R) = Tau (ITree.spin).
@@ -227,87 +285,93 @@ Section bisim.
   Proof.
     repeat intro. pcofix CIH. pstep.
     rewrite (@rewrite_spin _ R1). rewrite (@rewrite_spin _ R2).
-    constructor 5; auto.
+    econstructor 5; eauto.
   Qed.
 
   Lemma typing_top {R1 R2} Q (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) :
-    typing top_Perms Q t s.
+    typing top_Perms2 Q t s.
   Proof.
     repeat intro. inversion H.
   Qed.
 
-  Lemma sbuter_bottom {R1 R2} p Q (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) c1 c2:
-    sbuter p Q t c1 s c2 -> sbuter p (fun _ _ => bottom_Perms) t c1 s c2.
+  Lemma bisim_bottom {R1 R2} spred p Q (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) c1 c2:
+    bisim spred p Q t c1 s c2 -> bisim spred p (fun _ _ => bottom_Perms2) t c1 s c2.
   Proof.
-    revert p Q t s c1 c2. pcofix CIH. intros. pstep. punfold H0.
+    revert spred p Q t s c1 c2. pcofix CIH. intros. pstep. punfold H0.
     induction H0; pclearbot; try solve [econstructor; simpl; eauto].
     econstructor 11; eauto; intros.
-    - destruct (H1 b1). eexists. right. eapply CIH; pclearbot; apply H3.
-    - destruct (H2 b2). eexists. right. eapply CIH; pclearbot; apply H3.
+    - destruct (H0 b1). eexists. right. eapply CIH; pclearbot. apply H2.
+    - destruct (H1 b2). eexists. right. eapply CIH; pclearbot; apply H2.
   Qed.
 
   Lemma typing_bottom {R1 R2} P Q (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) :
-    typing P Q t s -> typing P (fun _ _ => bottom_Perms) t s.
+    typing P Q t s -> typing P (fun _ _ => bottom_Perms2) t s.
   Proof.
-    repeat intro. eapply sbuter_bottom; eauto.
+    repeat intro. eapply bisim_bottom; eauto.
   Qed.
 
-  Lemma sbuter_bind {R1 R2 S1 S2} (p : perm) (Q : R1 -> S1 -> Perms) (R : R2 -> S2 -> Perms)
+  Lemma bisim_bind {R1 R2 S1 S2} spred (p : perm)
+        (Q : R1 -> S1 -> Perms2) (R : R2 -> S2 -> Perms2)
         (t1 : itree (sceE config) R1) (t2 : R1 -> itree (sceE config) R2)
         (s1 : itree (sceE specConfig) S1) (s2 : S1 -> itree (sceE specConfig) S2)
-        c1 c2 r :
-    pre p (c1, c2) ->
-    sbuter p Q t1 c1 s1 c2 ->
-    (forall r1 r2 p c1 c2, p ∈ (Q r1 r2) ->
-                      pre p (c1, c2) ->
-                      paco6 sbuter_gen r p R (t2 r1) c1 (s2 r2) c2) ->
-    paco6 sbuter_gen r p R (x <- t1 ;; t2 x) c1 (x <- s1 ;; s2 x) c2.
+        c1 c2 Hspred r :
+    pre p (exist _ (c1, c2) Hspred) ->
+    bisim spred p Q t1 c1 s1 c2 ->
+    (forall r1 r2 c1 c2 spred' Hspred' p,
+        in_Perms2 (Q r1 r2) p ->
+        pre p (exist _ (c1, c2) Hspred') ->
+        paco7 bisim_gen r spred' p R (t2 r1) c1 (s2 r2) c2) ->
+    paco7 bisim_gen r spred p R (x <- t1 ;; t2 x) c1 (x <- s1 ;; s2 x) c2.
   Proof.
-    revert p Q R t1 t2 s1 s2 c1 c2. pcofix CIH.
-    intros p Q R t1 t2 s1 s2 c1 c2 Hpre Htyping1 Htyping2.
+    revert spred p Q R t1 t2 s1 s2 c1 c2 Hspred. pcofix CIH.
+    intros spred p Q R t1 t2 s1 s2 c1 c2 Hspred Hpre Htyping1 Htyping2.
     punfold Htyping1. induction Htyping1.
-    - do 2 rewritebisim @bind_ret_l. specialize (Htyping2 _ _ _ c1 c2 H0 H).
-      eapply paco6_mon; eauto.
+    - do 2 rewritebisim @bind_ret_l. specialize (Htyping2 _ _ c1 c2 spred Hspred0 _ H0 H).
+      eapply paco7_mon; eauto.
     - rewrite throw_bind. pstep. constructor.
     - rewritebisim @bind_tau.
-      specialize (IHHtyping1 Hpre Htyping2). punfold IHHtyping1.
-      pstep. constructor; auto.
+      specialize (IHHtyping1 _ Hpre Htyping2). punfold IHHtyping1.
+      pstep. econstructor; eauto.
     - rewritebisim @bind_tau.
-      specialize (IHHtyping1 Hpre Htyping2). punfold IHHtyping1.
-      pstep. constructor; auto.
+      specialize (IHHtyping1 _ Hpre Htyping2). punfold IHHtyping1.
+      pstep. econstructor; eauto.
     - do 2 rewritebisim @bind_tau. pclearbot.
-      pstep. constructor 5; auto. right. eapply CIH; eauto.
-    - rewritebisim @bind_vis. apply sbuter_gen_pre in Htyping1. destruct Htyping1; subst.
+      pstep. econstructor 5; eauto.
+    - rewritebisim @bind_vis. eapply bisim_gen_pre in Htyping1. destruct Htyping1; subst.
       + rewrite throw_bind. pstep. constructor.
-      + specialize (IHHtyping1 H2 Htyping2). punfold IHHtyping1. pstep. econstructor; eauto.
-    - rewritebisim @bind_vis. apply sbuter_gen_pre in Htyping1. destruct Htyping1; subst.
+      + pstep. econstructor; eauto. specialize (IHHtyping1 _ H2 Htyping2).
+        punfold IHHtyping1.
+    - rewritebisim @bind_vis. eapply bisim_gen_pre in Htyping1. destruct Htyping1; subst.
       + pstep. econstructor; eauto. rewrite H2. rewrite throw_bind. constructor.
-      + specialize (IHHtyping1 H2 Htyping2). punfold IHHtyping1. pstep. econstructor; eauto.
+      + pstep. econstructor; eauto. specialize (IHHtyping1 _ H2 Htyping2).
+        punfold IHHtyping1.
     - do 2 rewritebisim @bind_vis. pclearbot.
       pose proof H2. punfold H2.
       pstep. econstructor 8; eauto.
-      destruct (sbuter_gen_pre _ _ _ _ _ _ _ H2); eauto.
-      rewrite H4. rewrite throw_bind. left. pstep. constructor.
+      eapply bisim_gen_pre in H2. destruct H2; eauto.
+      left. pstep. rewrite H2. rewrite throw_bind. constructor.
     - rewritebisim @bind_vis. pstep. econstructor; eauto. intros.
-      destruct (sbuter_gen_pre _ _ _ _ _ _ _ (H1 b)).
-      + rewrite H3. rewrite throw_bind. constructor.
-      + specialize (H2 b H3 Htyping2). punfold H2.
+      specialize (H0 b). eapply bisim_gen_pre in H0. destruct H0.
+      + rewrite H0. rewrite throw_bind. constructor.
+      + specialize (H1 b _ H0 Htyping2). punfold H1.
     - rewritebisim @bind_vis. pstep. econstructor; eauto. intros.
-      destruct (sbuter_gen_pre _ _ _ _ _ _ _ (H1 b)).
-      + rewrite H3. rewrite throw_bind. constructor.
-      + specialize (H2 b H3 Htyping2). punfold H2.
+      specialize (H0 b). eapply bisim_gen_pre in H0. destruct H0.
+      + rewrite H0. rewrite throw_bind. constructor.
+      + specialize (H1 b _ H0 Htyping2). punfold H1.
     - do 2 rewritebisim @bind_vis. pclearbot. pstep. econstructor 11; eauto; intros.
-      + specialize (H1 b1). destruct H1. pclearbot.
-        punfold H1. destruct (sbuter_gen_pre _ _ _ _ _ _ _ H1).
-        * exists x. left. pstep. rewrite H3. rewrite throw_bind. econstructor; eauto.
+      + specialize (H0 b1). destruct H0. pclearbot.
+        punfold H0. pose proof H0. eapply bisim_gen_pre in H0. destruct H0.
+        * exists x. left. pstep. rewrite H0. rewrite throw_bind. econstructor; eauto.
         * eexists. right. eapply CIH; eauto. pstep; eauto.
-      + specialize (H2 b2). destruct H2. pclearbot.
-        punfold H2. destruct (sbuter_gen_pre _ _ _ _ _ _ _ H2).
-        * exists x. left. pstep. rewrite H3. rewrite throw_bind. econstructor; eauto.
+      + specialize (H1 b2). destruct H1. pclearbot.
+        punfold H1. pose proof H1. eapply bisim_gen_pre in H1. destruct H1.
+        * exists x. left. pstep. rewrite H1. rewrite throw_bind. econstructor; eauto.
         * eexists. right. eapply CIH; eauto. pstep; eauto.
+
+          Unshelve. all: eauto.
   Qed.
 
-  Lemma typing_bind {R1 R2 S1 S2} (P : Perms) (Q : R1 -> S1 -> Perms) (R : R2 -> S2 -> Perms)
+  Lemma typing_bind {R1 R2 S1 S2} (P : Perms2) (Q : R1 -> S1 -> Perms2) (R : R2 -> S2 -> Perms2)
         (t1 : itree (sceE config) R1) (t2 : R1 -> itree (sceE config) R2)
         (s1 : itree (sceE specConfig) S1) (s2 : S1 -> itree (sceE specConfig) S2) :
     typing P Q t1 s1 ->
@@ -315,28 +379,36 @@ Section bisim.
     typing P R (x <- t1 ;; t2 x) (x <- s1 ;; s2 x).
   Proof.
     repeat intro.
-    eapply sbuter_bind; eauto.
+    eapply bisim_bind; eauto.
+    intros. eapply H0; eauto.
   Qed.
 
-  Lemma sbuter_frame {R1 R2} p r p' Q R (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) c1 c2:
-    pre p' (c1, c2) ->
-    r ∈ R ->
-    p ** r <= p' ->
-    sbuter p Q t c1 s c2 ->
-    sbuter p' (fun r1 r2 => Q r1 r2 * R) t c1 s c2.
+  Lemma bisim_frame {R1 R2} spred spred' Hspred' p r p' Q R (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) c1 c2 Hc1c2:
+    pre p' (exist _ (c1, c2) Hc1c2) ->
+    in_Perms2 R r ->
+    hlte_perm1 _ spred spred' Hspred' (p ** r) p' ->
+    bisim spred p Q t c1 s c2 ->
+    bisim spred' p' (fun r1 r2 => sep_conj_Perms2 (Q r1 r2) R) t c1 s c2.
   Proof.
-    revert p r p' Q R t s c1 c2. pcofix CIH. rename r into r0.
-    intros p r p' Q R t s c1 c2 Hpre Hr Hlte Hsbuter. pstep. punfold Hsbuter.
+  Admitted.
+(*    revert spred p r p' Q R t s c1 c2 Hspred. pcofix CIH. rename r into r0.
+    intros spred p r p' Q R t s c1 c2 Hspred Hpre Hr Hlte Hbisim. pstep. punfold Hbisim.
     revert p' Hlte Hpre. generalize dependent r.
-    induction Hsbuter; intros; pclearbot; try solve [econstructor; eauto].
-    - constructor; auto. eapply Perms_upwards_closed; eauto.
-      do 2 eexists. split; [| split]; eauto; reflexivity.
-    - apply sbuter_gen_pre in Hsbuter. destruct Hsbuter; [subst; constructor |].
+    induction Hbisim; intros; pclearbot; try solve [econstructor; eauto].
+    - econstructor; eauto.
+      eapply Perms_upwards_closed1; eauto.
+      do 4 eexists. split; [| split]; eauto.
+      unfold hlte_perm1.
+      rewrite restrict_same. apply Hlte.
+      apply hlte_perm1_reflexive.
+    - eapply bisim_gen_pre in Hbisim. destruct Hbisim; [subst; constructor |].
       econstructor; eauto.
-      + apply Hlte. constructor. left. auto.
-      + eapply sep_step_lte; eauto. apply sep_step_sep_conj_l; eauto.
-        apply Hlte in Hpre. apply Hpre.
-      + eapply IHHsbuter; eauto. reflexivity.
+      (* 2: { eapply sep_step_lte; eauto. *)
+      + apply Hlte. constructor. left. erewrite (proof_irrelevance _ Hspred). apply H0.
+      + (* eapply sep_step_lte; eauto. apply sep_step_sep_conj_l; eauto. *)
+      (* apply Hlte in Hpre. apply Hpre. *)
+        admit.
+      + eapply IHHbisim. eapply Perms_upwards_closed1; eauto. admit.
         split; [| split]; auto.
         * apply Hlte in Hpre. destruct Hpre as (? & ? & ?). respects.
           apply H5. auto.
@@ -399,12 +471,23 @@ Section bisim.
       eapply sep_step_lte; eauto. apply sep_step_sep_conj_l; auto.
       apply Hlte in Hpre. apply Hpre.
   Qed.
+ *)
 
   Lemma typing_frame {R1 R2} P Q R (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2):
     typing P Q t s ->
-    typing (P * R) (fun r1 r2 => Q r1 r2 * R) t s.
+    typing (sep_conj_Perms2 P R) (fun r1 r2 => sep_conj_Perms2 (Q r1 r2) R) t s.
   Proof.
-    intros Ht p' c1 c2 (p & r & Hp & Hr & Hlte) Hpre.
+    (* repeat intro. *)
+    intros Ht spred p' c1 c2 Hc1c2 (spred' & Hspred' & p & r & Hp & Hr & Hlte) Hpre.
+    eapply bisim_frame; eauto.
+    eapply Ht; eauto.
+    destruct Hlte. cbn in pre_inc.
+    apply pre_inc. cbn.
+    erewrite (proof_irrelevance _ Hc1c2) in Hpre. apply Hpre.
+    Unshelve.
+
+    apply Hp.
+    destruct H.
     pose proof Hpre as H. apply Hlte in H. destruct H as (Hprep & Hprer & Hsep).
     eapply sbuter_frame; eauto.
   Qed.

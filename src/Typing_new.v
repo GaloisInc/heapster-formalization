@@ -23,7 +23,7 @@ From ITree Require Import
      Events.State
      Events.Exception
      Events.Nondeterminism
-     Eq.Eq
+     Eq.Eqit
      Eq.UpToTaus
      Eq.EqAxiom.
 
@@ -151,7 +151,7 @@ Section bisim.
     intro; unfold step in X; dependent destruction X.
     - rewrite <- (observing_intros _ (Tau t) _ x0), <- (observing_intros _ _ _ x).
       apply no_errors_Tau.
-    - rewrite <- (observing_intros _ (vis (Modify f) k) _ x0), <- (observing_intros _ _ _ x).
+    - rewrite <- (observing_intros _ (vis (Modify f) k) _ x0). , <- (observing_intros _ _ _ x).
       apply no_errors_Modify.
     - rewrite <- (observing_intros _ (vis Or k) _ x0), <- (observing_intros _ _ _ x).
       rewrite <- no_errors_Choice; eauto.

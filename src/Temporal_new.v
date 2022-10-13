@@ -24,7 +24,7 @@ From ITree Require Import
      Events.Writer
      Events.State
      Events.StateFacts
-     Eq.Eq
+     Eq.Eqit
      Eq.Shallow
      Interp.Interp
      Interp.InterpFacts.

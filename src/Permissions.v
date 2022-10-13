@@ -426,6 +426,14 @@ Section Permissions.
     - intros. apply H0. apply H; auto.
   Qed.
 
+  Global Instance Proper_eq_perm_separate :
+    Proper (eq_perm ==> eq_perm ==> Basics.flip Basics.impl) separate.
+  Proof.
+    repeat intro.
+    eapply separate_antimonotone; eauto. symmetry.
+    eapply separate_antimonotone; eauto. symmetry. auto.
+  Qed.
+
   (** ** Separating conjunction for permissions *)
   Program Definition sep_conj_perm (p q: perm) : perm :=
     {|

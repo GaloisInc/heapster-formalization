@@ -27,7 +27,7 @@ From ITree Require Import
      Events.Writer
      Events.State
      Events.StateFacts
-     Eq.Eq
+     Eq.Eqit
      Interp.Interp
      Interp.InterpFacts.
 
@@ -46,6 +46,7 @@ Import VectorNotations.
 
 Definition CompM S R := itree (sceE S) R.
 
+Ltac inv H := inversion H; clear H; subst.
 
 (** * Helper lemmas and definitions about [no_errors] and [sbuter] **)
 

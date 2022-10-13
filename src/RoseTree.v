@@ -170,6 +170,9 @@ Section RoseTree.
   Proof.
     simp parent. simpl.
     intros. destruct (rose_eqb r x); auto. destruct (find (rose_eqb r) xs); auto.
+    destruct xs; cbn in *. inversion H.
+
+    cbn.
   Abort.
 
   (* todo: rewrite this with parent in last case, then try using parents_elim *)

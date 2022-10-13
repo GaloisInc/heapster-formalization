@@ -42,7 +42,7 @@ Section Permissions.
   (** ** Permission ordering *)
   Record lte_perm (p q: perm) : Prop :=
     {
-      rely_inc : forall x y, rely q x y -> rely p x y;
+      rely_inc : forall x y, spred p x -> rely q x y -> rely p x y;
       guar_inc : forall x y, spred p x -> guar p x y -> guar q x y;
       pre_inc : forall x, pre q x -> pre p x;
       spred_inc : forall x, spred p x -> spred q x;
@@ -60,6 +60,7 @@ Section Permissions.
   Global Instance lte_perm_is_PreOrder : PreOrder lte_perm.
   Proof.
     constructor; [ constructor; auto | constructor; intro ]; eauto.
+    (* intros. apply H0 in H1. *)
   Qed.
 
   (** Equality of permissions = the symmetric closure of the ordering. *)
@@ -78,11 +79,11 @@ Section Permissions.
   Hint Resolve eq_perm_lte_2 : core.
   (* end hide *)
 
-  Global Instance Proper_eq_perm_rely :
-    Proper (eq_perm ==> eq ==> eq ==> Basics.flip Basics.impl) rely.
-  Proof.
-    repeat intro. subst. apply H. auto.
-  Qed.
+  (* Global Instance Proper_eq_perm_rely : *)
+  (*   Proper (eq_perm ==> eq ==> eq ==> Basics.flip Basics.impl) rely. *)
+  (* Proof. *)
+  (*   repeat intro. subst. apply H. auto. *)
+  (* Qed. *)
 
   (* Global Instance Proper_eq_perm_guar : *)
   (*   Proper (eq_perm ==> eq ==> eq ==> Basics.flip Basics.impl) guar. *)
@@ -114,10 +115,13 @@ Section Permissions.
   Program Definition bottom_perm : perm :=
     {|
       rely := fun x y => True;
-      guar := fun x y => x = y;
+      guar := fun x y => True;
       pre := fun x => True;
       spred := fun x => False;
     |}.
+  Next Obligation.
+    constructor; repeat intro; subst; auto.
+  Qed.
   Next Obligation.
     constructor; repeat intro; subst; auto.
   Qed.
@@ -439,8 +443,8 @@ Section Permissions.
   (** ** Separate permissions *)
   Record separate (p q : perm) : Prop :=
     {
-    sep_l: forall x y, spred q x -> guar q x y -> rely p x y;
-    sep_r: forall x y, spred p x -> guar p x y -> rely q x y;
+    sep_l: forall x y, spred q x -> spred p x -> guar q x y -> rely p x y;
+    sep_r: forall x y, spred p x -> spred q x -> guar p x y -> rely q x y;
     }.
 
   Notation "p ⊥ q" := (separate p q) (at level 50).
@@ -469,7 +473,7 @@ Section Permissions.
   Proof.
     intros. constructor.
     - intros. apply H; eauto.
-    - intros. apply H0. apply H; auto.
+    - intros. apply H0; auto. apply H; auto. apply H0; auto.
   Qed.
 
   (** ** Separating conjunction for permissions *)
@@ -562,8 +566,8 @@ Section Permissions.
   Proof.
     constructor; intros; simpl.
     - split.
-      + apply H. apply H1.
-      + apply H0. apply H1.
+      + apply H. apply H1. apply H2.
+      + apply H0. apply H1. apply H2.
     - induction H2.
       + destruct H2.
         constructor 1. left. destruct H2.
@@ -661,10 +665,11 @@ Section Permissions.
   Qed.
 *)
 
+  (*
   Lemma separate_sep_conj_perm_l: forall p q r, p ⊥ q ** r -> p ⊥ q.
   Proof.
     intros. destruct H. constructor; intros.
-    - apply sep_l0. constructor. left. auto.
+    - apply sep_l0. cbn. split; auto. constructor. left. auto.
     - apply sep_r0. auto.
   Qed.
   Lemma separate_sep_conj_perm_r: forall p q r, p ⊥ q ** r -> p ⊥ r.
@@ -722,6 +727,7 @@ Section Permissions.
           * constructor. right. auto.
     }
   Qed.
+*)
 
   (** * Permission sets *)
   (** Perms = upwards-closed sets of permissions *)
@@ -854,6 +860,7 @@ Section Permissions.
   Qed.
   Notation "P * Q" := (sep_conj_Perms P Q).
 
+  (*
   Lemma lte_l_sep_conj_Perms : forall P Q, P ⊑ P * Q.
   Proof.
     intros P Q p' ?. destruct H as [p [q [? [? ?]]]].
@@ -867,7 +874,7 @@ Section Permissions.
     eapply Perms_upwards_closed; eauto.
     etransitivity; eauto. apply lte_r_sep_conj_perm.
   Qed.
-
+   *)
   Lemma sep_conj_Perms_bottom_identity : forall P, bottom_Perms * P ≡ P.
   Proof.
     constructor; repeat intro.

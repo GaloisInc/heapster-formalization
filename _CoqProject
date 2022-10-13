@@ -3,6 +3,10 @@
 src/Utils.v
 src/RoseTree.v
 
+src/PermissionsSpred2.v
+src/SepStepSpred2.v
+src/PermS.v
+
 src/Permissions.v
 src/Memory.v
 src/Lifetime.v
@@ -14,6 +18,3 @@ src/LifetimePerms.v
 src/PermType.v
 src/PermTypeProofs.v
 src/Temporal.v
-
-src/Typing_new.v
-src/Temporal_new.v
