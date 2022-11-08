@@ -208,13 +208,10 @@ Proof.
   - destruct x, y. apply H; auto.
 Qed.
 
-Lemma hlte_perm1_reflexive config (spred : config -> Prop) p :
-  hlte_perm1 config spred spred (fun x H => H) p p.
+Lemma hlte_perm1_reflexive config (spred : config -> Prop) p H :
+  hlte_perm1 config spred spred H p p.
 Proof.
-  constructor; cbn; intros; auto.
-  - destruct x. auto.
-  - destruct x, y. auto.
-  - destruct x, y. auto.
+  unfold hlte_perm1. rewrite restrict_same. reflexivity.
 Qed.
 
 Lemma hlte_perm1_transitive config (spred1 spred2 spred3 : config -> Prop) (p1 p2 p3 : perm)
@@ -234,6 +231,12 @@ Proof.
     intros [] [] ?. cbn in *.
     specialize (guar_inc _ _ H). (* same as before but slightly cumbersome *)
     apply guar_inc.
+Qed.
+
+Lemma hlte_perm2_reflexive config (spred : config -> Prop) H p :
+  hlte_perm2 config spred spred H p p.
+Proof.
+  unfold hlte_perm2. rewrite restrict_same. reflexivity.
 Qed.
 
 Lemma hlte_perm2_transitive config (spred1 spred2 spred3 : config -> Prop) (p1 p2 p3 : perm)

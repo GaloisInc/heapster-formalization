@@ -89,6 +89,7 @@ Qed.
 (*            intros []; apply sep_step_rg]; eauto. *)
 (* Qed. *)
 
+(*
 Lemma sep_step_sep_conj_l config spred1 spred2 Hspred :
   forall p1 p2 q, p1 ⊥ q ->
              sep_step config spred1 spred2 Hspred p1 p2 ->
@@ -107,3 +108,4 @@ Proof.
   - apply H0. symmetry. eapply separate_sep_conj_perm_r; eauto.
   - symmetry. auto.
 Qed.
+*)
