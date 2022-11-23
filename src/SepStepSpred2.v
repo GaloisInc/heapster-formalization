@@ -4,6 +4,7 @@ From Heapster Require Import
      PermissionsSpred2.
 
 From Coq Require Import
+     Classes.Morphisms
      Classes.RelationClasses.
 (* end hide *)
 
@@ -17,8 +18,8 @@ Section step.
 
   (** * Preserves separability *)
   Definition sep_step
-             (p : @perm ({x | spred' x}))
-             (q : @perm ({x | spred x})) : Prop :=
+             (p : @perm {x | spred' x})
+             (q : @perm {x | spred x}) : Prop :=
     forall r, p ⊥ r -> q ⊥ (restrict _ _ _ Hspred r).
 End step.
 
@@ -45,32 +46,36 @@ Qed.
 (*   repeat intro. symmetry. eapply separate_antimonotone; eauto. symmetry; auto. *)
 (* Qed. *)
 
-(* Program Definition sym_guar_perm (p : @perm config) : perm := *)
-(*   {| *)
-(*     pre x := False; *)
-(*     rely := guar p; *)
-(*     guar := rely p; *)
-(*   |}. *)
-(* Lemma separate_self_sym : forall p, p ⊥ sym_guar_perm p. *)
-(* Proof. *)
-(*   intros. split; intros; auto. *)
-(* Qed. *)
+Program Definition sym_guar_perm config (spred : config -> Prop) (p : @perm {x | spred x}) :
+  perm :=
+  {|
+    pre x := False;
+    rely := guar p;
+    guar := rely p;
+  |}.
 
-(* Lemma sep_step_rely : forall p q x y, sep_step p q -> *)
-(*                                  rely p x y -> *)
-(*                                  rely q x y. *)
-(* Proof. *)
-(*   intros. specialize (H (sym_guar_perm p) (separate_self_sym _)). *)
-(*   apply H; auto. *)
-(* Qed. *)
+Lemma separate_self_sym config (spred : config -> Prop) : forall p, p ⊥ sym_guar_perm config spred p.
+Proof.
+  intros. split; intros; auto.
+Qed.
 
-(* Lemma sep_step_guar : forall p q x y, sep_step p q -> *)
-(*                                  guar q x y -> *)
-(*                                  guar p x y. *)
-(* Proof. *)
-(*   intros. specialize (H (sym_guar_perm p) (separate_self_sym _)). *)
-(*   apply H; auto. *)
-(* Qed. *)
+Lemma sep_step_rely config (spred1 spred2 : config -> Prop) Hspred : forall p q x y Hx Hy,
+    sep_step config spred1 spred2 Hspred p q ->
+    rely p (exist _ x (Hspred _ Hx)) (exist _ y (Hspred _ Hy)) ->
+    rely q (exist _ x Hx) (exist _ y Hy).
+Proof.
+  intros. specialize (H (sym_guar_perm _ _ p) (separate_self_sym _ _ _)).
+  apply H. auto.
+Qed.
+
+Lemma sep_step_guar config (spred1 spred2 : config -> Prop) Hspred : forall p q x y Hx Hy,
+    sep_step config spred1 spred2 Hspred p q ->
+    guar q (exist _ x Hx) (exist _ y Hy) ->
+    guar p (exist _ x (Hspred _ Hx)) (exist _ y (Hspred _ Hy)).
+Proof.
+  intros. specialize (H (sym_guar_perm _ _ p) (separate_self_sym _ _ _)).
+  destruct H. specialize (sep_r _ _ H0). cbn in sep_r. apply sep_r.
+Qed.
 
 (* Lemma sep_step_rg : forall p q, *)
 (*     (forall x y, guar q x y -> guar p x y) -> *)
@@ -89,17 +94,27 @@ Qed.
 (*            intros []; apply sep_step_rg]; eauto. *)
 (* Qed. *)
 
-(*
 Lemma sep_step_sep_conj_l config spred1 spred2 Hspred :
   forall p1 p2 q, p1 ⊥ q ->
              sep_step config spred1 spred2 Hspred p1 p2 ->
-             sep_step config spred1 spred2 Hspred (p1 ** q) (p2 ** q).
+             sep_step config spred1 spred2 Hspred (p1 ** q) (p2 ** (restrict _ _ _ Hspred q)).
 Proof.
   intros p1 p2 q ? ?.
   repeat intro; auto. symmetry in H1. symmetry. apply separate_sep_conj_perm; symmetry; auto.
   - apply H0. symmetry. eapply separate_sep_conj_perm_l; eauto.
-  - symmetry. eapply separate_sep_conj_perm_r; eauto.
+  - symmetry. apply separate_sep_conj_perm_r in H1.
+    apply separate_restrict; auto.
 Qed.
+
+#[export] Instance Proper_sep_step_eq_perm_2 config spred spred' Hspred:
+  Proper (eq ==> eq_perm ==> Basics.flip Basics.impl) (sep_step config spred spred' Hspred).
+Proof.
+  repeat intro. subst. apply H1 in H2. split; repeat intro.
+  - rewrite H0. apply H2. auto.
+  - destruct x, y1. apply H2. rewrite <- H0. auto.
+Qed.
+
+(*
 Lemma sep_step_sep_conj_r : forall p1 p2 q, p1 ⊥ q -> sep_step p1 p2 -> sep_step (q ** p1) (q ** p2).
 Proof.
   intros p1 p2 q ? ?.

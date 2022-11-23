@@ -405,18 +405,20 @@ Section bisim.
     erewrite (proof_irrelevance _ (Hspred2 x Hx')). apply H.
   Qed.
 
-  Lemma bisim_frame {R1 R2} spred spred' spred'' Hspred1 Hspred2 p r p' Q R (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) c1 c2 Hc1c2:
+  Lemma bisim_frame {R1 R2} spred spred' Hspred p r p' Q R (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) c1 c2 Hc1c2 Hrc1c2:
     pre p' (exist _ (c1, c2) Hc1c2) ->
-    @in_Perms2 (config * specConfig) R spred'' r -> (* here need to generalize the spred? *)
-    hlte_perm2 _ spred' spred Hspred1 (p ** (restrict _ spred spred'' Hspred2 r)) p' ->
+    pre r (exist _ (c1, c2) Hrc1c2) ->
+    @in_Perms2 (config * specConfig) R spred' r -> (* here need to generalize the spred? *)
+    (* hlte_perm2 _ spred' spred Hspred1 (p ** (restrict _ spred spred'' Hspred2 r)) p' -> *)
+    (p ** (restrict _ spred spred' Hspred r)) <= p' ->
     bisim spred p Q t c1 s c2 ->
-    bisim spred' p' (fun r1 r2 => sep_conj_Perms2 (Q r1 r2) R) t c1 s c2.
+    bisim spred p' (fun r1 r2 => sep_conj_Perms2 (Q r1 r2) R) t c1 s c2.
   Proof.
-    revert spred spred' spred'' p r p' Q R t s c1 c2 Hc1c2 Hspred1 Hspred2.
+    revert spred spred' p r p' Q R t s c1 c2 Hc1c2 Hrc1c2 Hspred.
     pcofix CIH. rename r into r0.
-    intros spred spred' spred'' p r p' Q R t s c1 c2 Hc1c2 Hspred1 Hspred2 Hpre Hr Hlte Hbisim.
+    intros spred spred' p r p' Q R t s c1 c2 Hc1c2 Hrc1c2 Hspred Hprep' Hprer Hr Hlte Hbisim.
     pstep. punfold Hbisim.
-    revert p' Hlte Hpre. generalize dependent r. generalize dependent spred'.
+    revert p' Hlte Hprep' Hprer. generalize dependent r.
     (* Set Printing All. *)
     (* punfold H2. *)
     induction Hbisim; intros; pclearbot; try solve [econstructor; eauto].
@@ -433,222 +435,137 @@ Section bisim.
       + unfold hlte_perm2.
         rewrite restrict_same. reflexivity.
         (* apply hlte_perm2_reflexive. *)
-        Unshelve. eauto.
+      + unfold hlte_perm2.
+        rewrite restrict_same. apply Hlte.
+        Unshelve. all: eauto.
     - eapply bisim_gen_pre in Hbisim. destruct Hbisim; [subst; constructor |].
       Unshelve. 2: auto.
-      econstructor; eauto.
-      Unshelve. 5: { intros. apply H3. }
-      (* 2: { eapply sep_step_lte; eauto. *)
-      + apply Hlte. constructor. left.
-        remember (Hspred1 (c1, c2) Hc1c2). remember (Hspred1 (f c1, c2) _).
-        erewrite (proof_irrelevance _ Hspred) in H0.
-        erewrite (proof_irrelevance _ (Hspred' _ _)) in H0. apply H0.
-      + (* eapply sep_step_lte; eauto. apply sep_step_sep_conj_l; eauto. *)
-        (* apply Hlte in Hpre. apply Hpre. *)
-        admit.
-        (* need p' ** (restrict ... r) *)
-      + eapply IHHbisim; clear IHHbisim.
-        Unshelve.
+      econstructor.
+      4: {
+        eapply IHHbisim. apply Hr. reflexivity.
+        Unshelve. all: auto.
+        split; [| split]; eauto.
+        - apply Hlte in Hprep'. destruct Hprep' as (? & ? & ?).
+          destruct H5. specialize (sep_r _ _ H0). cbn in sep_r.
+          cbn. eapply pre_respects. apply sep_r.
+          eapply restrict_pre; eauto. cbn.
+          erewrite (proof_irrelevance _ Hrc1c2) in Hprer. apply Hprer.
+          Unshelve. auto. auto.
+        - apply Hlte in Hprep'. destruct Hprep' as (_ & _ & ?). split.
+          + intros. eapply H1. apply H3. rewrite <- restrict_restrict. apply H4.
+          + intros. destruct x, y. eapply restrict_rely; eauto. apply H3.
+            eapply sep_step_guar; eauto.
+        - apply Hlte in Hprep'. destruct Hprep' as (? & ? & ?).
+          respects. destruct H5. specialize (sep_r _ _ H0). cbn in sep_r.
+          erewrite (proof_irrelevance _ Hrc1c2).
+          erewrite (proof_irrelevance _ (Hspred _ _)). apply sep_r.
+      }
+      Unshelve. all: auto.
+      + erewrite (proof_irrelevance _ Hspred0). apply Hprep'.
+      + eapply Hlte. constructor. left.
+        erewrite (proof_irrelevance _ Hspred0). apply H0.
+      + eapply sep_step_lte; eauto.
+        (* TODO *)
+        eapply Proper_sep_step_eq_perm_2. reflexivity.
+        erewrite (restrict_restrict _ _ _ _ r). reflexivity. eapply sep_step_sep_conj_l; eauto.
+        apply Hlte in Hprep'. apply Hprep'.
+    - econstructor.
+      4: {
+        eapply bisim_gen_pre in Hbisim. destruct Hbisim; [rewrite H2; constructor |].
+        eapply IHHbisim. apply Hr. reflexivity.
+        Unshelve. all: auto.
+        split; [| split]; eauto.
+        - apply Hlte in Hprep'. destruct Hprep' as (? & ? & ?).
+          destruct H5. specialize (sep_r _ _ H0). cbn in sep_r.
+          cbn. eapply pre_respects. apply sep_r.
+          eapply restrict_pre; eauto. cbn.
+          erewrite (proof_irrelevance _ Hrc1c2) in Hprer. apply Hprer.
+          Unshelve. auto. auto.
+        - apply Hlte in Hprep'. destruct Hprep' as (_ & _ & ?). split.
+          + intros. eapply H1. apply H3. rewrite <- restrict_restrict. apply H4.
+          + intros. destruct x, y. eapply restrict_rely; eauto. apply H3.
+            eapply sep_step_guar; eauto.
+        - apply Hlte in Hprep'. destruct Hprep' as (? & ? & ?).
+          respects. destruct H5. specialize (sep_r _ _ H0). cbn in sep_r.
+          erewrite (proof_irrelevance _ Hrc1c2).
+          erewrite (proof_irrelevance _ (Hspred _ _)). apply sep_r.
+      }
+      Unshelve. all: auto.
+      + erewrite (proof_irrelevance _ Hspred0). apply Hprep'.
+      + eapply Hlte. constructor. left.
+        erewrite (proof_irrelevance _ Hspred0). apply H0.
+      + eapply sep_step_lte; eauto.
+        (* TODO *)
+        eapply Proper_sep_step_eq_perm_2. reflexivity.
+        erewrite (restrict_restrict _ _ _ _ r). reflexivity. eapply sep_step_sep_conj_l; eauto.
+        apply Hlte in Hprep'. apply Hprep'.
+    - econstructor 8.
+      4: {
+        pose proof H2 as Hbisim.
+        punfold Hbisim. eapply bisim_gen_pre in Hbisim.
+        destruct Hbisim; [rewrite H3; left; pstep; constructor |].
+        right. eapply CIH.
+        5: { apply H2. }
+        3: { apply Hr. }
+        2: { respects. apply Hlte in Hprep'. destruct Hprep' as (? & ? & ?).
+             destruct H6. specialize (sep_r _ _ H0). cbn in sep_r.
+             erewrite (proof_irrelevance _ Hrc1c2). apply sep_r.
+        }
+        2: { reflexivity. }
+        Unshelve. all: auto.
+        split; [| split]; eauto.
+        - apply Hlte in Hprep'. destruct Hprep' as (? & ? & ?).
+          destruct H6. specialize (sep_r _ _ H0). cbn in sep_r.
+          cbn. eapply pre_respects.
+          erewrite (proof_irrelevance _ (Hspred _ (Hspred' _ _))) in sep_r. apply sep_r.
 
-        * apply Hr.
-        * red. reflexivity. (* apply hlte_perm2_reflexive. *)
-        * (* eapply Perms_upwards_closed2; eauto. admit. *)
-          split; [| split]; auto.
-          -- admit. (* apply H2. *)
-          -- apply Hlte in Hpre. destruct Hpre as (? & ? & ?).
-             eapply pre_respects. destruct H5.
-             apply sep_r in H0.
-             (* eapply separate_antimonotone in H5. eapply H5. *)
-             (* apply H0. *)
-             eapply restrict_rely; eauto.
-             eapply restrict_pre; eauto.
-          -- erewrite restrict_restrict. eapply H1.
-             apply Hlte in Hpre. destruct Hpre as (? & ? & ?).
-             apply H5.
-             Unshelve. 1: {
-    - admit.
-    - econstructor 8. admit. admit. admit. right. eapply CIH. admit. admit. admit. apply H2.
-    - admit.
-    - econstructor; eauto.
-      + apply Hlte. constructor. left. auto.
-      + eapply sep_step_lte; eauto. apply sep_step_sep_conj_l; eauto.
-        apply Hlte in Hpre. apply Hpre.
-      + apply sbuter_gen_pre in Hsbuter. destruct Hsbuter; [rewrite H2; constructor |].
-        eapply IHHsbuter; eauto. reflexivity.
-        split; [| split]; auto.
-        * apply Hlte in Hpre. destruct Hpre as (? & ? & ?). respects.
-          apply H5. auto.
-        * apply H1. apply Hlte in Hpre. apply Hpre.
-    - econstructor 8; eauto.
-      3: { pose proof H2 as Hsbuter.
-           punfold Hsbuter. apply sbuter_gen_pre in Hsbuter.
-           destruct Hsbuter; [rewrite H3; left; pstep; constructor |].
-           right. eapply CIH. 4: apply H2. 2: eauto. 2: reflexivity.
-           apply Hlte in Hpre. destruct Hpre as (? & ? & ?).
-           split; [| split]; auto.
-           respects. apply H6. auto.
+          eapply restrict_pre; eauto. cbn.
+          erewrite (proof_irrelevance _ Hrc1c2) in Hprer. apply Hprer.
+          Unshelve. auto. auto.
+        - apply Hlte in Hprep'. destruct Hprep' as (_ & _ & ?). split.
+          + intros. eapply H1. apply H4. rewrite <- restrict_restrict. apply H5.
+          + intros. destruct x, y. eapply restrict_rely; eauto. apply H4.
+            eapply sep_step_guar; eauto.
       }
-      + apply Hlte. constructor. left. auto.
-      + eapply sep_step_lte; eauto. apply sep_step_sep_conj_l; auto.
-        apply Hlte in Hpre. apply Hpre.
-    - econstructor; eauto.
-      + eapply sep_step_lte; eauto. apply sep_step_sep_conj_l; eauto.
-        apply Hlte in Hpre. apply Hpre.
-      + intros. specialize (H1 b).
-        apply sbuter_gen_pre in H1. destruct H1; [subst; constructor |].
-        eapply H2; eauto. reflexivity.
-        apply Hlte in Hpre. destruct Hpre as (? & ? & ?).
-        split; [| split]; auto.
-    - econstructor; eauto.
-      + eapply sep_step_lte; eauto. apply sep_step_sep_conj_l; eauto.
-        apply Hlte in Hpre. apply Hpre.
-      + intros. specialize (H1 b).
-        apply sbuter_gen_pre in H1. destruct H1; [rewrite H1; constructor |].
-        eapply H2; eauto. reflexivity.
-        apply Hlte in Hpre. destruct Hpre as (? & ? & ?).
-        split; [| split]; auto.
-    - econstructor 11; eauto.
-      2: { intros. specialize (H1 b1). destruct H1 as (b2 & H1). pclearbot. exists b2.
-           pose proof H1 as Hsbuter.
-           punfold Hsbuter. apply sbuter_gen_pre in Hsbuter.
-           destruct Hsbuter; [rewrite H3; left; pstep; constructor |].
-           right. eapply CIH. 4: apply H1. 2: eauto. 2: reflexivity.
-           apply Hlte in Hpre. destruct Hpre as (? & ? & ?).
-           split; [| split]; auto.
+      + erewrite (proof_irrelevance _ Hspred0). apply Hprep'.
+      + eapply Hlte. constructor. left.
+        erewrite (proof_irrelevance _ Hspred0). apply H0.
+      + eapply sep_step_lte; eauto.
+        (* TODO *)
+        eapply Proper_sep_step_eq_perm_2. reflexivity.
+        erewrite (restrict_restrict _ _ _ _ r). reflexivity. eapply sep_step_sep_conj_l; eauto.
+        apply Hlte in Hprep'. apply Hprep'.
+    - econstructor 11.
+      2: { intros. specialize (H0 b1). destruct H0 as (b2 & H0). pclearbot. exists b2.
+           pose proof H0 as Hbisim.
+           punfold Hbisim.
       }
-      2: { intros. specialize (H2 b2). destruct H2 as (b1 & H2). pclearbot. exists b1.
-           pose proof H2 as Hsbuter.
-           punfold Hsbuter. apply sbuter_gen_pre in Hsbuter.
-           destruct Hsbuter; [rewrite H3; left; pstep; constructor |].
-           right. eapply CIH. 4: apply H2. 2: eauto. 2: reflexivity.
-           apply Hlte in Hpre. destruct Hpre as (? & ? & ?).
-           split; [| split]; auto.
+      2: { intros. specialize (H1 b2). destruct H1 as (b1 & H1). pclearbot. exists b1.
+           pose proof H1 as Hbisim.
+           punfold Hbisim.
       }
-      eapply sep_step_lte; eauto. apply sep_step_sep_conj_l; auto.
-      apply Hlte in Hpre. apply Hpre.
+      apply Hprep'.
   Qed.
- *)
 
   Lemma typing_frame {R1 R2} P Q R (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2):
     typing P Q t s ->
     typing (sep_conj_Perms2 P R) (fun r1 r2 => sep_conj_Perms2 (Q r1 r2) R) t s.
   Proof.
-    (* repeat intro. *)
     intros Ht spred p' c1 c2 Hc1c2 (spred' & Hspred' & p & r & Hp & Hr & Hlte) Hpre.
-    eapply bisim_frame; eauto.
-    eapply Ht; eauto.
-    destruct Hlte. cbn in pre_inc.
-    specialize (pre_inc _ Hpre). cbn in pre_inc. apply pre_inc.
-    (* eapply pre_inc. cbn. *)
-    (* erewrite (proof_irrelevance _ Hc1c2) in Hpre. apply Hpre. *)
-    (* Unshelve. *)
-
-    (* apply Hp. *)
-    (* destruct H. *)
-    (* pose proof Hpre as H. apply Hlte in H. destruct H as (Hprep & Hprer & Hsep). *)
-    (* eapply sbuter_frame; eauto. *)
+    pose proof Hpre as Hpre'.
+    apply Hlte in Hpre. destruct Hpre as (Hp' & Hr' & Hsep).
+    eapply bisim_frame.
+    - apply Hpre'.
+    - apply Hr'.
+    - apply Hr.
+    - red in Hlte. etransitivity. apply restrict_sep_conj. apply Hlte.
+    - eapply Ht.
+      + eapply Perms_upwards_closed2. apply Hp. red. reflexivity.
+      + cbn. apply Hp'.
   Qed.
 
-  Lemma typing_frame1 {R1 R2 R3 R4} P Q R (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) (r3 : R3) (r4 : R4):
-    typing P Q t s ->
-    typing (R r3 r4 * P)
-           (fun '(r1, r2) '(r3, r4) => R r1 r3 * Q r2 r4)
-           (fmap (fun r1 => (r3, r1)) t)
-           (fmap (fun r1 => (r4, r1)) s).
-  Proof.
-    revert P Q R t s r3 r4. pcofix CIH. rename r into r'.
-    intros P Q R t s r3 r4 Ht p' c1 c2 (r & p & Hr & Hp & Hlte) Hpre.
-    pose proof Hpre as H. apply Hlte in H. destruct H as (Hprer & Hprep & Hsep).
-    specialize (Ht _ c1 c2 Hp Hprep). pstep. punfold Ht. induction Ht; simpl.
-    - do 2 rewritebisim @map_ret. constructor; auto. exists r, p. auto.
-    - unfold throw. unfold ITree.map. admit.
-    - rewritebisim @map_tau. constructor 3; auto.
-    - rewritebisim @map_tau. constructor 4; auto.
-    - do 2 rewritebisim @map_tau. constructor 5; eauto. right. eapply CIH; eauto; admit.
-    - unfold ITree.map. rewritebisim @bind_vis. econstructor 6; eauto; admit.
-    - unfold ITree.map. rewritebisim @bind_vis. econstructor 7; eauto; admit.
-    - unfold ITree.map. do 2 rewritebisim @bind_vis. econstructor 8; eauto.
-      + apply Hlte. constructor 1. right. auto.
-      + admit.
-      + right. eapply CIH; eauto; admit.
-    - unfold ITree.map. rewritebisim @bind_vis. econstructor 9; eauto; admit.
-    - unfold ITree.map. rewritebisim @bind_vis. econstructor 10; eauto; admit.
-    - unfold ITree.map. do 2 rewritebisim @bind_vis. econstructor 11; eauto.
-      + admit.
-      + intros. (* something with H1 *) admit.
-      + intros. (* something with H2 *) admit.
-  Admitted.
 
-  Lemma typing_par {R1 R2 S1 S2} (P1 P2 : Perms) (Q1 : R1 -> S1 -> Perms) (Q2 : R2 -> S2 -> Perms)
-        (t1 : itree (sceE config) R1) (s1 : itree (sceE specConfig) S1)
-        (t2 : itree (sceE config) R2) (s2 : itree (sceE specConfig) S2) :
-    typing P1 Q1 t1 s1 ->
-    typing P2 Q2 t2 s2 ->
-    typing (P1 * P2) (fun '(r1, r2) '(r3, r4) => Q1 r1 r3 * Q2 r2 r4) (par t1 t2) (par s1 s2).
-  Proof.
-    revert P1 P2 Q1 Q2 t1 s1 t2 s2. pcofix CIH.
-    intros P1 P2 Q1 Q2 t1 s1 t2 s2 Ht1 Ht2 p c1 c2 Hp Hpre.
-    pose proof Hp as H. destruct H as (p1 & p2 & Hp1 & Hp2 & Hlte).
-    pose proof Hpre as H. apply Hlte in H. destruct H as (Hpre1 & Hpre2 & Hsep).
-    specialize (Ht1 p1 c1 c2 Hp1 Hpre1).
-    punfold Ht1.
-    generalize dependent t2.
-    generalize dependent s2.
-    induction Ht1; intros; simpl.
-    - specialize (Ht2 p2 c1 c2 Hp2 Hpre2). punfold Ht2. induction Ht2.
-      + pstep. do 2 rewrite rewrite_par. unfold par_match.
-        econstructor 9; eauto. reflexivity.
-        intros. econstructor 10; eauto. reflexivity.
-        intros. simpl. admit.
-      + pstep. do 2 rewrite rewrite_par. unfold par_match.
-        econstructor 9; eauto. reflexivity.
-        intros. econstructor 10; eauto. reflexivity.
-        intros. simpl. destruct b0.
-        * unfold ITree.map. rewrite throw_bind. constructor.
-        * admit.
-      + pstep. do 2 rewrite rewrite_par. unfold par_match.
-        econstructor 9; eauto. reflexivity.
-        intros. econstructor 10; eauto. reflexivity.
-        intros. simpl. admit.
-      + pstep. do 2 rewrite rewrite_par. unfold par_match.
-        econstructor 9; eauto. reflexivity.
-        intros. econstructor 10; eauto. reflexivity.
-        intros. simpl. admit.
-      + pstep. do 2 rewrite rewrite_par. unfold par_match.
-        econstructor 9; eauto. reflexivity.
-        intros. econstructor 10; eauto. reflexivity.
-        intros. simpl. admit.
-      + pstep. do 2 rewrite rewrite_par. unfold par_match.
-        econstructor 9; eauto. reflexivity.
-        intros. econstructor 10; eauto. reflexivity.
-        intros. simpl. admit.
-      +
-
-        (* apply IHHt2. *)
-    (* econstructor 11; eauto. reflexivity. *)
-    (* { *)
-    (*   intros b; exists b; destruct b. *)
-    (*   { *)
-    (*     pose proof Hp as H. destruct H as (p1 & p2 & Hp1 & Hp2 & Hlte). *)
-    (*     pose proof Hpre as H. apply Hlte in H. destruct H as (Hpre1 & Hpre2 & Hsep). *)
-    (*     specialize (Ht1 p1 c1 c2 Hp1 Hpre1). *)
-    (*     punfold Ht1. *)
-    (*     generalize dependent t2. *)
-    (*     generalize dependent s2. *)
-    (*     induction Ht1; intros; simpl. *)
-    (*     - admit. *)
-    (*     - admit. *)
-    (*     - left. pstep. constructor 3; auto. *)
-
-    (*     - exists true. simpl. eapply typing_frame1 in Ht2. specialize (Ht2 p c1 c2 Hp Hpre). admit. *)
-    (*     - exists true. simpl. admit. (* rewrite @throw_vis. econstructor 2. *) *)
-    (*     - simpl. econstructor; auto. rewrite rewrite_par. unfold par_match. *)
-    (*       left. pstep. econstructor; eauto. reflexivity. intros []. *)
-    (*       + eapply IHHt1; auto. *)
-    (*       + specialize (Ht2 p2 c1 c2 Hp2 Hpre2). punfold Ht2. induction Ht2. *)
-    (*         * simpl. *)
-  Abort.
-
+  (*
   (** * [no_errors] *)
   Variant no_errors_gen {R C : Type} no_errors (c : C) : itree (sceE C) R -> Prop :=
   | no_errors_ret : forall r, no_errors_gen no_errors c (Ret r)
@@ -698,4 +615,5 @@ Section bisim.
     eapply sbuter_lte; eauto. apply H3; auto. rewrite <- H; auto.
     intros. rewrite H0. reflexivity.
   Qed.
+*)
 End bisim.

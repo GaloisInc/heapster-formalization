@@ -12,6 +12,7 @@ From Coq Require Import
 From Heapster Require Import
      Utils
      Permissions
+     PermissionsSpred2
      Lifetime.
 
 Import ListNotations.
@@ -23,7 +24,7 @@ Section LifetimePerms.
   Context {C : Type}.
   Context `{Hlens: Lens C Lifetimes}.
 
-  Definition nonLifetime (p : perm) :=
+  Definition nonLifetime (p : perm) : Prop :=
     forall x y, guar p x y -> lget x = lget y.
 
   Lemma nonLifetime_sep_conj p q (Hp : nonLifetime p) (Hq : nonLifetime q) :
@@ -121,7 +122,7 @@ Section LifetimePerms.
   (* Note: does not have permission to start or end the lifetime [n] *)
   Program Definition when
           (l : Lifetime)
-          (p : @perm C)
+          (p : @perm { x : C | True})
           (Hp : nonLifetime p) : perm :=
     {|
       pre := fun x =>

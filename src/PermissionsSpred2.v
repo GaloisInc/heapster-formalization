@@ -283,6 +283,27 @@ Proof.
   apply separate_restrict; auto.
 Qed.
 
+Lemma restrict_sep_conj config (spred1 spred2 : config -> Prop) Hspred p1 p2 :
+  restrict config spred1 spred2 Hspred p1 ** restrict config spred1 spred2 Hspred p2 <=
+  restrict config spred1 spred2 Hspred (p1 ** p2).
+Proof.
+  constructor.
+  - intros [] (? & ? & ?). split; [| split]; auto. apply separate_restrict; auto.
+  - intros [] [] ?. auto.
+  - intros [] [] ?. induction H.
+    + destruct x1, y. destruct H; constructor; auto.
+    + destruct x1, y, z. cbn in *. econstructor 2; eauto.
+Qed.
+
+(* the converse is not true *)
+Lemma restrict_sep_conj' config (spred1 spred2 : config -> Prop) Hspred p1 p2 :
+  restrict config spred1 spred2 Hspred (p1 ** p2) <=
+  restrict config spred1 spred2 Hspred p1 ** restrict config spred1 spred2 Hspred p2.
+Proof.
+  constructor.
+  - intros [] (? & ? & ?). split; [| split]; auto.
+Abort.
+
 Lemma lte_Perms_Restrict config (spred1 spred2 : config -> Prop) (P1 P2 : Perms)
   (Hspred : forall x, spred1 x -> spred2 x) :
   P1 ⊑ P2 ->
