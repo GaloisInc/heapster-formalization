@@ -1,3 +1,11 @@
+-R src2 Heapster2
+
+src2/Utils.v
+
+src2/Permissions.v
+src2/PermissionsSpred2.v
+src2/SepStepSpred2.v
+
 -R src Heapster
 
 src/Utils.v
@@ -5,6 +13,7 @@ src/RoseTree.v
 
 src/PermissionsSpred2.v
 src/SepStepSpred2.v
+src/TypingSpred2.v
 src/PermS.v
 
 src/Permissions.v
