@@ -1,10 +1,15 @@
 -R src2 Heapster2
 
 src2/Utils.v
+src2/Memory.v
 
 src2/Permissions.v
 src2/PermissionsSpred2.v
-src2/SepStepSpred2.v
+src2/SepStep.v
+src2/Typing.v
+src2/PermType.v
+src2/MemoryPerms.v
+src2/PermTypeProofs.v
 
 -R src Heapster
 
@@ -18,12 +23,13 @@ src/PermS.v
 
 src/Permissions.v
 src/Memory.v
-src/Lifetime.v
 src/SepStep.v
 src/Typing.v
 
 src/MemoryPerms.v
-src/LifetimePerms.v
 src/PermType.v
 src/PermTypeProofs.v
 src/Temporal.v
+
+src/Lifetime.v
+src/LifetimePerms.v

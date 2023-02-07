@@ -10,7 +10,7 @@ From Coq Require Import
 From Heapster2 Require Import
      Permissions
      PermissionsSpred2
-     SepStepSpred2.
+     SepStep.
 
 From ExtLib Require Import
      Structures.Functor
@@ -260,7 +260,7 @@ Section bisim.
       pre p (exist _ (c1, c2) Hspred) ->
       bisim spred p Q t c1 s c2.
 
-  Lemma typing_lte {R1 R2} (spred : config * specConfig -> Prop) P P' Q Q' (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) :
+  Lemma typing_lte {R1 R2} P P' Q Q' (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) :
     typing P Q t s ->
     lte_Perms2 P P' ->
     (forall r1 r2, lte_Perms2 (Q' r1 r2) (Q r1 r2)) ->
@@ -410,8 +410,7 @@ Section bisim.
   Lemma bisim_frame {R1 R2} spred spred' Hspred p r p' Q R (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) c1 c2 Hc1c2 Hrc1c2:
     pre p' (exist _ (c1, c2) Hc1c2) ->
     pre r (exist _ (c1, c2) Hrc1c2) ->
-    @in_Perms2 (config * specConfig) R (interp_spred spred') r -> (* here need to generalize the spred? *)
-    (* hlte_perm2 _ spred' spred Hspred1 (p ** (restrict _ spred spred'' Hspred2 r)) p' -> *)
+    @in_Perms2 (config * specConfig) R (interp_spred spred') r ->
     (p ** (restrict _ (interp_spred spred) (interp_spred spred') Hspred r)) <= p' ->
     bisim spred p Q t c1 s c2 ->
     bisim spred p' (fun r1 r2 => sep_conj_Perms2 (Q r1 r2) R) t c1 s c2.
@@ -421,25 +420,12 @@ Section bisim.
     intros spred spred' p r p' Q R t s c1 c2 Hc1c2 Hrc1c2 Hspred Hprep' Hprer Hr Hlte Hbisim.
     pstep. punfold Hbisim.
     revert p' Hlte Hprep' Hprer. generalize dependent r.
-    (* Set Printing All. *)
-    (* punfold H2. *)
     induction Hbisim; intros; pclearbot; try solve [econstructor; eauto].
-    (* admit. *)
-    (* admit. *)
-    (* pstep. econstructor. *)
-    (* apply H. *)
-    (* eapply IHbisim_gen. *)
-
     - econstructor; eauto.
-      eapply Perms_upwards_closed2; eauto. cbn.
+      eapply Perms2_upwards_closed; eauto. cbn.
       do 2 eexists. split; [| split]; eauto.
-      + eapply Perms_upwards_closed2. apply Hr. red. reflexivity.
-      + unfold hlte_perm2.
-        rewrite restrict_same. reflexivity.
-        (* apply hlte_perm2_reflexive. *)
-      (* + unfold hlte_perm2. *)
-      (*   rewrite restrict_same. apply Hlte. *)
-      (*   Unshelve. all: eauto. *)
+      + eapply Perms2_upwards_closed. apply Hr. red. reflexivity.
+      + unfold hlte_perm2. rewrite restrict_same. reflexivity.
     - eapply bisim_gen_pre in Hbisim. destruct Hbisim; [subst; constructor |].
       Unshelve. 2: auto.
       econstructor.
@@ -553,18 +539,15 @@ Section bisim.
     typing P Q t s ->
     typing (sep_conj_Perms2 P R) (fun r1 r2 => sep_conj_Perms2 (Q r1 r2) R) t s.
   Proof.
-    intros Ht spred p' c1 c2 Hc1c2 ((* spred' & Hspred' &  *)p & r & Hp & Hr & Hlte) Hpre.
-    (* Set Printing All. *)
+    intros Ht spred p' c1 c2 Hc1c2 (p & r & Hp & Hr & Hlte) Hpre.
     pose proof Hpre as Hpre'.
     apply Hlte in Hpre. destruct Hpre as (Hp' & Hr' & Hsep).
-    eapply bisim_frame. (* 4: { red in Hlte. etransitivity. apply restrict_sep_conj. apply Hlte. *)
+    eapply bisim_frame.
     - apply Hpre'.
     - apply Hr'.
     - apply Hr.
     - rewrite restrict_same. apply Hlte.
     - eapply Ht. apply Hp. apply Hp'.
-      (* + eapply Perms_upwards_closed2. apply Hp. red. reflexivity. *)
-      (* + cbn. apply Hp'. *)
       Unshelve. auto.
   Qed.
 
@@ -610,14 +593,15 @@ Section bisim.
       + inversion Hs. apply inj_pair2 in H5; subst.
         specialize (H6 x). pclearbot. eauto.
   Qed.
+*)
 
   Global Instance Proper_eq_Perms_typing {R1 R2} :
-    Proper (eq_Perms ==>
-           (pointwise_relation _ (pointwise_relation _ eq_Perms)) ==> eq ==> eq ==> flip impl) (@typing R1 R2).
+    Proper (eq_Perms2 ==>
+           (pointwise_relation _ (pointwise_relation _ eq_Perms2)) ==> eq ==> eq ==> flip impl) (@typing R1 R2).
   Proof.
     repeat intro. subst.
-    eapply sbuter_lte; eauto. apply H3; auto. rewrite <- H; auto.
-    intros. rewrite H0. reflexivity.
+    eapply bisim_lte; eauto.
+    eapply H3. eapply eq_Perms2_eq_perm_in_Perms2; eauto. reflexivity.
+    apply H5. apply H0.
   Qed.
-*)
 End bisim.

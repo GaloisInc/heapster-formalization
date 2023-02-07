@@ -17,7 +17,7 @@ Section step.
   (* TODO: change to 1 spred *)
 
   (** * Preserves separability *)
-  (* can step to larger spred *)
+  (* can step to smaller spred *)
   Definition sep_step
              (p : @perm {x | spred' x})
              (q : @perm {x | spred x}) : Prop :=
@@ -41,6 +41,29 @@ Lemma sep_step_lte config (spred1 spred2 : config -> Prop) Hspred :
 Proof.
   repeat intro. apply H0. symmetry. symmetry in H1. eapply separate_antimonotone; eauto.
 Qed.
+
+(*
+Lemma sep_step_lte' config (spred1 spred2 : config -> Prop) Hspred :
+  forall (p : @perm {x : config | spred1 x})
+    (* spred2 is smaller *)
+    (p' : @perm {x : config | spred2 x})
+    (q : @perm {x : config | spred2 x}),
+    hlte_perm2 _ _ _ Hspred p p' ->
+    sep_step config _ _ Hspred p q ->
+    sep_step config _ _ (fun _ H => H) p' q.
+Proof.
+  repeat intro. (* Set Printing All. *)
+  rewrite restrict_same. red in H0.
+  eapply separate_antimonotone. apply H0.
+  - symmetry in H1. symmetry. eapply separate_antimonotone.
+  2: { admit. }
+  symmetry. symmetry in H1. red in H. eapply separate_antimonotone. 2: {
+  - apply separate_restrict. apply H1.
+  - apply H0. symmetry. symmetry in H1. eapply separate_antimonotone; eauto. eapply H1.
+
+  2: { apply H0. symmetry. symmetry in H1. eapply separate_antimonotone; eauto.
+Qed.
+*)
 
 (* Lemma sep_step_lte' : forall p q, q <= p -> sep_step p q. *)
 (* Proof. *)
@@ -78,14 +101,26 @@ Proof.
   destruct H. specialize (sep_r _ _ H0). cbn in sep_r. apply sep_r.
 Qed.
 
-(* Lemma sep_step_rg : forall p q, *)
+Lemma sep_step_rg config spred1 spred2 Hspred (p : @perm {x : config | spred1 x}) (q : @perm {x : config | spred2 x}) :
+  (forall x y Hx Hy, guar q (exist _ x Hx) (exist _ y Hy) ->
+                guar p (exist _ x (Hspred _ Hx)) (exist _ y (Hspred _ Hy))) ->
+  (forall x y Hx Hy, rely p (exist _ x (Hspred _ Hx)) (exist _ y (Hspred _ Hy)) ->
+                rely q (exist _ x Hx) (exist _ y Hy)) ->
+    sep_step _ _ _ Hspred p q.
+Proof.
+  cbn. repeat intro. split; intros [? ?] [? ?] ?; cbn in *.
+  - apply H0. apply H1. auto.
+  - apply H1. auto.
+Qed.
+
+(* Lemma sep_step_rg_same config spred : forall (p q : @perm {x : config | spred x}) , *)
 (*     (forall x y, guar q x y -> guar p x y) -> *)
 (*     (forall x y, rely p x y -> rely q x y) -> *)
-(*     sep_step p q. *)
+(*     sep_step _ _ _ (fun _ H => H) p q. *)
 (* Proof. *)
 (*   repeat intro. split; intros. *)
-(*   - apply H0. apply H1. auto. *)
-(*   - apply H1. apply H. auto. *)
+(*   - apply H0. apply H1. rewrite restrict_same in H2. auto. *)
+(*   - rewrite restrict_same. apply H1. apply H. auto. *)
 (* Qed. *)
 
 (* Lemma sep_step_iff : forall p q, *)

@@ -356,13 +356,7 @@ Section PermSet.
   Record Perms2 :=
     {
       in_Perms2 : forall {spred}, @perm { x | spred x } -> Prop;
-      (* Perms_upwards_closed1 : forall (spred1 spred2 : config -> Prop) *)
-      (*                           (Hspred : forall x, spred1 x -> spred2 x) *)
-      (*                           (p1 : @perm {x | spred1 x}) (p2 : @perm {x | spred2 x}), *)
-      (*   in_Perms2 p1 -> *)
-      (*   hlte_perm1 config spred1 spred2 Hspred p1 p2 -> *)
-      (*   in_Perms2 p2 (* p2 has bigger spred *); *)
-      Perms_upwards_closed2 : forall (spred1 spred2 : config -> Prop)
+      Perms2_upwards_closed : forall (spred1 spred2 : config -> Prop)
                                 (Hspred : forall x, spred1 x -> spred2 x)
                                 (p1 : @perm {x | spred2 x}) (p2 : @perm {x | spred1 x}),
         in_Perms2 p1 ->
@@ -374,6 +368,54 @@ Section PermSet.
   Definition lte_Perms2 (P Q : Perms2) : Prop :=
     forall spred (p : @perm {x | spred x}), p ∈2 Q -> p ∈2 P.
   Notation "P ⊑2 Q" := (lte_Perms2 P Q) (at level 60).
+
+  Global Instance lte_Perms2_is_preorder : PreOrder lte_Perms2.
+  Proof.
+    constructor; repeat intro; auto.
+  Qed.
+
+  Definition eq_Perms2 (P Q : Perms2) : Prop := P ⊑2 Q /\ Q ⊑2 P.
+  Notation "P ≡2 Q" := (eq_Perms2 P Q) (at level 60).
+
+  Global Instance Equivalence_eq_Perms2 : Equivalence eq_Perms2.
+  Proof.
+    constructor; repeat intro.
+    - split; reflexivity.
+    - destruct H; split; auto.
+    - destruct H, H0. split; etransitivity; eauto.
+  Qed.
+
+  Global Instance Proper_eq_Perms2_lte_Perms2 :
+    Proper (eq_Perms2 ==> eq_Perms2 ==> Basics.flip Basics.impl) lte_Perms2.
+  Proof.
+    do 5 red. intros. etransitivity. apply H. etransitivity. apply H1. apply H0.
+  Qed.
+
+  (* don't know how to write proper instance for this *)
+  Lemma eq_Perms2_eq_perm_in_Perms2 spred P P' p p':
+    in_Perms2 P p ->
+    P ≡2 P' ->
+    p ≡≡ p' ->
+    @in_Perms2 P' spred p'.
+  Proof.
+    intros. apply H0. eapply Perms2_upwards_closed; eauto.
+    red. rewrite restrict_same. apply H1.
+    Unshelve. all: auto.
+  Qed.
+
+  Definition entails_Perms2 P Q := Q ⊑2 P.
+  Notation "P ⊨2 Q" := (entails_Perms2 P Q) (at level 60).
+
+  Global Instance entails_Perms2_preorder : PreOrder entails_Perms2.
+  Proof.
+    constructor; repeat intro; auto.
+  Qed.
+
+  Global Instance Proper_eq_Perms2_entails_Perms2 :
+    Proper (eq_Perms2 ==> eq_Perms2 ==> Basics.flip Basics.impl) entails_Perms2.
+  Proof.
+    do 6 red. intros. rewrite H. rewrite H0. auto.
+  Qed.
 
   Program Definition top_Perms2 : Perms2 :=
     {|
@@ -387,28 +429,103 @@ Section PermSet.
   Program Definition sep_conj_Perms2 (P Q : Perms2) : Perms2 :=
     {|
       in_Perms2 := fun spred (r : @perm {x | spred x}) =>
-                     (* spred is smaller than spred' *)
-                     (* exists (spred' : config -> Prop) *)
-                     (*   (Hspred : forall x, spred x -> spred' x) *)
                      exists (p q : @perm {x | spred x}),
                        p ∈2 P /\
                          q ∈2 Q /\
                          p ** q <= r
-                         (* hlte_perm2 config spred spred' Hspred (p ** q) r *)
     |}.
   Next Obligation.
-    (* rename H into spred', H1 into Hspred', H2 into p, H3 into q. *)
-    (* exists spred'. eexists. Unshelve. *)
-    (* 2: { intros. auto. } *)
-    (* exists p, q. split; [| split]; auto. eapply hlte_perm2_transitive; eauto. *)
     rename H into p, H1 into q, H2 into Hp, H3 into Hq.
-    (* Set Printing All. *)
     exists (restrict _ _ _ Hspred p), (restrict _ _ _ Hspred q). split; [| split].
-    - eapply Perms_upwards_closed2. apply Hp. red. reflexivity.
-    - eapply Perms_upwards_closed2. apply Hq. red. reflexivity.
+    - eapply Perms2_upwards_closed. apply Hp. red. reflexivity.
+    - eapply Perms2_upwards_closed. apply Hq. red. reflexivity.
     - etransitivity. apply restrict_sep_conj.
       etransitivity. apply lte_perm_restrict; eauto. apply H0.
   Qed.
+  Notation "P *2 Q" := (sep_conj_Perms2 P Q) (at level 60).
+
+  Lemma lte_l_sep_conj_Perms2 : forall P Q, P ⊑2 (P *2 Q).
+  Proof.
+    intros P Q ? p' ?. destruct H as [p [q [? [? ?]]]].
+    eapply Perms2_upwards_closed; eauto.
+    eapply hlte_perm2_transitive.
+    - apply lte_l_sep_conj_perm.
+    - red. do 2 rewrite restrict_same. apply H1.
+      Unshelve. all: auto.
+  Qed.
+
+  Lemma lte_r_sep_conj_Perms2 : forall P Q, Q ⊑2 (P *2 Q).
+  Proof.
+    intros P Q ? p' ?. destruct H as [p [q [? [? ?]]]].
+    eapply Perms2_upwards_closed; eauto.
+    eapply hlte_perm2_transitive.
+    - red. apply lte_r_sep_conj_perm.
+    - red. do 2 rewrite restrict_same. eapply H1.
+      Unshelve. all: auto.
+  Qed.
+
+  Lemma sep_conj_Perms2_bottom_identity : forall P, bottom_Perms2 *2 P ≡2 P.
+  Proof.
+    constructor; repeat intro.
+    - exists bottom_perm, p. split; simpl; [auto | split; auto].
+      rewrite sep_conj_perm_commut. apply sep_conj_perm_bottom.
+    - destruct H as [? [? [_ [? ?]]]].
+      eapply (Perms2_upwards_closed P); eauto.
+      eapply hlte_perm2_transitive.
+      + apply lte_r_sep_conj_perm.
+      + red. do 2 rewrite restrict_same. apply H0.
+        Unshelve. all: auto.
+  Qed.
+
+  Lemma sep_conj_Perms2_top_absorb : forall P, top_Perms2 *2 P ≡2 top_Perms2.
+  Proof.
+    constructor; repeat intro.
+    - inversion H.
+    - destruct H as [? [_ [[] _]]].
+  Qed.
+
+  Lemma sep_conj_Perms2_monotone : forall P P' Q Q', P' ⊑2 P -> Q' ⊑2 Q -> (P' *2 Q') ⊑2 (P *2 Q).
+  Proof.
+    repeat intro. destruct H1 as [? [? [? [? ?]]]].
+    exists x, x0. auto.
+  Qed.
+
+  Lemma sep_conj_Perms2_perm: forall {spred} P Q (p q : @perm {x : config | spred x}),
+      p ∈2 P ->
+      q ∈2 Q ->
+      p ** q ∈2 (P *2 Q).
+  Proof.
+    intros. exists p, q. split; auto. split; auto. reflexivity.
+  Qed.
+
+  Lemma sep_conj_Perms2_commut : forall P Q, (P *2 Q) ≡2 (Q *2 P).
+  Proof.
+    split; repeat intro.
+    - destruct H as [q [p' [? [? ?]]]].
+      exists p', q. split; [| split]; auto. etransitivity; eauto. apply sep_conj_perm_commut.
+    - destruct H as [p' [q [? [? ?]]]].
+      exists q, p'. split; [| split]; auto. etransitivity; eauto. apply sep_conj_perm_commut.
+  Qed.
+
+  Lemma sep_conj_Perms2_assoc : forall P Q R, (P *2 (Q *2 R)) ≡2 ((P *2 Q) *2 R).
+  Proof.
+    split; repeat intro.
+    - rename p into p'. destruct H as [pq [r [? [? ?]]]].
+      destruct H as [p [q [? [? ?]]]].
+      exists p, (q ** r).
+      split; auto. split; auto. apply sep_conj_Perms2_perm; auto.
+      rewrite <- sep_conj_perm_assoc.
+      etransitivity; eauto.
+      apply sep_conj_perm_monotone; intuition.
+    - rename p into p'. destruct H as [p [qr [? [? ?]]]].
+      destruct H0 as [q [r [? [? ?]]]].
+      exists (p ** q), r.
+      split; auto. apply sep_conj_Perms2_perm; auto. split; auto.
+      rewrite sep_conj_perm_assoc.
+      etransitivity; eauto.
+      apply sep_conj_perm_monotone; intuition.
+  Qed.
+
 
   (** Complete meet of Perms sets = union *)
   Program Definition meet_Perms2 (Ps : Perms2 -> Prop) : Perms2 :=
@@ -417,7 +534,22 @@ Section PermSet.
     |}.
   Next Obligation.
     exists H. split; auto.
-    eapply (Perms_upwards_closed2 _ _ _ _ p1); eauto.
+    eapply (Perms2_upwards_closed _ _ _ _ p1); eauto.
+  Qed.
+
+  Lemma lte_meet_Perms2 : forall (Ps : Perms2 -> Prop) P,
+      Ps P ->
+      meet_Perms2 Ps ⊑2 P.
+  Proof.
+    repeat intro. exists P. auto.
+  Qed.
+
+  Lemma meet_Perms2_max : forall (Ps : Perms2 -> Prop) Q,
+      (forall P, Ps P -> Q ⊑2 P) ->
+      Q ⊑2 meet_Perms2 Ps.
+  Proof.
+    repeat intro. destruct H0 as [? [? ?]].
+    eapply H; eauto.
   Qed.
 
   (** The least Perms set containing a given p *)
@@ -433,3 +565,9 @@ Section PermSet.
   Qed.
 
 End PermSet.
+
+Notation "p ∈2 P" := (in_Perms2 P p) (at level 60).
+Notation "P ⊑2 Q" := (lte_Perms2 P Q) (at level 60).
+Notation "P ⊨2 Q" := (entails_Perms2 P Q) (at level 60).
+Notation "P ≡2 Q" := (eq_Perms2 P Q) (at level 60).
+Notation "P *2 Q" := (sep_conj_Perms2 P Q) (at level 60).
