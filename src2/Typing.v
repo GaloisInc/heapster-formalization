@@ -179,7 +179,7 @@ Section bisim.
 
   Lemma bisim_lte {R1 R2} spred p Q Q' (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) c1 c2 :
     bisim spred p Q t c1 s c2 ->
-    (forall r1 r2, lte_Perms2 (Q' r1 r2) (Q r1 r2)) ->
+    (forall r1 r2, (Q' r1 r2) ⊑2 (Q r1 r2)) ->
     bisim spred p Q' t c1 s c2.
   Proof.
     revert spred p Q Q' t s c1 c2. pcofix CIH. intros spred p Q Q' t s c1 c2 Htyping Hlte.
@@ -262,8 +262,8 @@ Section bisim.
 
   Lemma typing_lte {R1 R2} P P' Q Q' (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) :
     typing P Q t s ->
-    lte_Perms2 P P' ->
-    (forall r1 r2, lte_Perms2 (Q' r1 r2) (Q r1 r2)) ->
+    P ⊑2 P' ->
+    (forall r1 r2, (Q' r1 r2) ⊑2 (Q r1 r2)) ->
     typing P' Q' t s.
   Proof.
     repeat intro.
@@ -271,7 +271,7 @@ Section bisim.
   Qed.
 
   Lemma typing_ret {R1 R2} P Q (r1 : R1) (r2 : R2) :
-    lte_Perms2 (Q r1 r2) P -> typing P Q (Ret r1) (Ret r2).
+    (Q r1 r2) ⊑2 P -> typing P Q (Ret r1) (Ret r2).
   Proof.
     repeat intro. pstep. econstructor; eauto.
   Qed.

@@ -830,12 +830,77 @@ Section MemoryPerms.
       Unshelve. all: auto; apply reach_perm_proper.
   Qed.
 
+  Definition lte_Perms' (P Q : Perms2) : Prop :=
+    forall (spred : Spred) (p : @perm {x | interp_spred spred x}), p ∈2 Q -> p ∈2 P.
+  Definition entails P Q := lte_Perms' Q P.
+
+  Lemma PtrI A xi yi xs ys rw o (T : VPermType A) :
+    xi :: ptr (rw, o, eqp yi) ▷ xs *2 yi :: T ▷ ys ⊨2 xi :: ptr (rw, o, T) ▷ ys.
+  Proof.
+    destruct xi; simpl.
+    - rewrite sep_conj_Perms2_top_absorb. reflexivity.
+    - repeat intro. destruct a. rename p into p'.
+      destruct H as (p & t & (P & (v & spred' & ?) & Hp) & Hp' & Hlte). subst.
+      destruct Hp as (? & ? & ? & ? & ?). cbn in *. subst.
+      destruct H as (Hspred & Hhlte).
+      eexists. split; [exists v, spred'; reflexivity |].
+      eapply Perms2_upwards_closed.
+      2: { red. rewrite restrict_same. apply Hlte. }
+      do 2 eexists. split; [| split]; cbn; eauto.
+      apply sep_conj_perm_monotone; intuition.
+      etransitivity; eauto. apply lte_l_sep_conj_perm.
+      Unshelve. auto.
+  Qed.
+
+  (* TODO PtrE *)
+
+  Lemma ReadDup' o xi yi :
+    entails (xi :: ptr (R, o, eqp yi) ▷ tt)
+            (xi :: ptr (R, o, eqp yi) ▷ tt *2 xi :: ptr (R, o, eqp yi) ▷ tt).
+  Proof.
+    repeat intro. cbn in *. destruct xi; [contradiction |].
+    destruct a as [b o']. unfold offset in *.
+    destruct H as (? & (v & spred' & ?) & ?). subst.
+    destruct H0 as (pread & peq & Hpread & Hpeq & Hlte).
+    destruct Hpread as (Hspred & Hhlte).
+    exists (read_perm spred (b, o' + o) v), (read_perm spred (b, o' + o) v).
+    cbn in Hpeq. subst.
+    assert (read_perm spred (b, o' + o) v ∈2 ptr_Perms R (VPtr (b, o' + o)) tt (eqp v)).
+    {
+      eexists. split; eauto. simpl in *. exists (read_perm spred (b, o' + o) v), bottom_perm.
+      split; [| split]. 2: reflexivity.
+      - exists Hspred. red. constructor.
+        + intros []; auto.
+        + intros [[]] [[]] ?; cbn in *; auto.
+        + intros [[]] [[]] ?; cbn in *; auto.
+      - rewrite sep_conj_perm_bottom. reflexivity.
+    }
+    split; [| split]; auto. clear H.
+    constructor; intros.
+    - destruct x, x. split; [| split]; auto.
+      1: { apply Hlte in H; auto. cbn in H. destruct H. apply Hhlte in H.
+           apply H.
+      }
+      1: { apply Hlte in H; auto. cbn in H. destruct H. apply Hhlte in H.
+           apply H.
+      }
+      split; intros [[]] [[]] ?; cbn in *; subst; auto.
+    - destruct x, y, x, x0. split.
+      1: { apply Hlte in H; auto. cbn in H. destruct H. apply Hhlte in H.
+           apply H.
+      }
+      1: { apply Hlte in H; auto. cbn in H. destruct H. apply Hhlte in H.
+           apply H.
+      }
+    - destruct x, y, x, x0. apply Hlte. constructor. left. apply Hhlte. cbn.
+      remember (exist _ _ i). remember (exist _ _ i0).
+      revert s s0 i s1 s2 i0 Heqs3 Heqs4.
+      induction H; intros; subst; auto.
+      + destruct H; auto.
+      + destruct y, x. etransitivity; [eapply IHclos_trans1 | eapply IHclos_trans2]; eauto.
+  Qed.
+
+
 End MemoryPerms.
 
 Notation "'arr' ( rw , o , l , T )" := (arr_perm rw o l T) (at level 40).
-
-
-Inductive LifetimeClauses :=
-| Empty : LifetimeClauses
-| Clause : nat -> nat -> LifetimeClauses -> LifetimeClauses
-.
