@@ -48,26 +48,40 @@ Section LifetimePerms.
 
   (* Some lifetime permissions only work with other permissions that do not affect lifetimes *)
   Definition nonLifetime c (p : @perm {x : Si * Ss | interp_LifetimeClauses c x}) : Prop :=
-    (* rely insensitive to lifetime changes *)
-    (forall x y, rely p x y -> Lifetimes_lte (lget (fst (proj1_sig x))) (lget (fst (proj1_sig y)))) /\
+    (* rely does not tolerate lifetimes going wrong *)
+    (* (forall x y, rely p x y -> Lifetimes_lte (lget (fst (proj1_sig x))) (lget (fst (proj1_sig y)))) /\ *)
       (* guar doesn't allow for lifetime changes *)
-      (forall x y, guar p x y -> lget (fst (proj1_sig x)) = lget (fst (proj1_sig y))).
+    (forall x y, guar p x y -> lget (fst (proj1_sig x)) = lget (fst (proj1_sig y))).
+
+  Lemma nonLifetime_restrict c c' Hspred p :
+    nonLifetime c' p ->
+    nonLifetime c (restrict _ (interp_LifetimeClauses c) (interp_LifetimeClauses c') Hspred p).
+  Proof.
+    repeat intro.
+    cbn in *. red in H, H0. destruct x, y, x, x0.
+    specialize (H _ _ H0). cbn in *. auto.
+  Qed.
 
   Lemma nonLifetime_sep_conj c (p q : @perm {x : Si * Ss | interp_LifetimeClauses c x}) (Hp : nonLifetime c p) (Hq : nonLifetime c q) :
     nonLifetime c (p ** q).
   Proof.
-    split; repeat intro.
-    - apply Hp. apply H.
-    - induction H.
-      + destruct Hp, Hq. destruct H; auto.
-      + etransitivity; eauto.
+    repeat intro.
+    induction H.
+    - destruct H; auto.
+    - etransitivity; eauto.
   Qed.
 
-  (* no longer true, need to modify so bottom does not tolerate weird lifetime stuff in rely *)
+  Lemma nonLifetime_lte c (p q : @perm {x : Si * Ss | interp_LifetimeClauses c x}) :
+    p <= q -> nonLifetime c q -> nonLifetime c p.
+  Proof.
+    repeat intro.
+    apply H0. apply H. auto.
+  Qed.
+
   Lemma nonLifetime_bottom c : nonLifetime c bottom_perm.
   Proof.
-    split; repeat intro; cbn in *; subst; auto.
-   Abort.
+    repeat intro; cbn in *; subst; auto.
+  Qed.
 
   Section asdf.
     Context (c : LifetimeClauses).
@@ -146,6 +160,8 @@ Section LifetimePerms.
         destruct s3; auto. inversion H.
     Qed.
 
+    (* not true since the when cannot tolerate lifetime changes in its rely *)
+    (*
     Lemma when_original n p Hp :
       when n p Hp <= p.
     Proof.
@@ -157,6 +173,7 @@ Section LifetimePerms.
         + rewrite H. reflexivity.
         + decompose [and] H; auto 7.
     Qed.
+     *)
 
     Lemma when_monotone n p1 p2 Hp1 Hp2 : p1 <= p2 -> when n p1 Hp1 <= when n p2 Hp2.
     Proof.
@@ -290,44 +307,40 @@ Section LifetimePerms.
               induction Hguar; intros; subst.
               - constructor 1. destruct H; auto.
                 right. cbn in *.
-                right. edestruct Hq. specialize (H1 _ _ H). cbn in H1. rewrite H1.
-                clear H0 H1.
-                split; [| split]; auto. reflexivity.
+                right. split; [| split]; auto.
               - econstructor 2.
                 2: { destruct y, x. eapply IHHguar; auto.
-                     clear IHHguar. clear H.
+                     clear IHHguar H.
                      remember (exist _ _ i1).
                      remember (exist _ _ i0).
                      revert s1 s2 s3 s4 i0 i1 Heqs5 Heqs6 Hlte Hfin.
                      induction Hguar; intros; subst.
                      - destruct H.
-                       + edestruct Hp.
-                         specialize (H1 _ _ H). cbn in H1. rewrite H1. reflexivity.
-                       + edestruct Hq.
-                         specialize (H1 _ _ H). cbn in H1. rewrite H1. reflexivity.
+                       + specialize (Hp _ _ H). cbn in Hp. rewrite Hp. reflexivity.
+                       + specialize (Hq _ _ H). cbn in Hq. rewrite Hq. reflexivity.
                      - destruct H.
-                       + destruct y, x. edestruct Hp.
-                         specialize (H1 _ _ H). cbn in H1. rewrite H1.
+                       + destruct y, x.
+                         specialize (Hp _ _ H). cbn in Hp. rewrite Hp.
                          eapply IHHguar; auto.
-                       + destruct y, x. edestruct Hq.
-                         specialize (H1 _ _ H). cbn in H1. rewrite H1.
+                       + destruct y, x.
+                         specialize (Hq _ _ H). cbn in Hq. rewrite Hq.
                          eapply IHHguar; auto.
                 }
                 clear IHHguar. destruct H; auto.
                 right. destruct y, x. cbn in *. right. split; [| split]; auto.
-                + edestruct Hq. specialize (H1 _ _ H). cbn in H1. rewrite H1. reflexivity.
+                + specialize (Hq _ _ H). cbn in Hq. rewrite Hq. reflexivity.
                 + clear Hls Hlte H.
                   remember (exist _ _ i1).
                   remember (exist _ _ i0).
                   revert s1 s2 s3 s4 i0 i1 Heqs5 Heqs6 Hfin.
                   induction Hguar; intros; subst.
                   * destruct H.
-                    -- edestruct Hp. specialize (H1 _ _ H). cbn in *. rewrite H1. auto.
-                    -- edestruct Hq. specialize (H1 _ _ H). cbn in *. rewrite H1. auto.
+                    -- specialize (Hp _ _ H). cbn in *. rewrite Hp. auto.
+                    -- specialize (Hq _ _ H). cbn in *. rewrite Hq. auto.
                   * destruct y, x. subst. destruct H.
-                    -- edestruct Hp. specialize (H1 _ _ H). cbn in *. rewrite H1.
+                    -- specialize (Hp _ _ H). cbn in *. rewrite Hp.
                        eapply IHHguar; eauto.
-                    -- edestruct Hq. specialize (H1 _ _ H). cbn in *. rewrite H1.
+                    -- specialize (Hq _ _ H). cbn in *. rewrite Hq.
                        eapply IHHguar; eauto.
             }
     Qed.
@@ -397,13 +410,34 @@ Section LifetimePerms.
   Definition when_Perms l P : Perms2 :=
     meet_Perms2 (fun R => exists c p Hp, p ∈2 P /\ R = singleton_Perms2 _ (when c l p Hp)).
 
+  Lemma when_perm_Perms c l p Hp P :
+    p ∈2 P ->
+    when c l p Hp ∈2 when_Perms l P.
+  Proof.
+    intros H.
+    eexists. split.
+    - exists c. exists p. eexists. split. 2: reflexivity. apply H.
+    - exists (fun _ H => H). red. rewrite restrict_same. reflexivity.
+  Qed.
+
   (* currently "lending" P, and will "return" Q when l ends (and P is provided to lowned). *)
   Definition lowned_Perms l ls Hsub P Q : Perms2 :=
-    meet_Perms2 (fun R => exists c r q Hq, R = singleton_Perms2 _ (r ** owned c l ls (Hsub c) q Hq) /\
-                                     q ∈2 Q /\
-                                     (forall p, p ∈2 P -> forall s, pre r s -> pre p s -> pre q s)).
+    meet_Perms2 (fun R => exists c (* r *) q Hq,
+                     R = singleton_Perms2 _ ((* r **  *)owned c l ls (Hsub c) q Hq) /\
+                       q ∈2 Q /\ (* q also has the spred c *)
+                       (forall p, p ∈2 P -> forall s, (* pre r s -> *) pre p s -> pre q s)).
   (* remove r? *)
 
+  Lemma lowned_perm_Perms c l ls Hsub p Hp P :
+    p ∈2 P ->
+    owned c l ls (Hsub c) p Hp ∈2 lowned_Perms l ls Hsub P P.
+  Proof.
+    intros. cbn. eexists. split.
+    - do 3 eexists. split; [| split]. reflexivity.
+      apply H.
+      intros. admit.
+    - exists (fun _ H => H). red. rewrite restrict_same. reflexivity.
+  Abort.
 
 
   Definition lte_Perms' (P Q : Perms2) : Prop :=
@@ -417,14 +451,88 @@ Section LifetimePerms.
   (*   - do 2 eexists. split; [| reflexivity]. eapply H. Set Printing All. admit. *)
   (*   - Unset Printing All. cbn. eexists. *)
 
+  Lemma restrict_owned c c' Hspred l ls Hsub p Hp:
+    restrict (Si * Ss) (interp_LifetimeClauses c) (interp_LifetimeClauses c') Hspred
+             (owned c' l ls Hsub p Hp) <=
+      owned c l ls (fun x Hc => Hsub x (Hspred _ Hc)) (restrict _ _ _ Hspred p) (nonLifetime_restrict _ _ Hspred p Hp).
+  Proof.
+    constructor.
+    - intros [[]] ?. cbn in *. auto.
+    - intros [[]] [[]] ?. cbn in *. auto.
+    - intros [[]] [[]] ?. cbn in *. intuition.
+      left. inversion H0. subst. clear H0.
+      rewrite (ProofIrrelevance.proof_irrelevance _ i i0). reflexivity.
+  Qed.
+
+  Lemma restrict_owned' c c' Hspred l ls Hsub p Hp:
+    owned c l ls (fun x Hc => Hsub x (Hspred _ Hc)) (restrict _ _ _ Hspred p) (nonLifetime_restrict _ _ Hspred p Hp) <=
+      restrict (Si * Ss) (interp_LifetimeClauses c) (interp_LifetimeClauses c') Hspred
+               (owned c' l ls Hsub p Hp).
+  Proof.
+    constructor.
+    - intros [[]] ?. cbn in *. auto.
+    - intros [[]] [[]] ?. cbn in *. auto.
+    - intros [[]] [[]] ?. cbn in *. intuition.
+      left. inversion H0. subst. clear H0.
+      rewrite (ProofIrrelevance.proof_irrelevance _ i i0). reflexivity.
+  Qed.
+
+  Lemma foo l ls Hsub P Q R :
+    entails (P *2 (lowned_Perms l ls Hsub R Q))
+            (when_Perms l P *2 (lowned_Perms l ls Hsub (P *2 R) (P *2 Q))).
+  Proof.
+    intros c p' H. cbn in H.
+    destruct H as (p & powned & Hp & (? & (c' & q & Hq' & ? & Hq & ?) & asdf) & Hlte); subst.
+    destruct asdf as (Hspred & Hhlte).
+    (* Set Printing All. *)
+    do 2 eexists. split; [| split].
+    2: { cbn. eexists. split.
+         - do 3 eexists. split. reflexivity. split.
+           + exists p, (restrict _ _ _ Hspred q). split; auto.
+             split. 2: reflexivity.
+             eapply Perms2_upwards_closed. apply Hq.
+             red. reflexivity.
+           + intros. cbn.
+             destruct H as (? & ? & ? & ? & ?).
+             split; [| split].
+             2: {
+               destruct s, x1. cbn. eapply H0.
+               eapply Perms2_upwards_closed. apply H2.
+               red. reflexivity.
+               cbn. apply H3. admit.
+             }
+             admit. admit.
+             * destruct H as (? & ? & ? & ? & ?).
+
+    3: {
+      etransitivity. 2: apply Hlte.
+      etransitivity. eapply convert. apply sep_conj_perm_monotone. reflexivity.
+      red in Hhlte. etransitivity. 2: apply Hhlte.
+      etransitivity. 2: apply restrict_owned'. reflexivity.
+    }
+    - apply when_perm_Perms; auto.
+    - eexists. split.
+      + do 3 eexists. split. reflexivity. split.
+        (* * (* Set Printing All. do 2 eexists. split; [| split]. apply Hp. apply Hq. reflexivity. *) *)
+        2: { intros. destruct H as (? & ? & ? & ? & ?). eapply H0. apply H2. apply H3. auto. }
+        admit.
+      + cbn. exists Hspred. red. rewrite restrict_owned. rewrite <- (restrict_same _ _ p).
+
+  Qed.
+
+  (* we need to know R includes a nonlifetime perm *)
   Lemma foo l ls Hsub P Q R :
     entails (R *2 lowned_Perms l ls Hsub P Q)
             (when_Perms l R).
   Proof.
-    repeat intro. destruct H as (r & Hp' & Hr & (? & (c' & q & Hq' & ? & Hq & ?) & asdf) & Hlte).
+    repeat intro. cbn in *.
+    destruct H as (r & pl & Hr & (? & (c' & q & Hq' & ? & Hq & ?) & asdf) & Hlte).
     subst. destruct asdf as (Hspred & Hhlte). eexists. split.
     - do 3 eexists. split; [| reflexivity]. eapply Hr.
     - cbn. exists (fun H x => x). red. rewrite restrict_same.
+      etransitivity. eapply when_original.
+      etransitivity; eauto. apply lte_l_sep_conj_perm.
+      Unshelve.
   Qed.
 
 
