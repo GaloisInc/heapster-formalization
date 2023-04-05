@@ -94,7 +94,7 @@ Section LifetimePerms.
       {|
         pre x :=
         let '(si, _) := x in
-        lifetime (lget si) l = None \/ lifetime (lget si) l = Some current ->
+        (lifetime (lget si) l = None \/ lifetime (lget si) l = Some current) ->
         pre p x;
 
         rely x y :=
@@ -198,16 +198,18 @@ Section LifetimePerms.
             (Hp : nonLifetime c p) :
       @perm { x : Si * Ss | interp_LifetimeClauses c x } :=
       {|
-        (* [l] must be current *)
-        pre := fun '(x, _) => lifetime (lget x) l = Some current;
-        (* nobody else can change [l]. If [l] is finished, the rely of [p] holds *)
+        (** [l] must be current *)
+        pre := fun x =>
+                 let '(si, _) := x in
+                 lifetime (lget si) l = Some current;
+        (** nobody else can change [l]. If [l] is finished, the rely of [p] holds *)
         rely := fun x y =>
                   let '(si, _) := x in
                   let '(si', _) := y in
                   Lifetimes_lte (lget si) (lget si') /\
                     lifetime (lget si) l = lifetime (lget si') l /\
                     (lifetime (lget si) l = Some finished -> rely p x y);
-        (* If [l] is finished afterwards, the guar of [p] holds *)
+        (** If [l] is finished afterwards, the guar of [p] holds *)
         guar := fun x y =>
                   let '(si, _) := x in
                   let '(si', _) := y in
@@ -252,30 +254,51 @@ Section LifetimePerms.
       p1 <= p2 -> owned l ls Hspred p1 Hp1 <= owned l ls Hspred p2 Hp2.
     Proof.
       intros. destruct H. constructor; cbn; intros.
-      - destruct x, x. cbn in *. auto.
+      - destruct x, x. cbn in *. intuition.
       - destruct x, y, x, x0. cbn in *. decompose [and] H; auto.
       - destruct x, y, x, x0. cbn in *. destruct H; auto.
         right. decompose [and] H; auto.
     Qed.
 
     Lemma lifetimes_sep l ls Hls
+          p q Hp Hq  :
+      when l p Hp ⊥ owned l ls Hls q Hq.
+    Proof.
+      split; intros.
+      - destruct x, y, x, x0. cbn in *. destruct H.
+        + inversion H. subst. split; try reflexivity.
+          intros. rewrite H. reflexivity.
+        + destruct H as (? & ? & ?). split; auto. intros.
+          destruct H2; rewrite H2 in H0; inversion H0.
+      - destruct x, y, x, x0. cbn in *. destruct H.
+        + inversion H. subst. split; [| split]; try reflexivity.
+          intros. rewrite H. reflexivity.
+        + destruct H as (? & ? & ? & ?). split; [| split]; auto.
+          rewrite H0, H1; auto.
+          intros. rewrite H0 in H3. inversion H3.
+    Qed.
+
+    Lemma lifetimes_sep' l ls Hls
           (p : perm) q Hp Hq  :
       p ⊥ owned l ls Hls q Hq ->
       when l p Hp ⊥ owned l ls Hls (p ** q) (nonLifetime_sep_conj c _ _ Hp Hq).
     Proof.
-      split; intros.
-      - destruct x, y, x, x0. cbn in *. destruct H0.
-        + inversion H0. subst. split; try reflexivity.
-          intros. rewrite H0. reflexivity.
-        + destruct H0 as (? & ? & ?). split; auto.
-          intros. destruct H3; rewrite H3 in H1; discriminate H1.
-      - destruct x, y, x, x0. cbn in *. destruct H0.
-        + inversion H0. subst. split; [| split]; try reflexivity.
-          intros. split; rewrite H0; reflexivity.
-        + destruct H0 as (? & ? & ? & ?). split; [| split]; auto.
-          rewrite H1, H2; auto.
-          intros. rewrite H4 in H1. discriminate H1.
+      intros.
+      eapply lifetimes_sep.
     Qed.
+    (*   split; intros. *)
+    (*   - destruct x, y, x, x0. cbn in *. destruct H0. *)
+    (*     + inversion H0. subst. split; try reflexivity. *)
+    (*       intros. rewrite H0. reflexivity. *)
+    (*     + destruct H0 as (? & ? & ?). split; auto. *)
+    (*       intros. destruct H3; rewrite H3 in H1; discriminate H1. *)
+    (*   - destruct x, y, x, x0. cbn in *. destruct H0. *)
+    (*     + inversion H0. subst. split; [| split]; try reflexivity. *)
+    (*       intros. split; rewrite H0; reflexivity. *)
+    (*     + destruct H0 as (? & ? & ? & ?). split; [| split]; auto. *)
+    (*       rewrite H1, H2; auto. *)
+    (*       intros. rewrite H4 in H1. discriminate H1. *)
+    (* Qed. *)
 
     Lemma convert p q l ls Hls Hp Hq :
       when l p Hp ** owned l ls Hls (p ** q) (nonLifetime_sep_conj c _ _ Hp Hq) <=
@@ -283,8 +306,14 @@ Section LifetimePerms.
     Proof.
       split; intros.
       - destruct x, x. cbn in *. decompose [and] H; auto. clear H.
-        split; [| split]; auto.
-        eapply lifetimes_sep; eauto.
+        split; auto.
+        split; [| eapply lifetimes_sep; eauto].
+        destruct H2; intuition.
+        (* right. split; [| split; [| split]]; auto. *)
+        (* destruct H3. split. *)
+        (* + intros [[]] [[]] ?. apply sep_l. cbn. right. split; auto. *)
+
+        (* eapply lifetimes_sep; eauto. *)
       - destruct x, y, x, x0. cbn in *. destruct H as (? & ? & ? & ?).
         split; [| split; [| split]]; auto.
       - destruct x, y, x, x0. cbn in H. induction H. 2: econstructor 2; eauto.
@@ -420,25 +449,76 @@ Section LifetimePerms.
     - exists (fun _ H => H). red. rewrite restrict_same. reflexivity.
   Qed.
 
+
   (* currently "lending" P, and will "return" Q when l ends (and P is provided to lowned). *)
   Definition lowned_Perms l ls Hsub P Q : Perms2 :=
-    meet_Perms2 (fun R => exists c (* r *) q Hq,
-                     R = singleton_Perms2 _ ((* r **  *)owned c l ls (Hsub c) q Hq) /\
-                       q ∈2 Q /\ (* q also has the spred c *)
-                       (forall p, p ∈2 P -> forall s, (* pre r s -> *) pre p s -> pre q s)).
+    meet_Perms2 (fun R => (* forall c (p : @perm {x : Si * Ss | interp_LifetimeClauses c x}), p ∈2 P -> *)
+                            exists c r q Hq,
+                              R = singleton_Perms2 _ (r ** owned c l ls (Hsub c) q Hq) /\
+                                q ∈2 Q /\ (* q also has the spred c *)
+                                (* r ∈2 (impl_Perms2 P Q) /\ *)
+                                (forall p, p ∈2 P -> exists q, q ∈2 Q /\
+                                                      (forall s, pre p s -> pre r s -> pre q s))).
   (* remove r? *)
+
+  Program Definition lowned_Perms' l ls Hsub (P Q : @Perms2 (Si * Ss)) : Perms2 :=
+    {|
+      in_Perms2 := fun spred x =>
+                     forall c p Hspred,
+                       p ∈2 P ->
+                       exists q Hq,
+                         q ∈2 Q /\
+                           hlte_perm2
+                             (Si * Ss) spred (interp_LifetimeClauses c) Hspred
+                             (owned c l ls (Hsub c) q Hq)
+                             x /\
+                           (forall s, pre p s -> pre q s);
+    |}.
+  Next Obligation.
+    specialize (H c p). edestruct H as (? & ? & ? & ? & ?). auto. Unshelve. 2: {
+    (* pose proof (hlte_perm2_transitive _ _ _ _ _ _ _ _ _ H3 H0). *)
+    (* do 3 eexists. split; [| split]. *)
+    (* 2: { *)
+    (*   erewrite (ProofIrrelevance.proof_irrelevance _ Hspred0). apply H5. *)
+    (* } *)
+    (* auto. intros. auto. Unshelve. *)
+    (* intros. apply Hspred0. apply Hspred. *)
+  Admitted.
+(*
+    rename H into c, H2 into q, H3 into Hq', H4 into Hq.
+    exists c. eexists. Unshelve.
+    2: { intros. apply H1, Hspred. auto. }
+    exists q, Hq'. split; auto. split.
+    eapply hlte_perm2_transitive; eauto.
+    intros.
+    eapply H6; eauto.
+  Qed.
+*)
+
+  (* Definition lowned_Perms l ls Hsub P : Perms2 := *)
+  (*   meet_Perms2 (fun R => exists c p Hp, p ∈2 P /\ R = singleton_Perms2 _ (owned c l ls (Hsub c) p Hp)). *)
 
   Lemma lowned_perm_Perms c l ls Hsub p Hp P :
     p ∈2 P ->
     owned c l ls (Hsub c) p Hp ∈2 lowned_Perms l ls Hsub P P.
   Proof.
-    intros. cbn. eexists. split.
-    - do 3 eexists. split; [| split]. reflexivity.
-      apply H.
-      intros. admit.
-    - exists (fun _ H => H). red. rewrite restrict_same. reflexivity.
-  Abort.
+  (*   intros. cbn. do 4 eexists. split; eauto. split. *)
+  (*   - red. rewrite restrict_same. reflexivity. *)
+  (*   - intros. *)
+  (*   Unshelve. intros. auto. *)
+  (* Qed. *)
+    (* cbn. intros. exists p0. eexists. eexists. *)
+    (* split. auto. split. *)
+    (* 2: { intros. auto. } *)
 
+
+    intros. cbn. eexists. split.
+    - do 4 eexists. split; [| split]. reflexivity.
+      apply H.
+      clear p H Hp. intros p Hp. exists p. split; auto.
+    - exists (fun _ H => H). red. rewrite restrict_same.
+      rewrite sep_conj_perm_commut. rewrite sep_conj_perm_bottom. reflexivity.
+  Qed.
 
   Definition lte_Perms' (P Q : Perms2) : Prop :=
     forall (c : LifetimeClauses) (p : @perm {x | interp_LifetimeClauses c x}), p ∈2 Q -> p ∈2 P.
@@ -482,18 +562,27 @@ Section LifetimePerms.
             (when_Perms l P *2 (lowned_Perms l ls Hsub (P *2 R) (P *2 Q))).
   Proof.
     intros c p' H. cbn in H.
-    destruct H as (p & powned & Hp & (? & (c' & q & Hq' & ? & Hq & ?) & asdf) & Hlte); subst.
+    destruct H as (p & powned & Hp & (? & (c' & r & q & Hq' & ? & Hq & ?) & asdf) & Hlte); subst.
     destruct asdf as (Hspred & Hhlte).
     (* Set Printing All. *)
     do 2 eexists. split; [| split].
     2: { cbn. eexists. split.
-         - do 3 eexists. split. reflexivity. split.
+         - do 4 eexists. split. reflexivity. split.
            + exists p, (restrict _ _ _ Hspred q). split; auto.
              split. 2: reflexivity.
              eapply Perms2_upwards_closed. apply Hq.
              red. reflexivity.
            + intros. cbn.
              destruct H as (? & ? & ? & ? & ?).
+             (* destruct (H0 x0). *)
+             admit.
+         - eexists. red. rewrite restrict_same. reflexivity.
+    }
+    - apply when_perm_Perms. apply Hp.
+    - rewrite <- sep_conj_perm_assoc. rewrite sep_conj_perm_commut.
+      etransitivity. red in Hhlte. eapply convert.
+
+
              split; [| split].
              2: {
                destruct s, x1. cbn. eapply H0.

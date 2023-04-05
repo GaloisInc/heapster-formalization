@@ -552,6 +552,24 @@ Section PermSet.
     eapply H; eauto.
   Qed.
 
+  Lemma sep_conj_Perms2_meet_commute : forall (Ps : Perms2 -> Prop) P,
+      (meet_Perms2 Ps) *2 P ≡2 meet_Perms2 (fun Q => exists P', Q = P' *2 P /\ Ps P').
+  Proof.
+    split; repeat intro.
+    - destruct H as [? [[Q [? ?]] ?]].
+      subst. destruct H1 as [? [? [? [? ?]]]].
+      simpl. exists x, x0. split; [ | split]; auto.
+      eexists; split; eauto.
+    - destruct H as [? [? [[Q [? ?]] [? ?]]]].
+      simpl. eexists. split.
+      + exists Q. split; auto.
+      + eapply Perms2_upwards_closed; eauto.
+        simpl. exists x, x0. split; [auto | split; [auto | ]]. reflexivity.
+        red. rewrite restrict_same. auto.
+        Unshelve. auto.
+  Qed.
+
+
   (** The least Perms set containing a given p *)
   Program Definition singleton_Perms2 spred1 (p1 : @perm {x : config | spred1 x}) : Perms2 :=
     {|
@@ -562,6 +580,21 @@ Section PermSet.
     eexists. Unshelve.
     2: { intros. apply H. apply Hspred. auto. }
     eapply hlte_perm2_transitive; eassumption.
+  Qed.
+
+  (** Separating implication, though we won't be using it. *)
+  Definition impl_Perms2 P Q := meet_Perms2 (fun R => R *2 P ⊨2 Q).
+
+  (** A standard property about separating conjunction and implication. *)
+  Lemma adjunction : forall P Q R, P *2 Q ⊨2 R <-> P ⊨2 (impl_Perms2 Q R).
+  Proof.
+    intros. split; intros.
+    - red. red. intros. simpl. exists P. auto.
+    - apply (sep_conj_Perms2_monotone _ _ Q Q) in H; intuition.
+      red. etransitivity; [ | apply H ].
+      unfold impl_Perms2.
+      rewrite sep_conj_Perms2_meet_commute.
+      apply meet_Perms2_max. intros P' [? [? ?]]. subst. auto.
   Qed.
 
 End PermSet.

@@ -164,7 +164,7 @@ Section MemoryPerms.
   (** Gives permission to allocate memory, assuming the last allocated block was [n-1] *)
   Program Definition malloc_perm (n : nat) : (@perm {x : Si * Ss | interp_spred spred x }) :=
     {|
-    (** always valid *)
+    (** there are exactly n allocated blocks *)
     pre '(x, _) := length (lget x) = n;
     (** No new blocks are allocated *)
     rely '(x, _) '(y, _) := length (lget x) = length (lget y) /\
@@ -247,11 +247,11 @@ Section MemoryPerms.
 
   Program Definition write_perm (ptr : addr) (v : Value) : (@perm {x : Si * Ss | interp_spred spred x}) :=
     {|
-    (* [ptr] points to [v] *)
+    (** [ptr] points to [v] *)
     pre '(x, _) := Some v = read (lget x) ptr;
-    (* only checks if the memory [ptr] points to in the 2 configs are equal *)
+    (** only checks if the memory [ptr] points to in the 2 configs are equal *)
     rely '(x, _) '(y, _) := read (lget x) ptr = read (lget y) ptr;
-    (* only the pointer we have write permission to may change *)
+    (** only the pointer we have write permission to may change *)
     guar '(x, _) '(y, _) := (forall ptr', ptr <> ptr' -> read (lget x) ptr' = read (lget y) ptr') /\
                             (forall ptr', sizeof (lget x) ptr' = sizeof (lget y) ptr') /\
                             length (lget x) = length (lget y);
