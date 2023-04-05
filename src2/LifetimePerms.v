@@ -22,17 +22,50 @@ From Heapster2 Require Import
      Typing
      PermType.
 
+From ITree Require Import
+     ITree
+     ITreeFacts
+     Basics.MonadState
+     Basics.MonadProp
+     Events.State
+     Events.Exception
+     Events.Nondeterminism
+     Eq.Eqit
+     Eq.UpToTaus
+     Eq.EqAxiom.
+
 From Paco Require Import
      paco.
 
 Import MonadNotation.
 Import ListNotations.
+Import ITreeNotations.
+Local Open Scope itree_scope.
 (* end hide *)
-
 
 Section LifetimePerms.
   Context {Si Ss : Type}.
   Context `{Hlens: Lens Si Lifetimes}.
+
+  (** * Memory operations *)
+  Definition newLifetime : itree (sceE Si) nat :=
+    s <- trigger (Modify id);; (* do read first to use length without subtraction *)
+    trigger (Modify (fun s =>
+                       (lput s ((lget s) ++ [current]))));;
+    Ret (length (lget s)).
+
+  Definition endLifetime (l : nat) : itree (sceE Si) unit :=
+    s <- trigger (Modify id);;
+    match nth_error (lget s) l with
+    | Some current =>
+        trigger (Modify (fun s =>
+                           (lput s (replace_list_index
+                                      (lget s)
+                                      l
+                                      finished))));;
+        Ret tt
+    | _ => throw tt
+    end.
 
   Inductive LifetimeClauses :=
   | Empty : LifetimeClauses
@@ -449,6 +482,21 @@ Section LifetimePerms.
     - exists (fun _ H => H). red. rewrite restrict_same. reflexivity.
   Qed.
 
+  (* when l (read_Perms ptr) * lowned l (when l (read_Perms ptr) -o write_Perms ptr) ⊢
+     endLifetime l :
+     write_Perms p *)
+
+  (* p ∈ read_Perms ptr * lowned l (read_Perms ptr -o write_Perms ptr) *)
+  (* -> p >= r * l *)
+  (* pre p s is true, so pre of both are true *)
+
+  (* r ∈ read_Perms ptr *)
+  (* -> r ≈ read_perm ptr v, for some v *)
+
+  (* l ∈ lowned l .... *)
+  (* ∃ w, w ∈ write_Perms ptr /\ l >= owned l w /\
+     (forall s, lifetime s = current -> pre r s -> pre l s -> pre w s) *)
+  (* -> w ≈ write_perm ptr v, for some v *)
 
   (* currently "lending" P, and will "return" Q when l ends (and P is provided to lowned). *)
   Definition lowned_Perms l ls Hsub P Q : Perms2 :=
@@ -461,6 +509,16 @@ Section LifetimePerms.
                                                       (forall s, pre p s -> pre r s -> pre q s))).
   (* remove r? *)
 
+  (* x = owned l (write_perm ptr v) ** pred_perm (ptr |-> v) *)
+  (* x ∈ lowned l (read_Perms ptr -o write_Perms ptr) *)
+  (* forall r ∈ read_Perms ptr (r ≈ read_perm ptr v', for some v')
+     exists w ∈ write_Perms ptr. (pick w = write_perm ptr v)
+   x >= owned l w *)
+
+
+  (* p  \in   lowned l (P1 * P2) Q    /\   p'  \in P1
+     then    pred_perm (pre p') ** p   \in  lowned l P2 Q
+   *)
   Program Definition lowned_Perms' l ls Hsub (P Q : @Perms2 (Si * Ss)) : Perms2 :=
     {|
       in_Perms2 := fun spred x =>
@@ -472,7 +530,7 @@ Section LifetimePerms.
                              (Si * Ss) spred (interp_LifetimeClauses c) Hspred
                              (owned c l ls (Hsub c) q Hq)
                              x /\
-                           (forall s, pre p s -> pre q s);
+                           (forall s, pre p s -> pre x s -> pre q s);
     |}.
   Next Obligation.
     specialize (H c p). edestruct H as (? & ? & ? & ? & ?). auto. Unshelve. 2: {
