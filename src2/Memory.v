@@ -8,7 +8,14 @@ From Coq Require Import
 From Heapster2 Require Import
      Utils.
 
+From ITree Require Import
+     ITree
+     Events.Exception.
+
 Import ListNotations.
+Import ITreeNotations.
+
+Local Open Scope itree_scope.
 (* end hide *)
 
 (** * Memory model *)
@@ -294,3 +301,62 @@ Proof.
     rewrite Hb. auto.
   * simpl. erewrite <- nth_error_replace_list_index_neq; auto.
 Qed.
+
+(** * Memory operations *)
+Section MemoryOps.
+  Context {Si Ss : Type}.
+  Context `{Hlens: Lens Si memory}.
+
+  Definition load (v : Value) : itree (sceE Si) Value :=
+    s <- trigger (Modify id);;
+    match v with
+    | VNum _ => throw tt
+    | VPtr p => match read (lget s) p with
+               | None => throw tt
+               | Some b => Ret b
+               end
+    end.
+
+  Definition store (ptr : Value) (v : Value) : itree (sceE Si) Si :=
+    match ptr with
+    | VNum _ => throw tt
+    | VPtr ptr => s <- trigger (Modify (fun s => match write (lget s) ptr v with
+                                            | None => s
+                                            | Some c => (lput s c)
+                                            end)) ;;
+                 match write (lget s) ptr v with
+                 | None => throw tt
+                 | Some c => Ret (lput s c)
+                 end
+    end.
+
+  Definition malloc (size : nat) : itree (sceE Si) Value :=
+    s <- trigger (Modify id);; (* do a read first to use length without subtraction *)
+    trigger (Modify (fun s =>
+                       (lput s ((lget s) ++
+                                         [Some (LBlock size
+                                                       (fun o => if o <? size
+                                                              then Some (VNum 0)
+                                                              else None))]))));;
+    Ret (VPtr (length (lget s), 0)).
+
+  Definition free (ptr : Value) : itree (sceE Si) unit :=
+    match ptr with
+    | VNum _ => throw tt
+    | VPtr ptr =>
+        if snd ptr =? 0
+        then
+          s <- trigger (Modify id);;
+          match nth_error (lget s) (fst ptr) with
+          | Some (Some (LBlock size bytes)) =>
+              trigger (Modify (fun s =>
+                                 (lput s (replace_list_index
+                                            (lget s)
+                                            (fst ptr)
+                                            (Some (LBlock size (fun o => if o <? size then None else bytes o)))))));;
+              Ret tt
+          | _ => throw tt
+          end
+        else throw tt
+    end.
+End MemoryOps.

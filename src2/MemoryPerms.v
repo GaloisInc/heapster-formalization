@@ -24,23 +24,13 @@ From Heapster2 Require Import
 
 From ITree Require Import
      ITree
-     ITreeFacts
-     Basics.MonadState
-     Basics.MonadProp
-     Events.State
-     Events.Exception
-     Events.Nondeterminism
-     Eq.Eqit
-     Eq.UpToTaus
-     Eq.EqAxiom.
+     Eq.Eqit.
 
 From Paco Require Import
      paco.
 
 Import MonadNotation.
 Import ListNotations.
-Import ITreeNotations.
-Local Open Scope itree_scope.
 (* end hide *)
 
 Section MemoryPerms.
@@ -410,60 +400,6 @@ Section MemoryPerms.
   Definition block_Perms (ptr : addr) (n : nat) : Perms2 :=
     meet_Perms2 (fun Q => exists spred,
                      Q = singleton_Perms2 _ (block_perm spred n ptr)).
-
-  (** * Memory operations *)
-  Definition load (v : Value) : itree (sceE Si) Value :=
-    s <- trigger (Modify id);;
-    match v with
-    | VNum _ => throw tt
-    | VPtr p => match read (lget s) p with
-               | None => throw tt
-               | Some b => Ret b
-               end
-    end.
-
-  Definition store (ptr : Value) (v : Value) : itree (sceE Si) Si :=
-    match ptr with
-    | VNum _ => throw tt
-    | VPtr ptr => s <- trigger (Modify (fun s => match write (lget s) ptr v with
-                                            | None => s
-                                            | Some c => (lput s c)
-                                            end)) ;;
-                 match write (lget s) ptr v with
-                 | None => throw tt
-                 | Some c => Ret (lput s c)
-               end
-    end.
-
-  Definition malloc (size : nat) : itree (sceE Si) Value :=
-    s <- trigger (Modify id);; (* do a read first to use length without subtraction *)
-    trigger (Modify (fun s =>
-                       (lput s ((lget s) ++
-                                         [Some (LBlock size
-                                                       (fun o => if o <? size
-                                                              then Some (VNum 0)
-                                                              else None))]))));;
-    Ret (VPtr (length (lget s), 0)).
-
-  Definition free (ptr : Value) : itree (sceE Si) unit :=
-    match ptr with
-    | VNum _ => throw tt
-    | VPtr ptr =>
-      if snd ptr =? 0
-      then
-        s <- trigger (Modify id);;
-        match nth_error (lget s) (fst ptr) with
-        | Some (Some (LBlock size bytes)) =>
-          trigger (Modify (fun s =>
-                             (lput s (replace_list_index
-                                        (lget s)
-                                        (fst ptr)
-                                        (Some (LBlock size (fun o => if o <? size then None else bytes o)))))));;
-          Ret tt
-        | _ => throw tt
-        end
-      else throw tt
-    end.
 
   (* Example no_error_load s : no_errors (lput s (mem_at (0, 0) (VNum 1))) *)
   (*                                     (load (VPtr (0, 0))). *)
@@ -899,7 +835,6 @@ Section MemoryPerms.
       + destruct H; auto.
       + destruct y, x. etransitivity; [eapply IHclos_trans1 | eapply IHclos_trans2]; eauto.
   Qed.
-
 
 End MemoryPerms.
 

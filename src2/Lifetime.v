@@ -12,8 +12,13 @@ From Coq Require Import
 From Heapster2 Require Import
      Utils.
 
+From ITree Require Import
+     ITree
+     Events.Exception.
+
 Import ListNotations.
-Open Scope list_scope.
+Import ITreeNotations.
+Local Open Scope itree_scope.
 (* end hide *)
 
 Variant status := current | finished.
@@ -130,3 +135,28 @@ Proof.
   destruct (lifetime s n1); auto. 2: inversion H0.
   destruct s0; auto.
 Qed.
+
+Section LifetimeOps.
+  Context {Si Ss : Type}.
+  Context `{Hlens: Lens Si Lifetimes}.
+
+  (** * Lifetime operations *)
+  Definition newLifetime : itree (sceE Si) nat :=
+    s <- trigger (Modify id);; (* do read first to use length without subtraction *)
+    trigger (Modify (fun s =>
+                       (lput s ((lget s) ++ [current]))));;
+    Ret (length (lget s)).
+
+  Definition endLifetime (l : nat) : itree (sceE Si) unit :=
+    s <- trigger (Modify id);;
+    match nth_error (lget s) l with
+    | Some current =>
+        trigger (Modify (fun s =>
+                           (lput s (replace_list_index
+                                      (lget s)
+                                      l
+                                      finished))));;
+        Ret tt
+    | _ => throw tt
+    end.
+End LifetimeOps.

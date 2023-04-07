@@ -1,7 +1,21 @@
 (* begin hide *)
 Require Import Coq.Lists.List.
 
+From ITree Require Import
+     ITree
+     ITreeFacts
+     Basics.MonadState
+     Basics.MonadProp
+     Events.State
+     Events.Exception
+     Events.Nondeterminism
+     Eq.Eqit
+     Eq.UpToTaus
+     Eq.EqAxiom.
+
 Import ListNotations.
+Import ITreeNotations.
+Local Open Scope itree_scope.
 (* end hide *)
 
 (** * Lens typeclass *)
@@ -45,7 +59,7 @@ Proof.
   revert l n'.
   induction n; intros l n' Hl Hn; (destruct l; [inversion Hl |]);
     simpl; destruct n'; intuition.
-  apply IHn; auto. apply PeanoNat.Nat.succ_lt_mono; auto.
+  (* apply IHn; auto. apply PeanoNat.Nat.succ_lt_mono; auto. *)
 Qed.
 
 Lemma nth_error_replace_list_index_eq A n (l : list A) (a : A) :
@@ -86,3 +100,11 @@ Proof.
     + inversion Hl.
     + simpl in Hl. apply PeanoNat.Nat.succ_lt_mono in Hl. apply IHn; auto.
 Qed.
+
+(** * itree stuff *)
+
+Variant modifyE C : Type -> Type :=
+  | Modify : forall (f : C -> C), modifyE C C.
+Global Arguments Modify {C} f.
+
+Definition sceE (C : Type) := (exceptE unit +' modifyE C +' nondetE).

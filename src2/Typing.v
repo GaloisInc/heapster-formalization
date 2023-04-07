@@ -8,6 +8,7 @@ From Coq Require Import
      ProofIrrelevance.
 
 From Heapster2 Require Import
+     Utils
      Permissions
      PermissionsSpred2
      SepStep.
@@ -16,20 +17,15 @@ From ExtLib Require Import
      Structures.Functor
      Structures.Monad.
 
-From ITree Require Import
-     ITree
-     ITreeFacts
-     Basics.MonadState
-     Basics.MonadProp
-     Events.State
-     Events.Exception
-     Events.Nondeterminism
-     Eq.Eqit
-     Eq.UpToTaus
-     Eq.EqAxiom.
-
 From Paco Require Import
      paco.
+
+From ITree Require Import
+     ITree
+     Eq.Eqit
+     Events.State
+     Events.Exception
+     Events.Nondeterminism.
 
 Import ITreeNotations.
 Local Open Scope itree_scope.
@@ -41,19 +37,19 @@ Local Open Scope itree_scope.
     [eq_itree eq]. This is used for convenience, we could also prove Proper
     instances for our definitions. *)
 Ltac rewritebisim lem := pose proof lem as bisim;
-                         eapply bisimulation_is_eq in bisim;
+                         eapply EqAxiom.bisimulation_is_eq in bisim;
                          rewrite bisim;
                          clear bisim.
 
 Ltac rewritebisim_in lem H := pose proof lem as bisim;
-                              eapply bisimulation_is_eq in bisim;
+                              eapply EqAxiom.bisimulation_is_eq in bisim;
                               rewrite bisim in H;
                               clear bisim.
 
 Lemma throw_vis {E R} `{exceptE unit -< E} (k : void -> itree E R) :
   vis (Throw tt) k = throw tt.
 Proof.
-  apply bisimulation_is_eq. pstep. unfold throw.
+  apply EqAxiom.bisimulation_is_eq. pstep. unfold throw.
   constructor. intros. inversion v.
 Qed.
 
@@ -65,12 +61,6 @@ Qed.
 
 (** * Stuttering bisimulation *)
 Section bisim.
-  Variant modifyE C : Type -> Type :=
-  | Modify : forall (f : C -> C), modifyE C C.
-  Global Arguments Modify {C} f.
-
-  Definition sceE (C : Type) := (exceptE unit +' modifyE C +' nondetE).
-
   Context {config specConfig : Type}.
   Context {Spred : Type}.
   Context {interp_spred : Spred -> config * specConfig -> Prop}.
@@ -278,7 +268,7 @@ Section bisim.
 
   Lemma rewrite_spin {E R} : (ITree.spin : itree E R) = Tau (ITree.spin).
   Proof.
-    intros. apply bisimulation_is_eq.
+    intros. apply EqAxiom.bisimulation_is_eq.
     ginit. gcofix CIH. gstep. unfold ITree.spin. constructor.
     apply Reflexive_eqit_gen_eq.
   Qed.

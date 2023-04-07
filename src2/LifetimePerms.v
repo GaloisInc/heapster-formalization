@@ -9,10 +9,6 @@ From Coq Require Import
      Logic.FunctionalExtensionality
      Lia.
 
-From ExtLib Require Import
-     Structures.Monads
-     Data.Monads.OptionMonad.
-
 From Heapster2 Require Import
      Utils
      Permissions
@@ -22,50 +18,15 @@ From Heapster2 Require Import
      Typing
      PermType.
 
-From ITree Require Import
-     ITree
-     ITreeFacts
-     Basics.MonadState
-     Basics.MonadProp
-     Events.State
-     Events.Exception
-     Events.Nondeterminism
-     Eq.Eqit
-     Eq.UpToTaus
-     Eq.EqAxiom.
-
 From Paco Require Import
      paco.
 
-Import MonadNotation.
 Import ListNotations.
-Import ITreeNotations.
-Local Open Scope itree_scope.
 (* end hide *)
 
 Section LifetimePerms.
   Context {Si Ss : Type}.
   Context `{Hlens: Lens Si Lifetimes}.
-
-  (** * Memory operations *)
-  Definition newLifetime : itree (sceE Si) nat :=
-    s <- trigger (Modify id);; (* do read first to use length without subtraction *)
-    trigger (Modify (fun s =>
-                       (lput s ((lget s) ++ [current]))));;
-    Ret (length (lget s)).
-
-  Definition endLifetime (l : nat) : itree (sceE Si) unit :=
-    s <- trigger (Modify id);;
-    match nth_error (lget s) l with
-    | Some current =>
-        trigger (Modify (fun s =>
-                           (lput s (replace_list_index
-                                      (lget s)
-                                      l
-                                      finished))));;
-        Ret tt
-    | _ => throw tt
-    end.
 
   Inductive LifetimeClauses :=
   | Empty : LifetimeClauses
@@ -522,39 +483,33 @@ Section LifetimePerms.
   Program Definition lowned_Perms' l ls Hsub (P Q : @Perms2 (Si * Ss)) : Perms2 :=
     {|
       in_Perms2 := fun spred x =>
-                     forall c p Hspred,
+                     forall c (p : @perm {x : Si * Ss | interp_LifetimeClauses c x}),
                        p ∈2 P ->
-                       exists q Hq,
+                       exists Hspred (q : @perm {x : Si * Ss | interp_LifetimeClauses c x}) Hq,
                          q ∈2 Q /\
                            hlte_perm2
                              (Si * Ss) spred (interp_LifetimeClauses c) Hspred
                              (owned c l ls (Hsub c) q Hq)
                              x /\
-                           (forall s, pre p s -> pre x s -> pre q s);
+                           (forall s, pre p _ -> pre x s -> pre q _);
     |}.
   Next Obligation.
-    specialize (H c p). edestruct H as (? & ? & ? & ? & ?). auto. Unshelve. 2: {
-    (* pose proof (hlte_perm2_transitive _ _ _ _ _ _ _ _ _ H3 H0). *)
-    (* do 3 eexists. split; [| split]. *)
-    (* 2: { *)
-    (*   erewrite (ProofIrrelevance.proof_irrelevance _ Hspred0). apply H5. *)
-    (* } *)
-    (* auto. intros. auto. Unshelve. *)
-    (* intros. apply Hspred0. apply Hspred. *)
-  Admitted.
-(*
-    rename H into c, H2 into q, H3 into Hq', H4 into Hq.
-    exists c. eexists. Unshelve.
-    2: { intros. apply H1, Hspred. auto. }
-    exists q, Hq'. split; auto. split.
-    eapply hlte_perm2_transitive; eauto.
-    intros.
-    eapply H6; eauto.
+    esplit. apply Hspred. apply H.
+  Defined.
+  Next Obligation.
+    esplit. apply Hspred. apply H.
+  Defined.
+  Next Obligation.
+    (* Set Printing All. *)
+    specialize (H c p). destruct H as (Hspred' & q & Hq' & Hq & Hhlte & Hpre). auto.
+    eexists. Unshelve.
+    2: { intros. apply Hspred'. apply Hspred. auto. }
+    exists q, Hq'. split; auto. split; auto.
+    - eapply hlte_perm2_transitive; eauto.
+    - intros [[]]. specialize (Hpre (exist _ _ (Hspred _ s1))). cbn in *.
+      intros. apply Hpre; auto.
+      red in H0. apply H0 in H2. cbn in H2. apply H2.
   Qed.
-*)
-
-  (* Definition lowned_Perms l ls Hsub P : Perms2 := *)
-  (*   meet_Perms2 (fun R => exists c p Hp, p ∈2 P /\ R = singleton_Perms2 _ (owned c l ls (Hsub c) p Hp)). *)
 
   Lemma lowned_perm_Perms c l ls Hsub p Hp P :
     p ∈2 P ->
