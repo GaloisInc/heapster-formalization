@@ -18,6 +18,10 @@ From Heapster2 Require Import
      Typing
      PermType.
 
+From ITree Require Import
+     ITree
+     Eq.Eqit.
+
 From Paco Require Import
      paco.
 
@@ -570,17 +574,183 @@ Section LifetimePerms.
       rewrite (ProofIrrelevance.proof_irrelevance _ i i0). reflexivity.
   Qed.
 
+  Lemma obvious l ls Hsub P Q :
+    entails (lowned_Perms' l ls Hsub bottom_Perms2 Q)
+            (lowned_Perms' l ls Hsub P Q).
+  Proof.
+    intros c p' H c' p Hp. cbn in H.
+    specialize (H c' p I). apply H.
+  Qed.
+
+  Lemma typing_end l ls Hsub P Q :
+    @typing Si Ss LifetimeClauses interp_LifetimeClauses _ _
+      (P *2 (lowned_Perms' l ls Hsub P Q))
+      (fun _ _ => Q)
+      (endLifetime l)
+      (Ret tt).
+  Proof.
+    intros c p' c1 c2 Hc (p & lowned' & Hp & Hl & Hlte) Hpre.
+    specialize (Hl c p Hp). destruct Hl as (Hspred & q & Hq' & Hq & Hhlte & Hpre').
+    unfold endLifetime. unfold id.
+    rewritebisim @bind_trigger.
+    pstep. econstructor; eauto; try reflexivity. cbn. reflexivity.
+
+    pose proof Hpre as Hpre''.
+    apply Hlte in Hpre. destruct Hpre as (_ & ? & _). apply Hhlte in H. rewrite H.
+    rewritebisim @bind_trigger.
+    econstructor; unfold id. eauto.
+    cbn in *. apply Hlte. constructor 1. right.
+    apply Hhlte. cbn. right.
+    {
+      rewrite lGetPut.
+      split; [| split].
+      - admit.
+      - unfold lifetime. apply nth_error_replace_list_index_eq.
+      - red in Hq'. (* TODO update defn of nonLifetime *) admit.
+    }
+
+    2: {
+      assert (asdf: interp_LifetimeClauses c (lput c1 (replace_list_index (lget c1) l finished), c2)) by admit.
+
+      econstructor. 2: apply Hq.
+      Unshelve. 2: auto.
+      3: apply asdf.
+      specialize (Hpre' (exist (fun x : Si * Ss => interp_LifetimeClauses c x)
+                               (lput c1 (replace_list_index (lget c1) l finished), c2) asdf)).
+      cbn in *.
+      erewrite (ProofIrrelevance.proof_irrelevance _ asdf).
+      apply Hpre'. admit. admit. (* how is this even true here *)
+      admit.
+    }
+
+    (* ok plausible, since q should be inside the rely and guar of p' *)
+    admit.
+  Abort.
+
+  Lemma join_commut' c l ls Hsub p Hp powned asdf asdf' asdf'':
+    join_perm' (fun pp => exists q Hq, owned c l ls Hsub q Hq <= powned /\
+                                  pp = owned c l ls Hsub (p ** q) (nonLifetime_sep_conj _ _ _ Hp Hq)) asdf <=
+      owned c l ls Hsub (p ** (join_perm' (fun q => exists Hq, owned c l ls Hsub q Hq <= powned) asdf')) asdf''
+  .
+  Proof.
+    constructor.
+    - intros [[]] ? ? ?. cbn in *. destruct H0 as (? & ? & ? & ?). subst. cbn. auto.
+    - intros [[]] [[]] ? ? ?. cbn in *. destruct H0 as (? & ? & ? & ?). subst. cbn.
+      destruct H as (? & ? & ?). split; auto. split; auto.
+      intros. destruct H2; auto. split; auto.
+      apply H4. eauto.
+    - intros ? ? ?. cbn in H. induction H. 2: etransitivity; eauto.
+      destruct H as (? & ? & ?). destruct H as (q & Hq & Hlte & ?). subst.
+      destruct x, y, x, x0. cbn in *.
+      destruct H0; auto.
+      right. destruct H as (? & ? & ?). split; auto. split; auto.
+      (* constructor. right. constructor. eexists. split. exists q, Hq. split; auto. *)
+      cbn.
+      clear H0.
+      remember (exist _ _ i). remember (exist _ _ i0).
+      revert s s0 s1 s2 i i0 H Heqs3 Heqs4. clear asdf asdf' asdf''.
+      induction H1; intros; subst.
+      + constructor 1. destruct H; auto.
+        right. constructor 1. eexists. split; eauto.
+      + destruct y, x.
+        specialize (IHclos_trans2 s3 s4). specialize (IHclos_trans1 s s0 s3 s4).
+        assert (Lifetimes_lte (lget s3) (lget s1)).
+        {
+          clear IHclos_trans1 IHclos_trans2 H H1_ s s0 i Hlte powned.
+          remember (exist _ _ i1). remember (exist _ _ i0).
+          revert s1 s2 s3 s4 i0 i1 Heqs Heqs0.
+          rename H1_0 into H.
+          induction H; intros; subst.
+          - destruct H.
+            + apply Hp in H. cbn in *. rewrite H. reflexivity.
+            + apply Hq in H. cbn in *. rewrite H. reflexivity.
+          - subst. destruct y, x. specialize (IHclos_trans1 s s0 s3 s4).
+            etransitivity. eapply IHclos_trans1; eauto.
+            eapply IHclos_trans2; eauto.
+        }
+        assert (Lifetimes_lte (lget s) (lget s3)).
+        {
+          clear IHclos_trans1 IHclos_trans2 H H0 H1_0 s1 s2 i0 Hlte powned.
+          remember (exist _ _ i1). remember (exist _ _ i).
+          revert s s0 s3 s4 i i1 Heqs1 Heqs2.
+          rename H1_ into H.
+          induction H; intros; subst.
+          - destruct H.
+            + apply Hp in H. cbn in *. rewrite H. reflexivity.
+            + apply Hq in H. cbn in *. rewrite H. reflexivity.
+          - subst. destruct y, x. specialize (IHclos_trans1 s s0 s1 s2).
+            etransitivity. eapply IHclos_trans1; eauto.
+            eapply IHclos_trans2; eauto.
+        }
+        econstructor 2; eauto.
+  Qed.
+
+
+  (*
+    Lemma join_commut c l ls Hsub p Hp powned asdf asdf' asdf'':
+    join_perm' (fun pp => exists q Hq, owned c l ls Hsub q Hq <= powned /\
+                                  pp = owned c l ls Hsub (p ** q) (nonLifetime_sep_conj _ _ _ Hp Hq)) asdf <=
+      owned c l ls Hsub (p ** (join_perm' (fun pp => exists q Hq, owned c l ls Hsub q Hq <= powned /\
+                        pp = owned c l ls Hsub q Hq) asdf')) asdf''
+  .
+  Proof.
+    constructor.
+    - intros [[]] ? ? ?. cbn in *. destruct H0 as (? & ? & ? & ?). subst. cbn. auto.
+    - intros [[]] [[]] ? ? ?. cbn in *. destruct H0 as (? & ? & ? & ?). subst. cbn.
+      destruct H as (? & ? & ?). split; auto. split; auto.
+      intros.
+      destruct H2; auto. split; auto.
+      specialize (H4 (owned c l ls Hsub x x0)).
+      cbn in H4. apply H4; auto. do 2 eexists. split; eauto.
+    - intros ? ? ?. cbn in H. induction H. 2: etransitivity; eauto.
+      destruct H as (? & ? & ?). destruct H as (q & Hq & Hlte & ?). subst.
+      destruct x, y, x, x0. cbn in *.
+      destruct H0; auto.
+      right. destruct H as (? & ? & ?). split; auto. split; auto.
+      (* constructor. right. constructor. eexists. split. exists q, Hq. split; auto. *)
+      cbn.
+      remember (exist _ _ i). remember (exist _ _ i0).
+      revert s s0 s1 s2 i i0 H H0 Heqs3 Heqs4. clear asdf asdf' asdf''.
+      induction H1; intros; subst.
+      + constructor 1. destruct H; auto.
+        right. constructor 1. eexists. split. exists q, Hq. split; auto. cbn.
+        right. auto.
+      + destruct y, x.
+        specialize (IHclos_trans2 s3 s4). specialize (IHclos_trans1 s s0 s3 s4).
+        assert (Lifetimes_lte (lget s3) (lget s1)) by admit.
+        assert (Lifetimes_lte (lget s) (lget s3)) by admit.
+        econstructor 2.
+        2: eapply IHclos_trans2; eauto.
+        clear IHclos_trans2 H1_0 s1 s2 i0 H H0 H1.
+
+        eapply IHclos_trans1; eauto. admit. (* TODO: I think we need to do more case analysis here *)
+  Admitted.
+   *)
+
   Lemma foo l ls Hsub P Q R :
-    entails (P *2 (lowned_Perms l ls Hsub R Q))
-            (when_Perms l P *2 (lowned_Perms l ls Hsub (P *2 R) (P *2 Q))).
+    entails (P *2 (lowned_Perms' l ls Hsub R Q))
+            (when_Perms l P *2 (lowned_Perms' l ls Hsub (P *2 R) (P *2 Q))).
   Proof.
     intros c p' H. cbn in H.
-    destruct H as (p & powned & Hp & (? & (c' & r & q & Hq' & ? & Hq & ?) & asdf) & Hlte); subst.
-    destruct asdf as (Hspred & Hhlte).
+    destruct H as (p & powned & Hp & ? & Hlte); subst.
+    (* do 2 eexists. *)
+    eexists.
+    (* assert (Hpr : forall r, nonLifetime c r) by admit. *)
+    eexists (join_perm' (fun p' => exists q Hq, owned c l ls (Hsub c) q Hq <= powned /\
+                                       p' = owned c l ls (Hsub c) (p ** q) _) _).
+    split; [| split].
+    3: {
+      etransitivity. 2: apply Hlte. etransitivity.
+      apply sep_conj_perm_monotone. reflexivity. apply join_commut'.
+      etransitivity. apply convert. apply sep_conj_perm_monotone; [reflexivity |].
+      specialize (H c). unfold hlte_perm2 in H. setoid_rewrite restrict_same in H.
+    }
+    apply when_perm_Perms; auto.
+
     (* Set Printing All. *)
-    do 2 eexists. split; [| split].
-    2: { cbn. eexists. split.
-         - do 4 eexists. split. reflexivity. split.
+    (* do 2 eexists. split; [| split]. *)
+    2: { cbn. do 3 eexists. split.
+         - do 2 eexists. split. reflexivity. split.
            + exists p, (restrict _ _ _ Hspred q). split; auto.
              split. 2: reflexivity.
              eapply Perms2_upwards_closed. apply Hq.
