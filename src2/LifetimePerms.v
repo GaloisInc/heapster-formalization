@@ -487,9 +487,10 @@ Section LifetimePerms.
   Program Definition lowned_Perms' l ls Hsub (P Q : @Perms2 (Si * Ss)) : Perms2 :=
     {|
       in_Perms2 := fun spred x =>
-                     forall c (p : @perm {x : Si * Ss | interp_LifetimeClauses c x}),
+                     exists c Hspred,
+                     forall (p : @perm {x : Si * Ss | interp_LifetimeClauses c x}),
                        p ∈2 P ->
-                       exists Hspred (q : @perm {x : Si * Ss | interp_LifetimeClauses c x}) Hq,
+                       exists (q : @perm {x : Si * Ss | interp_LifetimeClauses c x}) Hq,
                          q ∈2 Q /\
                            hlte_perm2
                              (Si * Ss) spred (interp_LifetimeClauses c) Hspred
@@ -504,15 +505,14 @@ Section LifetimePerms.
     esplit. apply Hspred. apply H.
   Defined.
   Next Obligation.
-    (* Set Printing All. *)
-    specialize (H c p). destruct H as (Hspred' & q & Hq' & Hq & Hhlte & Hpre). auto.
-    eexists. Unshelve.
-    2: { intros. apply Hspred'. apply Hspred. auto. }
+    rename H into c. rename H1 into Hspred'.
+    exists c. eexists. Unshelve. 2: { auto. } intros p Hp.
+    specialize (H2 p). destruct H2 as (q & Hq' & Hq & Hhlte & Hpre); auto.
     exists q, Hq'. split; auto. split; auto.
     - eapply hlte_perm2_transitive; eauto.
     - intros [[]]. specialize (Hpre (exist _ _ (Hspred _ s1))). cbn in *.
       intros. apply Hpre; auto.
-      red in H0. apply H0 in H2. cbn in H2. apply H2.
+      red in H0. apply H0 in H1. cbn in H1. apply H1.
   Qed.
 
   Lemma lowned_perm_Perms c l ls Hsub p Hp P :
@@ -578,8 +578,10 @@ Section LifetimePerms.
     entails (lowned_Perms' l ls Hsub bottom_Perms2 Q)
             (lowned_Perms' l ls Hsub P Q).
   Proof.
-    intros c p' H c' p Hp. cbn in H.
-    specialize (H c' p I). apply H.
+    intros c p' H. cbn in H.
+    destruct H as (c' & Hspred & ?).
+    exists c', Hspred. intros.
+    specialize (H p I). apply H.
   Qed.
 
   Lemma typing_end l ls Hsub P Q :
@@ -590,7 +592,8 @@ Section LifetimePerms.
       (Ret tt).
   Proof.
     intros c p' c1 c2 Hc (p & lowned' & Hp & Hl & Hlte) Hpre.
-    specialize (Hl c p Hp). destruct Hl as (Hspred & q & Hq' & Hq & Hhlte & Hpre').
+    destruct Hl as (c' & Hspred & Hl).
+    specialize (Hl (restrict _ _ _ Hspred p) Hp). destruct Hl as (Hspred & q & Hq' & Hq & Hhlte & Hpre').
     unfold endLifetime. unfold id.
     rewritebisim @bind_trigger.
     pstep. econstructor; eauto; try reflexivity. cbn. reflexivity.
@@ -741,11 +744,41 @@ Section LifetimePerms.
     split; [| split].
     3: {
       etransitivity. 2: apply Hlte. etransitivity.
-      apply sep_conj_perm_monotone. reflexivity. apply join_commut'.
+      apply sep_conj_perm_monotone; [reflexivity |].
+      apply join_commut'.
       etransitivity. apply convert. apply sep_conj_perm_monotone; [reflexivity |].
       specialize (H c). unfold hlte_perm2 in H. setoid_rewrite restrict_same in H.
+      (* edestruct H as (? & ? & ? & ? & ? & ?). admit. *)
+      constructor.
+      - intros [[]]. cbn. admit.
+      - intros [[]] [[]]. cbn. intros. intuition. admit. admit.
+        destruct H2. apply H2 in H0. cbn in H0. apply H0; auto.
+      - intros [[]] [[]]. cbn. intros. destruct H0. rewrite H0. reflexivity.
+        intuition.
+        assert (lifetime (lget s) l = Some finished).
+        {
+          remember (exist _ _ i). remember (exist _ _ i0).
+          revert s s0 i s1 s2 i0 Heqs3 Heqs4 H1 H0.
+          induction H3; intros; subst.
+          - destruct H0 as (? & (? & ?) & ?). apply x0 in H3. cbn in *. rewrite H3. auto.
+          - destruct y, x.
+            eapply (IHclos_trans1 _ _ _ _ _ _ eq_refl eq_refl); eauto.
+            admit.
+            eapply (IHclos_trans2 _ _ _ _ _ _ eq_refl eq_refl); eauto.
+            admit.
+        }
+        remember (exist _ _ i). remember (exist _ _ i0).
+        revert s s0 i s1 s2 i0 Heqs3 Heqs4 H1 H0 H2.
+        induction H3; intros; subst.
+        + destruct H0. destruct H0. destruct H0. apply H0. right. intuition.
+        + destruct y, x.
+          etransitivity.
+          eapply (IHclos_trans1 _ _ _ _ _ _ eq_refl eq_refl); eauto. admit. admit.
+          eapply (IHclos_trans2 _ _ _ _ _ _ eq_refl eq_refl); eauto. admit. admit.
     }
     apply when_perm_Perms; auto.
+    intros ? ? ?.
+    eexists.
 
     (* Set Printing All. *)
     (* do 2 eexists. split; [| split]. *)
