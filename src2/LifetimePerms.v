@@ -175,7 +175,7 @@ Section LifetimePerms.
 
     Lemma when_monotone n p1 p2 Hp1 Hp2 : p1 <= p2 -> when n p1 Hp1 <= when n p2 Hp2.
     Proof.
-      intros. destruct H. constructor; simpl; intros.
+      intros. destruct H. constructor; cbn; intros.
       - destruct x, x. cbn in *. auto.
       - destruct x, y, x, x0. cbn in *. destruct H; auto.
       - destruct x, y, x, x0. cbn in *. destruct H; auto.
@@ -197,24 +197,26 @@ Section LifetimePerms.
       @perm { x : Si * Ss | interp_LifetimeClauses c x } :=
       {|
         (** [l] must be current *)
-        pre := fun x =>
-                 let '(si, _) := x in
-                 lifetime (lget si) l = Some current;
+        pre x :=
+        let '(si, _) := x in
+        lifetime (lget si) l = Some current;
+
         (** nobody else can change [l]. If [l] is finished, the rely of [p] holds *)
-        rely := fun x y =>
-                  let '(si, _) := x in
-                  let '(si', _) := y in
-                  Lifetimes_lte (lget si) (lget si') /\
-                    lifetime (lget si) l = lifetime (lget si') l /\
-                    (lifetime (lget si) l = Some finished -> rely p x y);
+        rely x y :=
+        let '(si, _) := x in
+        let '(si', _) := y in
+        Lifetimes_lte (lget si) (lget si') /\
+          lifetime (lget si) l = lifetime (lget si') l /\
+          (lifetime (lget si) l = Some finished -> rely p x y);
+
         (** If [l] is finished afterwards, the guar of [p] holds *)
-        guar := fun x y =>
-                  let '(si, _) := x in
-                  let '(si', _) := y in
-                  x = y \/
-                    Lifetimes_lte (lget si) (lget si') /\
-                      lifetime (lget si') l = Some finished /\
-                      guar p x y;
+        guar x y :=
+        let '(si, _) := x in
+        let '(si', _) := y in
+        x = y \/
+          Lifetimes_lte (lget si) (lget si') /\
+            lifetime (lget si') l = Some finished /\
+            guar p x y;
       |}.
     Next Obligation.
       constructor; repeat intro.
@@ -629,6 +631,7 @@ Section LifetimePerms.
     (* ok plausible, since q should be inside the rely and guar of p' *)
     admit.
   Abort.
+*)
 
   Lemma join_commut' c l ls Hsub p Hp powned asdf asdf' asdf'':
     join_perm' (fun pp => exists q Hq, owned c l ls Hsub q Hq <= powned /\
@@ -747,6 +750,7 @@ Section LifetimePerms.
       apply sep_conj_perm_monotone; [reflexivity |].
       apply join_commut'.
       etransitivity. apply convert. apply sep_conj_perm_monotone; [reflexivity |].
+      destruct H as (? & ? & ?).
       specialize (H c). unfold hlte_perm2 in H. setoid_rewrite restrict_same in H.
       (* edestruct H as (? & ? & ? & ? & ? & ?). admit. *)
       constructor.

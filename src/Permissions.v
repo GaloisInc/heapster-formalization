@@ -137,6 +137,45 @@ Section Permissions.
 
   Ltac respects := eapply pre_respects; eauto.
 
+  Program Definition join_perm' (ps: perm -> Prop) (H: exists p, ps p) : perm :=
+    {|
+      pre := fun x => forall p, ps p -> pre p x;
+      rely := fun x y => forall p, ps p -> rely p x y;
+      guar  := clos_trans _ (fun x y => exists p, ps p /\ guar p x y);
+    |}.
+  Next Obligation.
+    constructor; repeat intro.
+    - reflexivity.
+    - etransitivity; eauto.
+  Qed.
+  Next Obligation.
+    constructor.
+    - constructor. eexists. split. apply H0. reflexivity.
+    - repeat intro. econstructor 2; eauto.
+  Qed.
+  Next Obligation.
+    respects.
+  Qed.
+
+  Lemma lte_join_perm' (ps : perm -> Prop) p (H : ps p) :
+    p <= join_perm' ps (ex_intro _ p H).
+  Proof.
+    constructor; cbn; intros; auto.
+    constructor 1. eexists. split; eauto.
+  Qed.
+
+  Lemma join_perm'_min (ps : perm -> Prop) (H : exists p, ps p) r :
+    (forall p, ps p -> p <= r) ->
+    join_perm' ps H <= r.
+  Proof.
+    intros Hlte. constructor; cbn; intros; auto.
+    - apply Hlte; auto.
+    - apply Hlte; auto.
+    - induction H0; auto.
+      + destruct H0 as (p' & ? & ?). eapply Hlte; eauto.
+      + transitivity y; auto.
+  Qed.
+
   Program Definition join_perm (p q: perm) : perm :=
     {|
     pre := fun x => pre p x /\ pre q x;

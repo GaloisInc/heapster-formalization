@@ -72,81 +72,43 @@ Proof.
   - destruct x, y, z; cbn in *; intuition; destruct s, s0; intuition.
 Qed.
 
-(** a [Lifetime] contains a number for disambiguation and its direct parent [Lifetime]s *)
-Definition Lifetime := rose.
+Definition Lifetimes := list status.
 
-Definition parent_of (l1 l2 : Lifetime) : Prop :=
-  l1 = l2 \/
-    parent l1 l2 = true.
+(* Definition parent_of (l1 l2 : Lifetime) : Prop := *)
+(*   l1 = l2 \/ *)
+(*     parent l1 l2 = true. *)
 
-Global Instance parent_of_trans : Transitive parent_of.
-Proof.
-  repeat intro. destruct H, H0; subst; unfold parent_of; auto.
-  right. eapply parent_trans; eauto.
-Qed.
+(* Global Instance parent_of_trans : Transitive parent_of. *)
+(* Proof. *)
+(*   repeat intro. destruct H, H0; subst; unfold parent_of; auto. *)
+(*   right. eapply parent_trans; eauto. *)
+(* Qed. *)
 
-Definition index (l : Lifetime) : nat :=
-  match l with
-  | node index _ => index
-  end.
+(* Definition index (l : Lifetime) : nat := *)
+(*   match l with *)
+(*   | node index _ => index *)
+(*   end. *)
 
 (* Definition parents (l : Lifetime) : Parents := *)
 (*   match l with *)
 (*   | node _ parents => parents *)
 (*   end. *)
 
-Module K <: DecidableType.
-  Definition t := Lifetime.
-  Definition eq := @eq Lifetime.
-  Definition eq_refl := @eq_refl Lifetime.
-  Definition eq_sym := @eq_sym Lifetime.
-  Definition eq_trans := @eq_trans Lifetime.
-  Definition eq_dec := rose_eq_dec.
-End K.
-
-Module Import M := FMapWeakList.Make(K).
-Module P := WProperties_fun K M.
-Module F := P.F.
-
-Definition mapT := M.t status.
-
-Record Lifetimes : Type :=
-  {
-    m : mapT;
-
-    (** Properties *)
-    (* (* maybe not needed *) *)
-    (* acyclic_keys : forall l, In l m -> acyclic l; *)
-
-    parents_exist : forall l p, In l m ->
-                           parent_of p l ->
-                           In p m;
-
-    parents_subsume : forall l p, In l m ->
-                             parent_of p l ->
-                             statusOf_subsumes (find p m) (find l m);
-  }.
-
-Definition Lifetimes_In (l : Lifetime) (ls : Lifetimes) : Prop :=
-    In l (m ls).
-
 (* Maybe do a lookup on l for its parents' statuses. This will implicitly end all children lifetimes hwen you end a parent lifetime *)
 
 (* Alternatively make ls a total map, so we can keep track of *all* children *)
-Definition statusOf (l : Lifetime) (ls : Lifetimes) : option status :=
-  (* map through the parnets of l, and look for any that are in ls. If any of those are finished, then we should return finished too *)
-  find l (m ls).
+Definition statusOf (l : nat) (ls : Lifetimes) : option status :=
+  nth_error ls l.
 
 Definition Lifetimes_lte (ls ls' : Lifetimes) : Prop :=
-  forall l, (In l (m ls) -> In l (m ls')) /\ statusOf_lte (statusOf l ls) (statusOf l ls').
+  forall l, statusOf_lte (statusOf l ls) (statusOf l ls').
+
 
 Global Instance Lifetimes_lte_preorder : PreOrder Lifetimes_lte.
 Proof.
   constructor; repeat intro.
-  - split; auto. reflexivity.
-  - split.
-    + intros. apply H0. apply H; auto.
-    + edestruct H, H0. etransitivity; eauto.
+  - destruct (statusOf l x); [destruct s |]; cbn; auto.
+  - specialize (H l). specialize (H0 l). etransitivity; eauto.
 Qed.
 
 (*
@@ -169,42 +131,9 @@ Qed.
   Admitted.
  *)
 
-Program Definition endLifetime (l : Lifetime) (ls : Lifetimes) (* and some proof that all the parents are finished? *) : Lifetimes.
+Program Definition endLifetime (l : nat) (ls : Lifetimes) (* and some proof that all the parents are finished? *) : Lifetimes.
 Admitted.
 
-(** [l1] subsumes [l2] *)
-Definition subsumes (l1 l2 : Lifetime) : Prop :=
-  l1 = l2 \/ parent_of l1 l2.
-
-#[global] Instance subsumes_preorder : PreOrder subsumes.
-Proof.
-  constructor; repeat intro; cbn; auto.
-  - left; auto.
-  - unfold subsumes in *. destruct H, H0; subst; auto. right.
-    etransitivity; eauto.
-Qed.
-
-Lemma parent_find l1 l2 l s :
-  parent_of l1 l2 ->
-  @find status l1 (m l) = Some s ->
-  @find status l2 (m l) = Some s.
-Proof.
-  intros.
-  destruct l. cbn in *.
-Admitted.
-
-Lemma subsumes_status l :
-  forall l1 l2, subsumes l1 l2 ->
-           statusOf_subsumes (statusOf l1 l) (statusOf l2 l).
-Proof.
-    intros. unfold subsumes in H. destruct H; subst; auto.
-    reflexivity.
-    destruct (F.In_dec (m l) l2).
-    - apply parents_subsume; auto.
-    - unfold statusOf. apply F.not_find_in_iff in n. rewrite n.
-      destruct (find l1 (m l)) eqn:?; cbn; auto.
-      destruct s; auto. erewrite parent_find in n; eauto. inversion n.
-Qed.
 
 (*
 Variant Lifetime := current | finished.
