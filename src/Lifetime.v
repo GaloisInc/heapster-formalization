@@ -103,13 +103,41 @@ Definition statusOf (l : nat) (ls : Lifetimes) : option status :=
 Definition Lifetimes_lte (ls ls' : Lifetimes) : Prop :=
   forall l, statusOf_lte (statusOf l ls) (statusOf l ls').
 
-
 Global Instance Lifetimes_lte_preorder : PreOrder Lifetimes_lte.
 Proof.
   constructor; repeat intro.
   - destruct (statusOf l x); [destruct s |]; cbn; auto.
   - specialize (H l). specialize (H0 l). etransitivity; eauto.
 Qed.
+
+Lemma Lifetimes_lte_finished ls l :
+  Lifetimes_lte ls (replace_list_index ls l finished).
+Proof.
+  intro l'. destruct (Compare_dec.lt_eq_lt_dec l l') as [[? | ?] | ?]; subst; unfold statusOf.
+  - destruct (Compare_dec.dec_lt l (length ls)).
+    + erewrite nth_error_replace_list_index_neq; eauto. reflexivity. lia.
+    + erewrite nth_error_replace_list_index_neq_after; try lia.
+      erewrite (proj2 (nth_error_None ls l')). reflexivity. lia.
+  - rewrite nth_error_replace_list_index_eq.
+    destruct (nth_error ls l'); [destruct s |]; constructor.
+  - destruct (Compare_dec.dec_lt l (length ls)).
+    + erewrite nth_error_replace_list_index_neq; eauto. reflexivity. lia.
+    + destruct (Compare_dec.dec_lt l' (length ls)).
+      * erewrite nth_error_replace_list_index_neq_before; eauto. reflexivity. lia.
+      * erewrite nth_error_replace_list_index_neq_new; try lia.
+        destruct (nth_error ls l'); [destruct s |]; cbn; auto.
+Qed.
+
+Lemma Lifetimes_lte_replace_list_index ls ls' l s :
+  Lifetimes_lte ls ls' ->
+  Lifetimes_lte (replace_list_index ls l s) (replace_list_index ls' l s).
+Proof.
+  repeat intro.
+  destruct (Peano_dec.dec_eq_nat l l0).
+  - subst. red in H. admit.
+  - admit.
+Admitted.
+
 
 (*
   Program Definition newLifetime (ls : Lifetimes) (ps : list Lifetime) (H : forall p, In p parents -> inL p ls) :
