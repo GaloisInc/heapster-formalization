@@ -36,17 +36,18 @@ Section LifetimePerms.
   Context `{Hlens: Lens Si Lifetimes}.
 
   Definition nonLifetime (p : @perm (Si * Ss)) : Prop :=
-    (forall x y, guar p x y -> lget (fst x) = lget (fst y)) /\
-      (forall si si' ss ss' l s, guar p (si, ss) (si', ss') ->
-                            guar p ((lput si (replace_list_index (lget si) l s)), ss)
-                                 ((lput si' (replace_list_index (lget si') l s)), ss')).
+    (forall x y, guar p x y -> lget (fst x) = lget (fst y)).
+  (* /\ *)
+  (*     (forall si si' ss ss' l s, guar p (si, ss) (si', ss') -> *)
+  (*                           guar p ((lput si (replace_list_index (lget si) l s)), ss) *)
+  (*                                ((lput si' (replace_list_index (lget si') l s)), ss')). *)
 
 
   Lemma clos_trans_nonLifetime p q (Hp : nonLifetime p) (Hq : nonLifetime q) x y :
     Relation_Operators.clos_trans (Si * Ss) (guar p \2/ guar q) x y ->
     lget (fst x) = lget (fst y).
   Proof.
-    repeat intro. cbn in H. induction H.
+    repeat intro. induction H.
     - destruct H; [apply Hp | apply Hq]; auto.
     - etransitivity; eauto.
   Qed.
@@ -54,31 +55,21 @@ Section LifetimePerms.
   Lemma nonLifetime_sep_conj p q (Hp : nonLifetime p) (Hq : nonLifetime q) :
     nonLifetime (p ** q).
   Proof.
-    repeat intro. split.
-    - apply (clos_trans_nonLifetime p q); auto.
-    - intros. remember (si, ss). remember (si', ss').
-      revert si ss si' ss' Heqp0 Heqp1. induction H; intros; subst.
-      + destruct H; constructor; [left; apply Hp | right; apply Hq]; auto.
-      + destruct y. etransitivity; eauto.
+    repeat intro.
+    apply (clos_trans_nonLifetime p q); auto.
   Qed.
 
   Lemma nonLifetime_bottom : nonLifetime bottom_perm.
   Proof.
-    split.
-    - repeat intro; cbn in *; subst; auto.
-    - repeat intro; cbn in *; inversion H; subst; auto.
+    repeat intro; cbn in *; subst; auto.
   Qed.
 
   (* Not true with the new second clause of nonLifetime, but it's not needed? *)
   Lemma nonLifetime_lte p q :
     nonLifetime p -> q <= p -> nonLifetime q.
   Proof.
-    split.
-    - repeat intro. apply H0 in H1. apply H; auto.
-    - repeat intro. destruct H.
-      apply H0 in H1. specialize (H _ _ H1). specialize (H2 si si' ss ss' l s H1).
-      cbn in H. setoid_rewrite H in H2.
-  Abort.
+    repeat intro. apply H0 in H1. apply H; auto.
+  Qed.
 
   (* Definition lifetime_invariant x y := *)
   (*   (forall n n', subsumes n' n (lget x) (lget x) -> *)
@@ -618,7 +609,10 @@ Section LifetimePerms.
     repeat intro. constructor.
     - intros [] [] ?. cbn in *. apply H in H0. cbn in H0. intuition.
     - intros [] [] ?. cbn in *. destruct H0. rewrite H0. reflexivity.
-      destruct H0 as (? & ? & ? & ?). apply H. cbn. right. intuition. rewrite H0. reflexivity.
+      destruct H0 as (? & ? & ? & ?). apply H. cbn. right. intuition.
+      rewrite H0. reflexivity.
+      do 2 (rewrite replace_list_index_eq; auto).
+      do 2 rewrite lPutGet; auto.
   Qed.
 
   Lemma typing_end l P Q :
@@ -702,68 +696,73 @@ Section LifetimePerms.
    *)
 
   Program Definition join_owned_perm
-          (P : @Perms (Si * Ss)) Q l powned (r : @perm (Si * Ss)) (Hr : nonLifetime r)
+          (P : @Perms (Si * Ss)) Q l powned (R : @Perms (Si * Ss))
           (H :
             forall (p : perm) (Hp : nonLifetime p),
               p ∈ P ->
               {q : perm | {Hq : nonLifetime q |
                             q ∈ Q /\ owned l q Hq <= powned /\ (forall s, pre p s -> pre powned s -> pre q s)}})
           Hinhab : perm :=
-    @join_perm' (Si * Ss) (fun p' => exists p (Hp : p ∈ P) (Hp' : nonLifetime p), _) Hinhab.
+    @join_perm' (Si * Ss) (fun p' => exists p (Hp : p ∈ P) (Hp' : nonLifetime p) r (Hr : r ∈ R) (Hr' : nonLifetime r), _) Hinhab.
   Next Obligation.
     specialize (H p Hp' Hp). destruct H as (q & Hq' & Hq & Hlte & Hpre).
-    apply (p' = owned l (r ** q) (nonLifetime_sep_conj _ _ Hr Hq')).
+    apply (p' = owned l (r ** q) (nonLifetime_sep_conj _ _ Hr' Hq')).
   Defined.
   Program Definition owned_join_perm
-          (P : @Perms (Si * Ss)) Q l powned r (Hr : nonLifetime r)
+          (P : @Perms (Si * Ss)) Q l powned R
           (H :
             forall (p : perm) (Hp : nonLifetime p),
               p ∈ P ->
               {q : perm | {Hq : nonLifetime q |
                             q ∈ Q /\ owned l q Hq <= powned /\ (forall s, pre p s -> pre powned s -> pre q s)}})
-          Hinhab : perm :=
-    owned l (r ** @join_perm' (Si * Ss) (fun p' => exists p (Hp : p ∈ P) (Hp' : nonLifetime p), _) Hinhab) _.
+          Hinhab Hinhab' : perm :=
+    owned l (@join_perm' (Si * Ss) (fun r => r ∈ R /\ nonLifetime r) Hinhab' **
+             @join_perm' (Si * Ss) (fun p' => exists p (Hp : p ∈ P) (Hp' : nonLifetime p), _) Hinhab) _.
   Next Obligation.
     specialize (H p Hp' Hp). destruct H as (q & Hq' & Hq & Hlte & Hpre).
     apply (p' = q).
   Defined.
   Next Obligation.
-    (* eapply (clos_trans_nonLifetime _ _ _ _ _ _ H0). *)
-    (* Unshelve. all: auto. *)
-    (* repeat intro. cbn in H1. *)
-    (* induction H1; auto. *)
-    (* 2: etransitivity; eauto. *)
-    (* destruct H1 as (? & (? & ? & ? & ?) & ?). red in H1. *)
-    (* destruct (H x2 x4 x3) as (? & ? & ? & ? & ?). subst. apply x6; auto. *)
+    eapply (clos_trans_nonLifetime _ _ _ _ _ _ H0).
+    Unshelve.
+    - repeat intro. admit.
+    - repeat intro. cbn in H1.
+      induction H1; auto.
+      2: etransitivity; eauto.
+      destruct H1 as (? & (? & ? & ? & ?) & ?). red in H1.
+      destruct (H x2 x4 x3) as (? & ? & ? & ? & ?). subst. apply x6; auto.
   Admitted.
 
-  Lemma join'_owned_commut_sig P Q l powned r Hr H Hinhab1 Hinhab2 :
-    join_owned_perm P Q l powned r Hr H Hinhab1 <=
-      owned_join_perm P Q l powned r Hr H Hinhab2.
+  Lemma join_owned_commut_sig P Q l powned R H Hinhab1 Hinhab2 Hinhab3:
+    join_owned_perm P Q l powned R H Hinhab1 <=
+      owned_join_perm P Q l powned R H Hinhab2 Hinhab3.
   Proof.
     constructor.
     - cbn. intros [] ? x ?.
-      destruct H1 as (p & Hp & Hp' & ?). red in H1.
+      destruct H1 as (p & Hp & Hp' & r & Hr & Hr' & ?). red in H1.
       destruct H as (q & Hq' & Hq & Hlte & Hpre). subst. auto.
     - cbn. intros [] [] ? x ?.
       destruct H0 as (? & ? & ?).
-      destruct H1 as (p & Hp & Hp' & ?).
+      destruct H1 as (p & Hp & Hp' & r & Hr & Hr' & ?).
       unfold join_owned_perm_obligation_1 in *.
       unfold owned_join_perm_obligation_1 in *.
       destruct H as (q & Hq' & Hq & Hlte & Hpre) eqn:?. subst.
       cbn. split; [| split]; auto.
-      intros. apply H3 in H1. destruct H1. split; auto.
-      apply H4. do 3 eexists. rewrite Heqs3. auto.
+      intros. specialize (H3 H1). destruct H3. split.
+      + apply H3; auto.
+      + apply H4. exists p, Hp, Hp'. rewrite Heqs3. reflexivity.
     - intros ? ? ?. cbn in H0. induction H0. 2: etransitivity; eauto.
-      destruct H0 as (? & (p & Hp & Hp' & ?) & ?). red in H0.
+      destruct H0 as (? & (p & Hp & Hp' & r & Hr & Hr' & ?) & ?). red in H0.
       destruct (H p Hp' Hp) as (q & Hq' & Hq & Hlte & Hpre) eqn:?. subst.
       destruct x, y. cbn. destruct H1; auto. right.
       destruct H0 as (? & ? & ?). split; [| split]; auto.
       remember (lput _ _, s0). remember (lput _ _, s2).
       revert s s0 s1 s2 Heqp0 Heqp1 H0 H1.
       induction H2; intros; subst.
-      + constructor 1. destruct H0; auto. right. constructor 1. exists q.
-        split; auto. do 3 eexists. red. rewrite Heqs. auto.
+      + constructor 1. destruct H0.
+        * left. constructor. exists r. auto.
+        * right. constructor. exists q. split; auto.
+          exists p, Hp, Hp'. red. rewrite Heqs. reflexivity.
       + destruct y.
         assert (s3 = lput s3 (replace_list_index (lget s3) l finished)) by admit.
         rewrite H2 in *.
@@ -817,17 +816,40 @@ Section LifetimePerms.
           -- admit.
   Admitted.
 
+  (*
+
+   ptr(W, p) = { write_perm(p |-> v) | forall v }
+
+   ptr(W, p) * lowned l ⊥ ->
+
+   [l]ptr(W, p) * lowned l (ptr(W, p))
+
+
+   *)
+
   Lemma foo l P Q R (Hinhab : exists q, q ∈ Q /\ nonLifetime q) :
     P * lowned_Perms' l Q R ⊨
-    when_Perms l P * lowned_Perms' l (P * Q) (P * R).
+    when_Perms l P * lowned_Perms' l (when_Perms l P * Q) (P * R).
   Proof.
     intros p0 (p & powned & Hp & Howned & Hlte). cbn in Howned.
     assert (Hp' : nonLifetime p) by admit.
-    eexists (when l p Hp').
-
+    (* eexists (when l p Hp'). *)
     assert (forall (q : perm) (Hq' : nonLifetime q), q ∈ Q -> {r : perm | { Hr : nonLifetime r | r ∈ R /\ owned l r Hr <= powned /\ (forall s, pre q s -> pre powned s -> pre r s)}}) by admit.
     clear Howned.
-    eexists (join_owned_perm Q _ l powned p Hp' X _).
+
+    (* assert (exists r, r ∈ R /\ nonLifetime r). *)
+    (* { *)
+    (*   destruct Hinhab as (? & ? & ?). destruct (X x H0 H) as (? & ? & ? & ?). *)
+    (*   exists x0. split; auto. *)
+    (* } *)
+    (* assert (nonLifetime (join_perm' (in_Perms R /1\ nonLifetime) H)) by admit. *)
+
+    (* \/ {x, owned x <= powned} owned (p * x) *)
+    (* <= *)
+    (* owned (p * \/....x) *)
+
+    eexists (when l (join_perm' (in_Perms P /1\ nonLifetime) _) _).
+    eexists (join_owned_perm Q _ l powned P X _).
     (* Unshelve. *)
     (* 2: { cbn. unfold join_owned_perm_obligation_1. do 4 eexists. *)
     (*      (* use the fact taht Q inhab *) *)
@@ -843,15 +865,18 @@ Section LifetimePerms.
 
     (* eexists (join_perm' (fun p' => exists q Hq, owned l q Hq <= powned /\ *)
     (*                                       p' = owned l (p ** q) _) _). *)
-    split; [apply when_perm_Perms | split]; auto.
-    2: { etransitivity; eauto.
+    split; [| split]; auto.
+    3: { etransitivity; eauto.
          etransitivity. apply sep_conj_perm_monotone; [reflexivity |].
-         apply join'_owned_commut_sig.
+         apply join_owned_commut_sig.
+
+         unfold owned_join_perm.
 
          etransitivity. apply convert.
-         apply sep_conj_perm_monotone; [reflexivity |].
+         (* apply sep_conj_perm_monotone. *)
          unfold owned_join_perm_obligation_1.
-
+         admit.
+         (*
          constructor.
          - intros [] ?.
            destruct Hinhab as (? & ? & ?).
@@ -879,7 +904,9 @@ Section LifetimePerms.
              admit. admit. (* ok since the r is nonLifetime *)
              eapply (IHclos_trans2 s3 s4 s1 s2); auto.
              admit. admit.
+          *)
     }
+    apply when_perm_Perms. admit.
     cbn.
     intros ? ? (? & ? & ? & ? & ?).
     destruct Hinhab as (q & Hq & Hq').
