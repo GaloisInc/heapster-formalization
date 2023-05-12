@@ -780,14 +780,14 @@ Section Permissions.
 
   Lemma lte_l_sep_conj_Perms : forall P Q, P ⊑ P * Q.
   Proof.
-    intros P Q p' ?. destruct H as [p [q [? [? ?]]]].
+    intros P Q p' ?. destruct H as (p & q & Hp & Hq & ?).
     eapply Perms_upwards_closed; eauto.
     etransitivity; eauto. apply lte_l_sep_conj_perm.
   Qed.
 
   Lemma lte_r_sep_conj_Perms : forall P Q, Q ⊑ P * Q.
   Proof.
-    intros P Q q' ?. destruct H as [p [q [? [? ?]]]].
+    intros P Q p' ?. destruct H as (p & q & Hp & Hq & ?).
     eapply Perms_upwards_closed; eauto.
     etransitivity; eauto. apply lte_r_sep_conj_perm.
   Qed.
@@ -795,9 +795,9 @@ Section Permissions.
   Lemma sep_conj_Perms_bottom_identity : forall P, bottom_Perms * P ≡ P.
   Proof.
     constructor; repeat intro.
-    - exists bottom_perm, p. split; simpl; [auto | split; auto].
-      rewrite sep_conj_perm_commut. apply sep_conj_perm_bottom.
-    - destruct H as [? [? [_ [? ?]]]].
+    - exists bottom_perm, p. split; cbn; [| split]; auto.
+      + rewrite sep_conj_perm_commut. apply sep_conj_perm_bottom.
+    - destruct H as (? & ? & ? & ? & ?).
       eapply (Perms_upwards_closed P); eauto.
       etransitivity; eauto. apply lte_r_sep_conj_perm.
   Qed.
@@ -820,16 +820,18 @@ Section Permissions.
       q ∈ Q ->
       p ** q ∈ P * Q.
   Proof.
-    intros. exists p, q. split; auto. split; auto. reflexivity.
+    intros. exists p, q. split; [| split; [| split]]; auto.
   Qed.
 
   Lemma sep_conj_Perms_commut : forall P Q, P * Q ≡ Q * P.
   Proof.
     split; repeat intro.
-    - destruct H as [q [p' [? [? ?]]]].
-      exists p', q. split; [| split]; auto. etransitivity; eauto. apply sep_conj_perm_commut.
-    - destruct H as [p' [q [? [? ?]]]].
-      exists q, p'. split; [| split]; auto. etransitivity; eauto. apply sep_conj_perm_commut.
+    - destruct H as (q & p' & Hq & Hp & ?).
+      exists p', q. split; [| split]; auto.
+      etransitivity; eauto. apply sep_conj_perm_commut.
+    - destruct H as (p' & q & Hp & Hq & ?).
+      exists q, p'. split; [| split]; auto.
+      etransitivity; eauto. apply sep_conj_perm_commut.
   Qed.
 
   Lemma sep_conj_Perms_assoc : forall P Q R, P * (Q * R) ≡ (P * Q) * R.

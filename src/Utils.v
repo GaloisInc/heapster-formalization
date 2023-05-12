@@ -28,15 +28,27 @@ Fixpoint replace_list_index {A : Type} (l : list A) (n : nat) (new : A) : list A
   end.
 
 (** Some properties about [replace_list_index] and [nth_error] *)
-Lemma replace_list_index_length A (l : list A) n (a : A) :
+Lemma replace_list_index_length A (l l' : list A) n (a : A) :
+  length l = length l' ->
   n < length l ->
-  length l = length (replace_list_index l n a).
+  length l = length (replace_list_index l' n a).
 Proof.
-  revert l. induction n; intros l Hl.
-  - destruct l; auto. inversion Hl.
-  - destruct l.
-    + inversion Hl.
-    + simpl in Hl. apply PeanoNat.Nat.succ_lt_mono in Hl. simpl. f_equal. auto.
+  revert l l'. induction n; intros l l' Hlen Hlt.
+  - destruct l, l'; try inversion Hlen; auto. inversion Hlt.
+  - destruct l, l'; try inversion Hlen.
+    + inversion Hlt.
+    + cbn in Hlt. apply PeanoNat.Nat.succ_lt_mono in Hlt. cbn. f_equal. auto.
+Qed.
+
+Lemma replace_list_index_length_bound A (l : list A) n a :
+  n < length (replace_list_index l n a).
+Proof.
+  revert l.
+  induction n; intros.
+  - destruct l; cbn; auto. apply PeanoNat.Nat.lt_0_succ.
+  - destruct l; cbn; auto.
+    + apply Arith_prebase.lt_n_S_stt. specialize (IHn []). auto.
+    + apply Arith_prebase.lt_n_S_stt. auto.
 Qed.
 
 Lemma nth_error_replace_list_index_neq A n n' (l : list A) (a : A) :

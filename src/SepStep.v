@@ -3,7 +3,10 @@ From Heapster Require Import
      Permissions.
 
 From Coq Require Import
-     Classes.RelationClasses.
+     Classes.Morphisms
+     Classes.RelationClasses
+     Relations.Relation_Operators
+     Relations.Operators_Properties.
 (* end hide *)
 
 Section step.
@@ -12,6 +15,13 @@ Section step.
   (** * Preserves separability *)
   Definition sep_step (p q : @perm config) : Prop :=
     forall r, p ⊥ r -> q ⊥ r.
+
+  Global Instance Proper_eq_perm_sep_step :
+    Proper (eq_perm ==> eq_perm ==> Basics.flip Basics.impl) sep_step.
+  Proof.
+    repeat intro.
+    rewrite H in H2. rewrite H0. apply H1; auto.
+  Qed.
 
   Global Instance sep_step_refl : Reflexive sep_step.
   Proof.
