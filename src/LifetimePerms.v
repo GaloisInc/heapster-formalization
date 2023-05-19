@@ -998,7 +998,7 @@ keep the permission on the value separate?
       exists (pr ** r). split; [| split].
       + apply sep_conj_Perms_perm; auto. (* we don't have p ⊥ r, best we can do is that p ⊥ owned r2, and r2 ~> r *)
         (* lfinished_Perms could help? *)
-      + (* apply sep_step_sep_conj_r; auto. *) admit. (* p ~ pr should be ok if they're both pointer permissions, but them being separate from r/r2 is a problem *)
+      + (* apply sep_step_sep_conj_r; auto. *) admit. (* p ~ pr should be ok if they're both pointer permissions, but them being separate from r/r2 is a problem. we only have that p ⊥ owned r2 *)
       + intros. split; [| split]; auto.
         * apply Hlte'' in H. destruct H as (? & ? & ?).
           apply Hlte''' in H. cbn in H.

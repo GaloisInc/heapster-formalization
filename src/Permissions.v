@@ -771,23 +771,23 @@ Section Permissions.
   (** ** Separating conjunction for permission sets *)
   Program Definition sep_conj_Perms (P Q : Perms) : Perms :=
     {|
-    in_Perms := fun r => exists p q, p ∈ P /\ q ∈ Q /\ p ** q <= r
+    in_Perms := fun r => exists p q, p ∈ P /\ q ∈ Q /\ p ⊥ q /\ p ** q <= r
     |}.
   Next Obligation.
-    exists H, H1. split; [| split]; auto. etransitivity; eauto.
+    exists H, H1. split; [| split; [| split]]; auto. etransitivity; eauto.
   Qed.
   Notation "P * Q" := (sep_conj_Perms P Q).
 
   Lemma lte_l_sep_conj_Perms : forall P Q, P ⊑ P * Q.
   Proof.
-    intros P Q p' ?. destruct H as (p & q & Hp & Hq & ?).
+    intros P Q p' ?. destruct H as (p & q & Hp & Hq & ? & ?).
     eapply Perms_upwards_closed; eauto.
     etransitivity; eauto. apply lte_l_sep_conj_perm.
   Qed.
 
   Lemma lte_r_sep_conj_Perms : forall P Q, Q ⊑ P * Q.
   Proof.
-    intros P Q p' ?. destruct H as (p & q & Hp & Hq & ?).
+    intros P Q p' ?. destruct H as (p & q & Hp & Hq & ? & ?).
     eapply Perms_upwards_closed; eauto.
     etransitivity; eauto. apply lte_r_sep_conj_perm.
   Qed.
@@ -795,9 +795,10 @@ Section Permissions.
   Lemma sep_conj_Perms_bottom_identity : forall P, bottom_Perms * P ≡ P.
   Proof.
     constructor; repeat intro.
-    - exists bottom_perm, p. split; cbn; [| split]; auto.
+    - exists bottom_perm, p. split; cbn; [| split; [| split]]; auto.
+      + symmetry. apply separate_bottom.
       + rewrite sep_conj_perm_commut. apply sep_conj_perm_bottom.
-    - destruct H as (? & ? & ? & ? & ?).
+    - destruct H as (? & ? & ? & ? & ? & ?).
       eapply (Perms_upwards_closed P); eauto.
       etransitivity; eauto. apply lte_r_sep_conj_perm.
   Qed.
@@ -818,54 +819,71 @@ Section Permissions.
   Lemma sep_conj_Perms_perm: forall P Q p q,
       p ∈ P ->
       q ∈ Q ->
+      p ⊥ q ->
       p ** q ∈ P * Q.
   Proof.
-    intros. exists p, q. split; [| split; [| split]]; auto.
+    intros. exists p, q. split; [| split; [| split]]; auto. reflexivity.
   Qed.
 
   Lemma sep_conj_Perms_commut : forall P Q, P * Q ≡ Q * P.
   Proof.
     split; repeat intro.
-    - destruct H as (q & p' & Hq & Hp & ?).
-      exists p', q. split; [| split]; auto.
-      etransitivity; eauto. apply sep_conj_perm_commut.
-    - destruct H as (p' & q & Hp & Hq & ?).
-      exists q, p'. split; [| split]; auto.
-      etransitivity; eauto. apply sep_conj_perm_commut.
+    - destruct H as (q & p' & Hq & Hp & ? & ?).
+      exists p', q. split; [| split; [| split]]; auto.
+      symmetry. auto.
+      rewrite sep_conj_perm_commut. auto.
+    - destruct H as (p' & q & Hp & Hq & ? & ?).
+      exists q, p'. split; [| split; [| split]]; auto.
+      symmetry. auto.
+      rewrite sep_conj_perm_commut. auto.
   Qed.
 
   Lemma sep_conj_Perms_assoc : forall P Q R, P * (Q * R) ≡ (P * Q) * R.
   Proof.
     split; repeat intro.
-    - rename p into p'. destruct H as [pq [r [? [? ?]]]].
-      destruct H as [p [q [? [? ?]]]].
-      exists p, (q ** r).
-      split; auto. split; auto. apply sep_conj_Perms_perm; auto.
-      rewrite <- sep_conj_perm_assoc.
-      etransitivity; eauto.
-      apply sep_conj_perm_monotone; intuition.
-    - rename p into p'. destruct H as [p [qr [? [? ?]]]].
-      destruct H0 as [q [r [? [? ?]]]].
-      exists (p ** q), r.
-      split; auto. apply sep_conj_Perms_perm; auto. split; auto.
-      rewrite sep_conj_perm_assoc.
-      etransitivity; eauto.
-      apply sep_conj_perm_monotone; intuition.
+    - rename p into p'. destruct H as (pq & r & ? & ? & ? & ?).
+      destruct H as (p & q & ? & ? & ? & ?).
+      exists p, (q ** r). split; [| split; [| split]]; auto.
+      + apply sep_conj_Perms_perm; auto.
+        symmetry in H1. symmetry. eapply separate_antimonotone; eauto.
+        etransitivity; eauto. apply lte_r_sep_conj_perm.
+      + apply separate_sep_conj_perm; auto.
+        * symmetry in H1. symmetry. eapply separate_antimonotone; eauto.
+          etransitivity; eauto. apply lte_l_sep_conj_perm.
+        * symmetry in H1. eapply separate_antimonotone; eauto.
+          etransitivity; eauto. apply lte_r_sep_conj_perm.
+      + rewrite <- sep_conj_perm_assoc.
+        etransitivity; eauto.
+        apply sep_conj_perm_monotone; intuition.
+    - rename p into p'. destruct H as (p & qr & ? & ? & ? & ?).
+      destruct H0 as (q & r & ? & ? & ? & ?).
+      exists (p ** q), r. split; [| split; [| split]]; auto.
+      + apply sep_conj_Perms_perm; auto.
+        eapply separate_antimonotone; eauto.
+        etransitivity; eauto. apply lte_l_sep_conj_perm.
+      + symmetry. apply separate_sep_conj_perm; symmetry; auto.
+        * eapply separate_antimonotone; eauto.
+          etransitivity; eauto. apply lte_r_sep_conj_perm.
+        * eapply separate_antimonotone; eauto.
+          etransitivity; eauto. apply lte_l_sep_conj_perm.
+      + rewrite sep_conj_perm_assoc.
+        etransitivity; eauto.
+        apply sep_conj_perm_monotone; intuition.
   Qed.
 
   Lemma sep_conj_Perms_meet_commute : forall (Ps : Perms -> Prop) P,
       (meet_Perms Ps) * P ≡ meet_Perms (fun Q => exists P', Q = P' * P /\ Ps P').
   Proof.
     split; repeat intro.
-    - destruct H as [? [[Q [? ?]] ?]].
-      subst. destruct H1 as [? [? [? [? ?]]]].
-      simpl. exists x, x0. split; [ | split]; auto.
+    - destruct H as (? & (Q & ? & ?) & ?). subst.
+      subst. destruct H1 as (? & ? & ? & ? & ? & ?).
+      cbn. exists x, x0. split; [| split]; auto.
       eexists; split; eauto.
-    - destruct H as [? [? [[Q [? ?]] [? ?]]]].
-      simpl. eexists. split.
+    - destruct H as (? & ? & (Q & ? & ?) & ? & ? & ?).
+      cbn. eexists. split.
       + exists Q. split; auto.
       + eapply Perms_upwards_closed; eauto.
-        simpl. exists x, x0. split; [auto | split; [auto | ]]. reflexivity.
+        exists x, x0. split; [| split; [| split]]; auto. reflexivity.
   Qed.
 
   (** Permission entailment, which we sometimes use instead of ordering. *)

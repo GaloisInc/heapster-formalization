@@ -453,14 +453,20 @@ Section MemoryPerms.
         + unfold read, allocated. simpl. rewrite nth_error_app_last; auto.
       - simpl. apply Hp in Hpre. simpl in Hpre. rewrite Hpre.
         eexists. exists (write_perm (n, 0) (VNum 0)).
-        split; [| split].
-        + do 2 eexists. split; [| split]; try reflexivity.
-          eexists. split.
+        split; [| split; [| split]].
+        + do 2 eexists. split; [| split; [| split]]; try reflexivity.
+          1: eexists; split.
           * exists (n + 1). reflexivity.
           * simpl. reflexivity.
+          * apply malloc_block; cbn; lia.
         + eexists. split; [exists (VNum 0); reflexivity |].
-          do 2 eexists. split; [simpl; reflexivity | split]; simpl; auto.
-          apply sep_conj_perm_bottom.
+          do 2 eexists. split; [cbn; reflexivity | split; [| split]]; cbn; auto.
+          * apply separate_bottom.
+          * apply sep_conj_perm_bottom.
+        + symmetry. apply separate_sep_conj_perm.
+          * symmetry. apply malloc_write; cbn; lia.
+          * symmetry. apply write_block.
+          * symmetry. apply malloc_block; cbn; lia.
         + constructor; auto.
           { intros [] (? & ? & ?). simpl in *. split; split; auto.
             - split; [| apply malloc_block; simpl; lia].
@@ -544,8 +550,9 @@ Section MemoryPerms.
       (Ret r).
   Proof.
     intros p'' c1 c2 H Hpre. pstep. unfold store. rewritebisim @bind_trigger.
-    destruct H as (p' & q & Hwrite & Hq & Hlte). destruct Hwrite as (? & (v & ?) & Hwrite); subst.
-    destruct Hwrite as (pw & p & Hwritelte & Hp & Hlte'). simpl in *.
+    destruct H as (p' & q & Hwrite & Hq & Hsep & Hlte).
+    destruct Hwrite as (? & (v & ?) & Hwrite); subst.
+    destruct Hwrite as (pw & p & Hwritelte & Hp & Hsep' & Hlte'). simpl in *.
     assert (exists val, read (lget c1) ptr = Some val).
     {
       apply Hlte in Hpre. destruct Hpre as (Hpre & _).
@@ -565,16 +572,21 @@ Section MemoryPerms.
     }
     econstructor; eauto.
     3: {
+      assert (write_perm ptr val' ⊥ q).
+      {
+        apply Hlte in Hpre. symmetry in Hsep.
+        eapply separate_antimonotone in Hsep; eauto. apply separate_sep_conj_perm_l in Hsep.
+        eapply separate_antimonotone in Hsep; eauto. symmetry. constructor; apply Hsep.
+      }
       rewrite Hwrite. constructor; eauto.
-      2: { simpl. eexists. split. exists val'. reflexivity.
-           simpl. eexists. exists q. split; [reflexivity | split]; eauto. reflexivity. }
-      split; [| split].
+      2: { eexists. split. exists val'. reflexivity.
+           cbn. eexists. exists q.
+           split; [reflexivity | split; [| split; [| reflexivity]]]; eauto.
+      }
+      split; [| split]; auto.
       - symmetry. eapply write_success_read_eq; rewrite lGetPut; eauto.
       - apply Hlte in Hpre. respects. 2: apply Hpre; eauto.
         apply Hpre. auto.
-      - apply Hlte in Hpre. destruct Hpre as (_ & _ & Hsep). symmetry in Hsep.
-        eapply separate_antimonotone in Hsep; eauto. apply separate_sep_conj_perm_l in Hsep.
-        eapply separate_antimonotone in Hsep; eauto. symmetry. constructor; apply Hsep.
     }
     - rewrite Hwrite. apply Hlte. constructor 1. left. auto.
     - eapply sep_step_lte; eauto. apply sep_step_sep_conj_l.

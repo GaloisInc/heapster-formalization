@@ -330,32 +330,72 @@ Section permType.
   Proof.
     revert x.
     induction xs.
-    - intros x p (p1 & p2 & Hp1 & Hp2 & Hlte).
+    - intros x p (p1 & p2 & Hp1 & Hp2 & Hsep & Hlte).
       destruct Hp1 as (? & (U & HU & ?) & Hp1); subst.
       apply HU in Hp1. simpl in Hp1. subst. eapply Perms_upwards_closed; eauto.
       etransitivity; eauto. apply lte_r_sep_conj_perm.
-    - intros x p (px' & py & Hpx' & Hpy & Hlte).
+    - intros x p (px' & py & Hpx' & Hpy & Hsep & Hlte).
       eapply mu_fixed_point in Hpx'.
-      destruct Hpx' as (pa & px & Hpa & Hpx & Hlte').
+      destruct Hpx' as (pa & px & Hpa & Hpx & Hsep' & Hlte').
       (* x must be a pointer *)
       destruct x; try contradiction. destruct a0 as [b o'].
       destruct Hpx as (? & (v & ?) & Hpx); subst.
-      destruct Hpx as (px'' & pv & Hpx'' & Hpv & Hlte'').
+      destruct Hpx as (px'' & pv & Hpx'' & Hpv & Hsep'' & Hlte'').
 
-      apply mu_fixed_point.
-      simpl.
-      exists pa. exists (px'' ** (pv ** py)). split; [apply Hpa | split].
-      2: { repeat rewrite <- sep_conj_perm_assoc.
+      apply mu_fixed_point. cbn.
+      exists pa, (px'' ** (pv ** py)). split; [apply Hpa | split; [| split]].
+      3: { repeat rewrite <- sep_conj_perm_assoc.
            etransitivity; eauto.
            eapply sep_conj_perm_monotone; intuition.
            repeat rewrite sep_conj_perm_assoc.
            etransitivity; eauto.
            eapply sep_conj_perm_monotone; intuition.
       }
+      2: {
+        apply separate_sep_conj_perm.
+        - eapply separate_antimonotone; eauto.
+          etransitivity; eauto. apply lte_l_sep_conj_perm.
+        - apply separate_sep_conj_perm.
+          + eapply separate_antimonotone; eauto.
+            etransitivity; eauto. apply lte_r_sep_conj_perm.
+          + symmetry. symmetry in Hsep. eapply separate_antimonotone; eauto.
+            etransitivity; eauto. apply lte_l_sep_conj_perm.
+          + symmetry in Hsep. eapply separate_antimonotone; eauto.
+            etransitivity; eauto. etransitivity. apply lte_r_sep_conj_perm.
+            apply sep_conj_perm_monotone. reflexivity.
+            etransitivity; eauto. apply lte_r_sep_conj_perm.
+        - symmetry. apply separate_sep_conj_perm.
+          + eapply separate_antimonotone; eauto. reflexivity.
+          + symmetry. symmetry in Hsep. eapply separate_antimonotone; eauto.
+            etransitivity; eauto. etransitivity. apply lte_r_sep_conj_perm.
+            apply sep_conj_perm_monotone. reflexivity.
+            etransitivity; eauto. apply lte_l_sep_conj_perm.
+          + symmetry in Hsep. eapply separate_antimonotone; eauto.
+            etransitivity; eauto. etransitivity. apply lte_r_sep_conj_perm.
+            apply sep_conj_perm_monotone. reflexivity.
+            etransitivity; eauto. apply lte_r_sep_conj_perm.
+      }
       eexists; split; [eexists; reflexivity |].
-      apply sep_conj_Perms_perm; [apply Hpx'' |].
-      simpl. exists (v :: reach_perm z rw o T ▷ (xs ++ ys)). split.
-      2: { apply IHxs. apply sep_conj_Perms_perm; auto. }
+      apply sep_conj_Perms_perm; [apply Hpx'' | |].
+      2: {
+        apply separate_sep_conj_perm; auto.
+        + symmetry. symmetry in Hsep. eapply separate_antimonotone; eauto.
+          etransitivity; eauto. etransitivity. apply lte_r_sep_conj_perm.
+          apply sep_conj_perm_monotone. reflexivity.
+          etransitivity; eauto. apply lte_l_sep_conj_perm.
+        + symmetry in Hsep. eapply separate_antimonotone; eauto.
+          etransitivity; eauto. etransitivity. apply lte_r_sep_conj_perm.
+          apply sep_conj_perm_monotone. reflexivity.
+          etransitivity; eauto. apply lte_r_sep_conj_perm.
+      }
+      cbn. exists (v :: reach_perm z rw o T ▷ (xs ++ ys)). split.
+      2: {
+        apply IHxs. apply sep_conj_Perms_perm; auto.
+        symmetry. symmetry in Hsep. eapply separate_antimonotone; eauto.
+        etransitivity; eauto. etransitivity. apply lte_r_sep_conj_perm.
+        apply sep_conj_perm_monotone. reflexivity.
+        etransitivity; eauto. apply lte_r_sep_conj_perm.
+      }
       eexists; split; eauto.
       repeat intro. eapply mu_fixed_point in H0; auto.
       Unshelve. all: apply reach_perm_proper.

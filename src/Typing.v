@@ -330,7 +330,9 @@ Section bisim.
     revert p' Hlte Hpre. generalize dependent r.
     induction Hsbuter; intros; pclearbot; try solve [econstructor; eauto].
     - constructor; auto. eapply Perms_upwards_closed; eauto.
-      do 2 eexists. split; [| split]; eauto; reflexivity.
+      do 2 eexists. split; [| split; [| split]]; eauto.
+      apply Hlte in Hpre. apply Hpre.
+      reflexivity.
     - apply sbuter_gen_pre in Hsbuter. destruct Hsbuter; [subst; constructor |].
       econstructor; eauto.
       + apply Hlte. constructor. left. auto.
@@ -404,8 +406,8 @@ Section bisim.
     typing P Q t s ->
     typing (P * R) (fun r1 r2 => Q r1 r2 * R) t s.
   Proof.
-    intros Ht p' c1 c2 (p & r & Hp & Hr & Hlte) Hpre.
-    pose proof Hpre as H. apply Hlte in H. destruct H as (Hprep & Hprer & Hsep).
+    intros Ht p' c1 c2 (p & r & Hp & Hr & Hsep & Hlte) Hpre.
+    pose proof Hpre as H. apply Hlte in H. destruct H as (Hprep & Hprer & Hsep').
     eapply sbuter_frame; eauto.
   Qed.
 

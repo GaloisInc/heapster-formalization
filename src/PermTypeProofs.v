@@ -142,7 +142,9 @@ Lemma EqRefl A P (xi : A) :
   P ⊨ P * xi :: eqp Si Ss xi ▷ tt.
 Proof.
   repeat intro.
-  exists p, bottom_perm. split; [| split]; simpl; eauto. rewrite sep_conj_perm_bottom. reflexivity.
+  exists p, bottom_perm. split; [| split; [| split]]; cbn; eauto.
+  - apply separate_bottom.
+  - rewrite sep_conj_perm_bottom. reflexivity.
 Qed.
 
 Lemma EqSym (A : Type) (xi yi : A) :
@@ -166,14 +168,16 @@ Qed.
 Lemma EqDup (A : Type) (xi yi : A) :
   xi :: eqp _ _ yi ▷ tt ⊨ xi :: eqp Si Ss yi ▷ tt * xi :: eqp _ _ yi ▷ tt.
 Proof.
-  repeat intro. simpl in *. subst. exists bottom_perm, bottom_perm.
-  split; [| split]; auto. rewrite sep_conj_perm_bottom. apply bottom_perm_is_bottom.
+  repeat intro. cbn in *. subst. exists bottom_perm, bottom_perm.
+  split; [| split; [| split]]; auto.
+  - apply separate_bottom.
+  - rewrite sep_conj_perm_bottom. apply bottom_perm_is_bottom.
 Qed.
 
 Lemma Cast (A B : Type) (P : PermType Si Ss A B) xi yi xs ys :
   xi :: eqp _ _ yi ▷ xs * yi :: P ▷ ys ⊨ xi :: P ▷ ys.
 Proof.
-  repeat intro. destruct H0 as (e & p' & Heq & Hp & Hlte).
+  repeat intro. destruct H0 as (e & p' & Heq & Hp & Hsep & Hlte).
   simpl in Heq. subst.
   eapply Perms_upwards_closed; eauto. etransitivity. apply lte_r_sep_conj_perm. eauto.
 Qed.
@@ -218,7 +222,7 @@ Lemma If (A B : Type) P ti1 ti2 ts1 ts2 (xi yi : bool) xs (U : PermType Si Ss A 
   P ⊢ ti2 ⤳ ts2 ::: U ->
   P * xi :: eqp _ _ yi ▷ xs ⊢ if xi then ti1 else ti2 ⤳ if yi then ts1 else ts2 ::: U.
 Proof.
-  repeat intro. destruct H2 as (? & ? & ? & ? & ?); simpl in *; subst.
+  repeat intro. destruct H2 as (p' & q & Hp' & ? & Hsep & Hlte); cbn in *; subst.
   destruct xi.
   - apply H0; auto. eapply Perms_upwards_closed; eauto.
     etransitivity; eauto. apply lte_l_sep_conj_perm.
@@ -271,54 +275,71 @@ Proof.
   destruct xi; simpl.
   - rewrite sep_conj_Perms_top_absorb. reflexivity.
   - repeat intro. destruct a. rename p into p'.
-    destruct H0 as (p & t & (P & (v & ?) & Hp) & Hp' & Hlte). subst.
-    destruct Hp as (? & ? & ? & ? & ?). simpl in *. subst.
+    destruct H0 as (p & t & (P & (v & ?) & Hp) & Hp' & Hsep & Hlte). subst.
+    destruct Hp as (? & ? & ? & ? & Hsep' & Hlte'). cbn in *. subst.
     eexists. split; [exists v; reflexivity |].
     eapply Perms_upwards_closed; eauto.
-    do 2 eexists. split; [| split]; eauto.
-    apply sep_conj_perm_monotone; intuition.
-    etransitivity; eauto. apply lte_l_sep_conj_perm.
+    do 2 eexists. split; [| split; [| split]]; eauto.
+    + symmetry. symmetry in Hsep. eapply separate_antimonotone; eauto.
+      etransitivity; eauto. apply lte_l_sep_conj_perm.
+    + apply sep_conj_perm_monotone; intuition.
+      etransitivity; eauto. apply lte_l_sep_conj_perm.
 Qed.
 
 Lemma PtrE A B C (P : Perms) rw o (T : VPermType Si Ss A) (xi : Value) xs ti ts (U : PermType Si Ss B C) :
   (forall yi, P * xi :: ptr _ _ (rw, o, eqp Si Ss yi) ▷ tt * yi :: T ▷ xs ⊢ ti ⤳ ts ::: U) ->
   P * xi :: ptr _ _ (rw, o, T) ▷ xs ⊢ ti ⤳ ts ::: U.
 Proof.
-  repeat intro. rename p into p''. destruct H1 as (p & p' & Hp & Hptr & Hlte).
+  repeat intro. rename p into p''. destruct H1 as (p & p' & Hp & Hptr & Hsep & Hlte).
   destruct xi; [contradiction | destruct a].
   destruct Hptr as (? & (? & ?) & ?). subst.
-  destruct H3 as (pptr & pt & Hptr & Hpt & Hlte').
+  destruct H3 as (pptr & pt & Hptr & Hpt & Hsep' & Hlte').
   eapply H0; eauto. exists (p ** pptr), pt.
-  split; [| split]; eauto.
-  - do 2 eexists. split; [| split]; eauto. 2: reflexivity. eexists.
-    split; eauto.
-    do 2 eexists. split; [| split]; eauto. reflexivity. apply sep_conj_perm_bottom'.
+  split; [| split; [| split]]; eauto.
+  - do 2 eexists. split; [| split; [| split]]. eauto. 3: reflexivity.
+    + eexists. split; eauto. do 2 eexists.
+      split; [| split; [| split]]. eauto. reflexivity. 2: apply sep_conj_perm_bottom'.
+      apply separate_bottom.
+    + eapply separate_antimonotone; eauto. etransitivity; eauto. apply lte_l_sep_conj_perm.
+  - symmetry. symmetry in Hsep'. apply separate_sep_conj_perm; auto.
+    + symmetry. eapply separate_antimonotone; eauto. etransitivity; eauto.
+      apply lte_r_sep_conj_perm.
+    + symmetry. eapply separate_antimonotone; eauto. etransitivity; eauto.
+      apply lte_l_sep_conj_perm.
   - etransitivity; eauto. rewrite sep_conj_perm_assoc.
     apply sep_conj_perm_monotone; auto; reflexivity.
+Qed.
+
+(* TODO: move to other file *)
+Lemma read_separate Ss ptr ptr' v v' :
+  (read_perm ptr v : @perm (Si * Ss)) ⊥ read_perm ptr' v'.
+Proof.
+  split; intros; auto; destruct x, y; cbn in *; subst; reflexivity.
 Qed.
 
 Lemma ReadDup o xi yi :
   xi :: ptr _ _ (R, o, eqp _ _ yi) ▷ tt ⊨
   xi :: ptr _ _ (R, o, eqp Si Ss yi) ▷ tt * xi :: ptr _ _ (R, o, eqp _ _ yi) ▷ tt.
-
 Proof.
   repeat intro. simpl in *. destruct xi; [contradiction |].
   destruct a as [b o']. unfold offset in *.
   destruct H0 as (? & (v & ?) & ?). subst.
   exists (read_perm (b, o' + o) v), (read_perm (b, o' + o) v).
-  destruct H1 as (pread & peq & Hpread & Hpeq & Hlte).
+  destruct H1 as (pread & peq & Hpread & Hpeq & Hsep & Hlte).
   simpl in Hpread, Hpeq. subst.
   assert (read_perm (b, o' + o) v ∈ ptr_Perms _ _ R (VPtr (b, o' + o)) tt (eqp Si Ss v)).
   {
     eexists. split; eauto. simpl in *. exists (read_perm (b, o' + o) v), bottom_perm.
-    split; [| split]. 2: reflexivity.
+    split; [| split; [| split]]. 2: reflexivity.
     - split; intros; auto.
+    - apply separate_bottom.
     - rewrite sep_conj_perm_bottom. reflexivity.
   }
-  split; [| split]; auto.
+  split; [| split; [| split]]; auto.
+  apply read_separate.
   constructor; intros; eauto.
   - split; [| split]; auto. 1, 2: apply Hpread; apply Hlte; auto.
-    split; intros; auto; destruct x0, y; simpl in H2; subst; reflexivity.
+    apply read_separate.
   - split; apply Hpread; apply Hlte; auto.
   - apply Hlte. constructor. left. apply Hpread. induction H1; auto.
     + destruct H1; auto.
@@ -330,7 +351,8 @@ Lemma PtrOff A xi xs rw o1 o2 (T : VPermType Si Ss A) :
   xi :: ptr _ _ (rw, o1, T) ▷ xs ⊨ offset xi o2 :: ptr _ _ (rw, o1 - o2, T) ▷ xs.
 Proof.
   destruct xi; [reflexivity | destruct a].
-  intros. simpl. rewrite <- Nat.add_assoc. rewrite (Minus.le_plus_minus_r _ _ H0).
+  intros. simpl. rewrite <- Nat.add_assoc.
+  rewrite (Nat.add_comm o2 _). rewrite Nat.sub_add; auto.
   reflexivity.
 Qed.
 Lemma PtrOff' A xi xs rw o1 o2 (T : VPermType Si Ss A) :
@@ -338,7 +360,8 @@ Lemma PtrOff' A xi xs rw o1 o2 (T : VPermType Si Ss A) :
   offset xi o2 :: ptr _ _ (rw, o1 - o2, T) ▷ xs ⊨ xi :: ptr _ _ (rw, o1, T) ▷ xs.
 Proof.
   destruct xi; [reflexivity | destruct a].
-  intros. simpl. rewrite <- Nat.add_assoc. rewrite (Minus.le_plus_minus_r _ _ H0).
+  intros. cbn. rewrite <- Nat.add_assoc.
+  rewrite (Nat.add_comm o2 _). rewrite Nat.sub_add; auto.
   reflexivity.
 Qed.
 
@@ -351,21 +374,24 @@ Proof.
   repeat intro. pstep. unfold load. rewritebisim @bind_trigger.
   econstructor; eauto; try reflexivity.
   destruct xi as [? | [b o]]; try contradiction.
-  simpl in H0. unfold ptr_Perms in H0.
+  cbn in H0. unfold ptr_Perms in H0.
   destruct H0 as (? & (v & ?) & ?); subst.
-  destruct H2 as (? & ? & ? & ? & ?). simpl in H0, H2. subst.
+  destruct H2 as (? & ? & ? & ? & Hsep & Hlte). cbn in H0, H2. subst.
   assert (read (lget c1) (b, o) = Some v).
   {
-    apply H3 in H1. destruct H1 as (? & _).
+    apply Hlte in H1. destruct H1 as (? & _).
     rewrite Nat.add_0_r in H0. apply H0 in H1. destruct rw; auto.
   }
   rewrite H2. constructor; auto.
   (* TODO: these exists are kind of weird *)
-  simpl. exists bottom_perm, x. split; [| split]; eauto. eexists. split; eauto.
-  simpl. exists x, bottom_perm. split; [| split]; eauto.
-  rewrite sep_conj_perm_bottom. reflexivity.
-  rewrite sep_conj_perm_commut. rewrite sep_conj_perm_bottom.
-  etransitivity; eauto. apply lte_l_sep_conj_perm.
+  cbn. exists bottom_perm, x. split; [| split; [| split]]; auto.
+  - cbn. eexists. split; eauto.
+    cbn. exists x, bottom_perm. split; [| split; [| split]]; eauto.
+    apply separate_bottom.
+    rewrite sep_conj_perm_bottom. reflexivity.
+  - symmetry. apply separate_bottom.
+  - rewrite sep_conj_perm_commut. rewrite sep_conj_perm_bottom.
+    etransitivity; eauto. apply lte_l_sep_conj_perm.
 Qed.
 
 Lemma Store A xi yi xs (P : VPermType Si Ss A) :
@@ -378,7 +404,7 @@ Proof.
   rewritebisim @bind_trigger.
   rename p into p'. rename H1 into Hpre.
   destruct H0 as (? & (v & ?) & Hwrite); subst.
-  destruct Hwrite as (pw & p & Hwritelte & Hp & Hlte).
+  destruct Hwrite as (pw & p & Hwritelte & Hp & Hsep & Hlte).
   rewrite Nat.add_0_r in Hwritelte.
   assert (exists val, read (lget c1) (b, o) = Some val).
   {
@@ -399,9 +425,11 @@ Proof.
   econstructor; eauto.
   3: {
     rewrite Hwrite. constructor; eauto.
-    2: { simpl. exists bottom_perm. eexists. split; [| split]; auto.
+    2: { simpl. exists bottom_perm. eexists. split; [| split; [| split]]; auto.
          - eexists. split; eauto. simpl. eexists. exists bottom_perm.
-           split; [| split]; eauto; try reflexivity.
+           split; [| split; [| split]]; eauto; try reflexivity.
+           apply separate_bottom.
+         - symmetry. apply separate_bottom.
          - rewrite sep_conj_perm_bottom. rewrite sep_conj_perm_commut.
            rewrite sep_conj_perm_bottom. reflexivity.
     }
@@ -422,8 +450,9 @@ Lemma IsNull1 A xi xs rw o (P : VPermType Si Ss A) :
 Proof.
   repeat intro. pstep. unfold isNull. destruct xi; [contradiction |].
   destruct a as [b o']. simpl. constructor; auto.
-  simpl. exists bottom_perm, p. split; [| split]; eauto.
-  rewrite sep_conj_perm_commut. rewrite sep_conj_perm_bottom. reflexivity.
+  cbn. exists bottom_perm, p. split; [| split; [| split]]; eauto.
+  - symmetry. apply separate_bottom.
+  - rewrite sep_conj_perm_commut. rewrite sep_conj_perm_bottom. reflexivity.
 Qed.
 
 Lemma IsNull2 xi:
@@ -432,7 +461,7 @@ Lemma IsNull2 xi:
   Ret tt :::
   eqp _ _ true.
 Proof.
-  repeat intro. pstep. simpl in *. subst. constructor; simpl; auto.
+  repeat intro. pstep. cbn in *. subst. constructor; cbn; auto.
 Qed.
 
 (** * Example 2 *)
@@ -542,10 +571,10 @@ Lemma split_leq_append_leq A l1 v l2 (l: le l2 l1) :
   @append_leq A l1 l2 l (fst (split_leq l1 v l2 l)) (snd (split_leq l1 v l2 l)) = v.
 Proof.
   revert l2 l; induction v; intros.
-  - simpl. reflexivity.
+  - cbn. reflexivity.
   - destruct l2.
-    + simpl. reflexivity.
-    + simpl.
+    + cbn. reflexivity.
+    + cbn.
       rewrite (surjective_pairing (split_leq n v l2 (le_S_n l2 n l))). simpl.
       rewrite IHv. reflexivity.
 Qed.
@@ -602,16 +631,23 @@ Lemma ArrCombine A xi rw o l1 l2 xs1 xs2 (P : VPermType Si Ss A) :
   xi :: arr (rw, o, l1, P) ▷ xs1 * xi :: arr (rw, o + l1, l2, P) ▷ xs2 ⊨
   xi :: arr (rw, o, l1 + l2, P) ▷ Vector.append xs1 xs2 .
 Proof.
-  repeat intro. destruct H0 as (p1 & p2 & Hp1 & Hp2 & Hlte).
-  revert Hp1 Hp2. revert o xi l2 xs2. revert Hlte. revert p p1 p2. induction l1; intros.
-  - rewrite Nat.add_0_r in Hp2. simpl in *. revert xs1. apply Vector.case0. simpl.
+  repeat intro. destruct H0 as (p1 & p2 & Hp1 & Hp2 & Hsep & Hlte).
+  revert Hp1 Hp2. revert o xi l2 xs2. revert Hsep Hlte. revert p p1 p2. induction l1; intros.
+  - rewrite Nat.add_0_r in Hp2. cbn in *. revert xs1. apply Vector.case0. simpl.
     eapply Perms_upwards_closed; eauto. etransitivity; [apply lte_r_sep_conj_perm |]; eauto.
-  - simpl. destruct Hp1 as (? & ? & ? & ? & ?).
-    do 2 eexists. split; [| split].
+  - cbn. destruct Hp1 as (? & ? & ? & ? & Hsep' & Hlte').
+    do 2 eexists. split; [| split; [| split]].
     + rewrite vector_hd_append. apply H0.
-    + rewrite vector_tl_append. eapply IHl1. reflexivity.
-      * eapply Perms_upwards_closed; eauto. reflexivity.
-      * simpl. rewrite <- plus_n_Sm in Hp2. eauto.
+    + rewrite vector_tl_append. eapply IHl1. 2: reflexivity.
+      2: { eapply Perms_upwards_closed; eauto. reflexivity. }
+      2: { cbn. rewrite <- plus_n_Sm in Hp2. eauto. }
+      symmetry. symmetry in Hsep. eapply separate_antimonotone; eauto.
+      etransitivity; eauto. apply lte_r_sep_conj_perm.
+    + apply separate_sep_conj_perm; auto.
+      * symmetry. symmetry in Hsep. eapply separate_antimonotone; eauto.
+        etransitivity; eauto. apply lte_l_sep_conj_perm.
+      * symmetry in Hsep. eapply separate_antimonotone; eauto.
+        etransitivity; eauto. apply lte_r_sep_conj_perm.
     + rewrite <- sep_conj_perm_assoc. etransitivity; eauto.
       apply sep_conj_perm_monotone; eauto; reflexivity.
 Qed.
@@ -619,13 +655,13 @@ Qed.
 Lemma ArrPtr A xi xs rw o (P : VPermType Si Ss A) :
   xi :: arr (rw, o, 1, P) ▷ xs ⊨ xi :: ptr _ _ (rw, o, P) ▷ Vector.hd xs.
 Proof.
-  simpl. rewrite sep_conj_Perms_commut. rewrite sep_conj_Perms_bottom_identity. reflexivity.
+  cbn. rewrite sep_conj_Perms_commut. rewrite sep_conj_Perms_bottom_identity. reflexivity.
 Qed.
 
 Lemma PtrArr A xi xs rw o (P : VPermType Si Ss A) :
   xi :: ptr _ _ (rw, o, P) ▷ xs ⊨ xi :: arr (rw, o, 1, P) ▷ vsingle xs.
 Proof.
-  simpl. rewrite sep_conj_Perms_commut. rewrite sep_conj_Perms_bottom_identity. reflexivity.
+  cbn. rewrite sep_conj_Perms_commut. rewrite sep_conj_Perms_bottom_identity. reflexivity.
 Qed.
 
 
@@ -796,14 +832,20 @@ Lemma post_malloc_perm_ok {A} n b size (xs : Vector.t A (S n))
   singleton_Perms (block_perm (S size) (b, 0)) *
   malloc_Perms.
 Proof.
-  simpl.
-  induction n.
-  - simpl. do 2 eexists. split; [| split].
-    + do 2 eexists. split; [| split; reflexivity].
-      eexists. exists bottom_perm. split; [| split; reflexivity].
-      eexists. split; [exists (VNum 0); reflexivity |].
-      eexists. exists bottom_perm. split; [| split; reflexivity]; simpl; reflexivity.
-    + eexists. split; [exists (b + 1); reflexivity | simpl; reflexivity].
+  cbn. induction n.
+  - cbn. do 2 eexists. split; [| split; [| split]].
+    + do 2 eexists. split; [| split; [| split]]; try reflexivity.
+      * eexists. exists bottom_perm. split; [| split; [| split]]; auto. 3: reflexivity.
+        2: apply separate_bottom.
+        eexists. split; [exists (VNum 0); reflexivity |].
+        eexists. exists bottom_perm. split; [| split; [| split]]; cbn; try reflexivity.
+        apply separate_bottom.
+      * do 2 rewrite sep_conj_perm_bottom. symmetry. apply write_block.
+    + eexists. split; [exists (b + 1); reflexivity | cbn; reflexivity].
+    + do 2 rewrite sep_conj_perm_bottom. symmetry. apply separate_sep_conj_perm.
+      * apply malloc_write; cbn; lia.
+      * apply malloc_block; cbn; lia.
+      * apply write_block; cbn; lia.
     + repeat rewrite sep_conj_perm_bottom. constructor; auto.
       { intros [] (? & ? & ?). simpl in *.
         rewrite Nat.sub_0_r in *. rewrite Nat.add_0_r in *.
@@ -822,25 +864,50 @@ Proof.
         unfold "**". unfold guar. unfold guar in H. unfold "**" in H. unfold guar in H.
         replace (S size - 1) with size. 2: lia. apply H. (* TODO simplify this *)
       }
-  - simpl.
-    assert (Hn': (n <= size)%nat) by lia.
+  - cbn. assert (Hn': (n <= size)%nat) by lia.
     specialize (IHn (Vector.tl xs) Hn').
     rewrite Nat.add_0_r in *.
-    destruct IHn as (? & ? & ? & ? & ?).
-    destruct H0 as (? & ? & ? & ? & ?).
-    destruct H0 as (? & ? & ? & ? & ?).
+    destruct IHn as (? & ? & ? & ? & Hsep & Hlte).
+    destruct H0 as (? & ? & ? & ? & Hsep' & Hlte').
+    destruct H0 as (? & ? & ? & ? & Hsep'' & Hlte'').
+    (* destruct H0 as (? & (? & ?) & ?). subst. *)
+    (* destruct H1 as (? & (? & ?) & ?). subst. *)
     exists (write_perm (b, size - S n) (VNum 0) ** x).
-    eexists. split; [| split]; eauto.
+    eexists. split; [| split; [| split]]; eauto.
+    2: {
+      symmetry. apply separate_sep_conj_perm.
+      2: symmetry; auto.
+      - symmetry. eapply separate_antimonotone. apply write_post_malloc_perm; auto.
+        etransitivity; eauto. apply lte_r_sep_conj_perm.
+      - symmetry. eapply separate_antimonotone. apply write_post_malloc_perm; auto.
+        etransitivity; eauto. apply lte_l_sep_conj_perm.
+    }
     {
-      exists (write_perm (b, size - S n) (VNum 0) ** x1). eexists. split; [| split]. 2: apply H3.
-      2: { rewrite sep_conj_perm_assoc. apply sep_conj_perm_monotone; auto. reflexivity. }
-      do 2 eexists. split; [| split].
+      exists (write_perm (b, size - S n) (VNum 0) ** x1). eexists.
+      split; [| split; [| split]]. 2: apply H2.
+      3: { rewrite sep_conj_perm_assoc. apply sep_conj_perm_monotone; auto. reflexivity. }
+      2: {
+      symmetry. apply separate_sep_conj_perm.
+      2: symmetry; auto.
+      - symmetry. eapply separate_antimonotone. apply write_post_malloc_perm; auto.
+        etransitivity; eauto. etransitivity. 2: apply lte_l_sep_conj_perm.
+        etransitivity; eauto. apply lte_r_sep_conj_perm.
+      - symmetry. eapply separate_antimonotone. apply write_post_malloc_perm; auto.
+        etransitivity; eauto. etransitivity. 2: apply lte_l_sep_conj_perm.
+        etransitivity; eauto. apply lte_l_sep_conj_perm.
+      }
+      do 2 eexists. split; [| split; [| split]].
       - eexists. split. exists (VNum 0). reflexivity.
-        eexists. exists bottom_perm. split; [| split]; simpl; reflexivity.
+        eexists. exists bottom_perm. split; [| split; [| split]]; cbn; try reflexivity.
+        apply separate_bottom.
       - assert (Heq : size - S n + 1 = size - n) by lia. rewrite Heq. clear Heq.
         exists x3, x4. split; [| split]; eauto.
         rewrite arr_offset in *. simpl in *.
         assert (Heq : size - S n + 2 = size - n + 1) by lia. rewrite Heq. clear Heq. auto.
+      - rewrite sep_conj_perm_bottom.
+        eapply separate_antimonotone. apply write_post_malloc_perm; auto.
+        etransitivity; eauto. etransitivity. 2: apply lte_l_sep_conj_perm.
+        etransitivity; eauto. apply lte_l_sep_conj_perm.
       - rewrite sep_conj_perm_bottom. reflexivity.
     }
     {
@@ -856,7 +923,7 @@ Lemma Malloc xi xs size :
   (arr (W, 0, S size, trueP Si Ss)) ⋆ (blockPT _ _ (S size)) ∅ malloc_Perms.
 Proof.
   intros p si ss Hp Hpre. pstep. unfold malloc.
-  destruct Hp as (peq & pmalloc & Heq & Hpmalloc & Hlte). simpl in Heq. subst.
+  destruct Hp as (peq & pmalloc & Heq & Hpmalloc & Hsep & Hlte). simpl in Heq. subst.
   destruct Hpmalloc as (? & (b & ?) & Hpmalloc); subst.
   (* read step *)
   rewritebisim @bind_trigger. econstructor; eauto; try reflexivity.
@@ -907,7 +974,7 @@ Proof.
   induction n; intros.
   - apply Hlte. subst si'. simpl in *.
     rewrite replace_n_0; auto. rewrite lPutGet. reflexivity.
-  - destruct Hparr as (pptr & parr' & Hpptr & Hparr' & Hlte').
+  - destruct Hparr as (pptr & parr' & Hpptr & Hparr' & Hsep & Hlte').
     etransitivity.
     {
       eapply IHn; try lia; try rewrite lGetPut.
@@ -922,7 +989,7 @@ Proof.
     {
       subst si'. simpl. apply Hlte. apply Hlte'. constructor 1. left.
       destruct Hpptr as (val & (? & ?) & Hpptr); subst.
-      destruct Hpptr as (pwrite & p' & Hpwrite & _ & Hlte'').
+      destruct Hpptr as (pwrite & p' & Hpwrite & _ & Hsep' & Hlte'').
       apply Hlte''. constructor 1. left.
       apply Hpwrite. simpl.
       split; [| split]; auto; repeat rewrite lGetPut in *.
@@ -957,7 +1024,7 @@ Lemma Free {A} xi len (xs : Vector.t A (S len) * unit) :
   Ret tt :::
   trueP _ _.
 Proof.
-  intros p si ss (parr & pblock & Hparr & Hpblock & Hlte) Hpre.
+  intros p si ss (parr & pblock & Hparr & Hpblock & Hsep & Hlte) Hpre.
   pstep. unfold free. destruct xi as [| ptr]; try contradiction.
   assert (Hoffset: snd ptr = 0).
   { apply Hlte in Hpre. destruct Hpre as (_ & Hpre & _).
@@ -969,7 +1036,7 @@ Proof.
   (* read step *)
   rewritebisim @bind_trigger. econstructor; auto; try reflexivity.
   pose proof Hpre as Hpre'. apply Hlte in Hpre'.
-  destruct Hpre' as (Hprewrite & Hpreblock & Hsep).
+  destruct Hpre' as (Hprewrite & Hpreblock & Hsep').
   apply Hpblock in Hpreblock. simpl in Hpreblock.
   unfold sizeof in Hpreblock. rewrite Hoffset in Hpreblock. simpl in Hpreblock.
   unfold memory in *.
@@ -1037,21 +1104,45 @@ Lemma TransR {A} x y z rw o (T : VPermType Si Ss A) xs ys :
 Proof.
   revert x.
   induction xs.
-  - intros x p (p1 & p2 & Hp1 & Hp2 & Hlte).
+  - intros x p (p1 & p2 & Hp1 & Hp2 & Hsep & Hlte).
     destruct Hp1 as (? & (U & HU & ?) & Hp1); subst.
     apply HU in Hp1. simpl in Hp1. subst. eapply Perms_upwards_closed; eauto.
     etransitivity; eauto. apply lte_r_sep_conj_perm.
-  - intros x p (px' & py & Hpx' & Hpy & Hlte).
+  - intros x p (px' & py & Hpx' & Hpy & Hsep & Hlte).
     eapply mu_fixed_point in Hpx'.
-    destruct Hpx' as (pa & px & Hpa & Hpx & Hlte').
+    destruct Hpx' as (pa & px & Hpa & Hpx & Hsep' & Hlte').
     (* x must be a pointer *)
     destruct x; try contradiction. destruct a0 as [b o'].
     destruct Hpx as (? & (v & ?) & Hpx); subst.
-    destruct Hpx as (px'' & pv & Hpx'' & Hpv & Hlte'').
+    destruct Hpx as (px'' & pv & Hpx'' & Hpv & Hsep'' & Hlte'').
 
     apply mu_fixed_point.
     simpl.
-    exists pa. exists (px'' ** (pv ** py)). split; [apply Hpa | split].
+    exists pa. exists (px'' ** (pv ** py)). split; [apply Hpa | split; [| split]].
+    2: {
+        apply separate_sep_conj_perm.
+        - eapply separate_antimonotone; eauto.
+          etransitivity; eauto. apply lte_l_sep_conj_perm.
+        - apply separate_sep_conj_perm.
+          + eapply separate_antimonotone; eauto.
+            etransitivity; eauto. apply lte_r_sep_conj_perm.
+          + symmetry. symmetry in Hsep. eapply separate_antimonotone; eauto.
+            etransitivity; eauto. apply lte_l_sep_conj_perm.
+          + symmetry in Hsep. eapply separate_antimonotone; eauto.
+            etransitivity; eauto. etransitivity. apply lte_r_sep_conj_perm.
+            apply sep_conj_perm_monotone. reflexivity.
+            etransitivity; eauto. apply lte_r_sep_conj_perm.
+        - symmetry. apply separate_sep_conj_perm.
+          + eapply separate_antimonotone; eauto. reflexivity.
+          + symmetry. symmetry in Hsep. eapply separate_antimonotone; eauto.
+            etransitivity; eauto. etransitivity. apply lte_r_sep_conj_perm.
+            apply sep_conj_perm_monotone. reflexivity.
+            etransitivity; eauto. apply lte_l_sep_conj_perm.
+          + symmetry in Hsep. eapply separate_antimonotone; eauto.
+            etransitivity; eauto. etransitivity. apply lte_r_sep_conj_perm.
+            apply sep_conj_perm_monotone. reflexivity.
+            etransitivity; eauto. apply lte_r_sep_conj_perm.
+    }
     2: { repeat rewrite <- sep_conj_perm_assoc.
          etransitivity; eauto.
          eapply sep_conj_perm_monotone; intuition.
@@ -1059,10 +1150,27 @@ Proof.
          etransitivity; eauto.
          eapply sep_conj_perm_monotone; intuition.
     }
-    eexists; split; [eexists; reflexivity |].
-    apply sep_conj_Perms_perm; [apply Hpx'' |].
-    simpl. exists (v :: reach_perm _ _ z rw o T ▷ (xs ++ ys)). split.
-    2: { apply IHxs. apply sep_conj_Perms_perm; auto. }
+    eexists. split; [eexists; reflexivity |].
+    apply sep_conj_Perms_perm; [apply Hpx'' | |].
+    2: {
+      apply separate_sep_conj_perm; auto.
+      + symmetry. symmetry in Hsep. eapply separate_antimonotone; eauto.
+        etransitivity; eauto. etransitivity. apply lte_r_sep_conj_perm.
+        apply sep_conj_perm_monotone. reflexivity.
+        etransitivity; eauto. apply lte_l_sep_conj_perm.
+      + symmetry in Hsep. eapply separate_antimonotone; eauto.
+        etransitivity; eauto. etransitivity. apply lte_r_sep_conj_perm.
+        apply sep_conj_perm_monotone. reflexivity.
+        etransitivity; eauto. apply lte_r_sep_conj_perm.
+    }
+    cbn. exists (v :: reach_perm _ _ z rw o T ▷ (xs ++ ys)). split.
+    2: {
+      apply IHxs. apply sep_conj_Perms_perm; auto.
+      symmetry. symmetry in Hsep. eapply separate_antimonotone; eauto.
+      etransitivity; eauto. etransitivity. apply lte_r_sep_conj_perm.
+      apply sep_conj_perm_monotone. reflexivity.
+      etransitivity; eauto. apply lte_r_sep_conj_perm.
+    }
     eexists; split; eauto.
     repeat intro. eapply mu_fixed_point in H0; auto.
     Unshelve. all: apply reach_perm_proper.
