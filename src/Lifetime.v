@@ -110,6 +110,14 @@ Proof.
   - specialize (H l). specialize (H0 l). etransitivity; eauto.
 Qed.
 
+Lemma Lifetimes_lte_app ls ls' r :
+  Lifetimes_lte ls ls' ->
+  Lifetimes_lte ls (ls' ++ r).
+Proof.
+  repeat intro. unfold statusOf. destruct (Compare_dec.dec_lt l (length ls)).
+  - rewrite nth_error_app1; auto.
+Admitted.
+
 Lemma Lifetimes_lte_finished ls l :
   Lifetimes_lte ls (replace_list_index ls l finished).
 Proof.
@@ -134,7 +142,8 @@ Lemma Lifetimes_lte_replace_list_index ls ls' l s :
 Proof.
   repeat intro.
   destruct (Peano_dec.dec_eq_nat l l0).
-  - subst. red in H. admit.
+  - subst. red in H. unfold statusOf in *. do 2 rewrite nth_error_replace_list_index_eq.
+    reflexivity.
   - admit.
 Admitted.
 
@@ -158,10 +167,6 @@ Admitted.
   Next Obligation.
   Admitted.
  *)
-
-Program Definition endLifetime (l : nat) (ls : Lifetimes) (* and some proof that all the parents are finished? *) : Lifetimes.
-Admitted.
-
 
 (*
 Variant Lifetime := current | finished.
