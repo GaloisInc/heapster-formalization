@@ -8,6 +8,7 @@ From Coq Require Import
      ProofIrrelevance.
 
 From Heapster Require Import
+     Utils
      Permissions
      SepStep.
 
@@ -98,12 +99,6 @@ End Parallel.
 
 (** * Stuttering bisimulation *)
 Section bisim.
-  Variant modifyE C : Type -> Type :=
-  | Modify : forall (f : C -> C), modifyE C C.
-  Global Arguments Modify {C} f.
-
-  Definition sceE (C : Type) := (exceptE unit +' modifyE C +' nondetE).
-
   Context {config specConfig : Type}.
 
   Inductive sbuter_gen {R1 R2 : Type} (sbuter : perm -> (R1 -> R2 -> Perms) -> itree (sceE config) R1 -> config -> itree (sceE specConfig) R2 -> specConfig -> Prop)

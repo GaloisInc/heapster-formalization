@@ -3,6 +3,22 @@ From Coq Require Import
      Lists.List
      micromega.Lia.
 
+From ITree Require Import
+     ITree
+     ITreeFacts
+     Basics.MonadState
+     Basics.MonadProp
+     Events.State
+     Events.Exception
+     Events.Nondeterminism
+     Eq.Eqit
+     Eq.UpToTaus
+     Eq.EqAxiom.
+
+Import ListNotations.
+Import ITreeNotations.
+Local Open Scope itree_scope.
+
 Import ListNotations.
 (* end hide *)
 
@@ -169,3 +185,11 @@ Proof.
     f_equal. apply IHl.
     intros. specialize (H (S n)). cbn in H. auto.
 Qed.
+
+(** * Common itree definitions *)
+
+Variant modifyE C : Type -> Type :=
+  | Modify : forall (f : C -> C), modifyE C C.
+Global Arguments Modify {C} f.
+
+Definition sceE (C : Type) := (exceptE unit +' modifyE C +' nondetE).

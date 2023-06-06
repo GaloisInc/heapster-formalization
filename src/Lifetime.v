@@ -110,13 +110,35 @@ Proof.
   - specialize (H l). specialize (H0 l). etransitivity; eauto.
 Qed.
 
+Lemma Lifetimes_lte_cons ls ls' a a' :
+  Lifetimes_lte (a :: ls) (a' :: ls') ->
+  Lifetimes_lte ls ls'.
+Proof.
+  intros H n. specialize (H (S n)).
+  cbn in *. auto.
+Qed.
+
+Lemma Lifetimes_lte_length ls ls' :
+  Lifetimes_lte ls ls' ->
+  length ls <= length ls'.
+Proof.
+  revert ls'. induction ls; intros; cbn; try lia.
+  destruct ls'.
+  - specialize (H 0). contradiction.
+  - cbn. apply le_n_S. apply IHls.
+    eapply Lifetimes_lte_cons; eauto.
+Qed.
+
 Lemma Lifetimes_lte_app ls ls' r :
   Lifetimes_lte ls ls' ->
   Lifetimes_lte ls (ls' ++ r).
 Proof.
   repeat intro. unfold statusOf. destruct (Compare_dec.dec_lt l (length ls)).
-  - rewrite nth_error_app1; auto.
-Admitted.
+  - rewrite nth_error_app1; auto. apply H.
+    apply Lifetimes_lte_length in H. lia.
+  - rewrite (proj2 (nth_error_None ls l)). 2: lia.
+    cbn. auto.
+Qed.
 
 Lemma Lifetimes_lte_finished ls l :
   Lifetimes_lte ls (replace_list_index ls l finished).
@@ -144,9 +166,9 @@ Proof.
   destruct (Peano_dec.dec_eq_nat l l0).
   - subst. red in H. unfold statusOf in *. do 2 rewrite nth_error_replace_list_index_eq.
     reflexivity.
-  - admit.
-Admitted.
-
+  - destruct (Compare_dec.dec_lt l (length ls)).
+    + cbn.
+Abort. (* not used right now *)
 
 (*
   Program Definition newLifetime (ls : Lifetimes) (ps : list Lifetime) (H : forall p, In p parents -> inL p ls) :

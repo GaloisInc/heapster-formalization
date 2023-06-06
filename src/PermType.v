@@ -15,7 +15,6 @@ From Heapster Require Import
      Utils
      Permissions
      Memory
-     MemoryPerms
      SepStep
      Typing.
 
@@ -38,13 +37,12 @@ Import MonadNotation.
 (* end hide *)
 
 Section permType.
-  Context (Si Ss:Type).
-  Context `{Lens Si memory}.
+  Context {Si Ss : Type}.
 
   (** * Permission types *)
 
   Record PermType (A B:Type) : Type :=
-    { ptApp : A -> B -> @Perms(Si*Ss) }.
+    { ptApp : A -> B -> @Perms(Si * Ss) }.
   Definition VPermType A := PermType Value A.
   Notation "xi :: T ▷ xs" := (ptApp _ _ T xi xs) (at level 35).
 
@@ -89,47 +87,8 @@ Section permType.
   Definition falseP {A B} : PermType A B :=
     {| ptApp := fun _ _ => top_Perms |}.
 
-  Definition offset (v : Value) (o : nat) : Value :=
-    match v with
-    | VNum n => VNum (n + o)
-    | VPtr (blk, n) => VPtr (blk, n + o)
-    end.
-
-  Definition ptr_Perms {A} (rw : RW) (p : Value) (a : A) T : @Perms (Si * Ss) :=
-    match p with
-    | VNum _ => top_Perms
-    | VPtr p =>
-      meet_Perms (fun P => exists v, P = singleton_Perms (match rw with
-                                                  | R => read_perm p v
-                                                  | W => write_perm p v
-                                                  end)
-                                 * (v :: T ▷ a))
-    end.
-
-  Definition ptr {A} '(rw, o, T) : VPermType A :=
-    {|
-    ptApp := fun x a => ptr_Perms rw (offset x o) a T;
-    |}.
-
-  Fixpoint arr_perm {A} rw o l T : VPermType (Vector.t A l) :=
-    match l with
-    | 0 => trueP
-    | S l' =>
-      {| ptApp := fun xi xss =>
-                    xi :: ptr (rw, o, T) ▷ Vector.hd xss *
-                    xi :: arr_perm rw (S o) l' T ▷ Vector.tl xss
-      |}
-    end.
-  Notation "'arr' ( rw , o , l , T )":=(arr_perm rw o l T).
-
   Program Definition eqp {A} (a:A): PermType A unit :=
     {| ptApp := fun a' _ => {| in_Perms _ := a=a' |} |}.
-
-  Definition blockPT l : VPermType unit :=
-    {| ptApp := fun a _ => match a with
-                        | VPtr ptr => singleton_Perms (block_perm l ptr)
-                        | _ => top_Perms
-                        end |}.
 
   (** * Operations used in typing rules *)
 
@@ -164,22 +123,22 @@ Section permType.
   Proof.
     constructor; intro; intros; intros a b.
     - reflexivity.
-    - etransitivity; [ apply H0 | apply H1 ].
+    - etransitivity; [ apply H | apply H0 ].
   Qed.
 
   Global Instance Equivalence_eq_PermType A B : Equivalence (@eq_PermType A B).
   Proof.
     constructor; intro; intros.
     - split; reflexivity.
-    - destruct H0; split; assumption.
-    - destruct H0; destruct H1; split; etransitivity; eassumption.
+    - destruct H; split; assumption.
+    - destruct H; destruct H0; split; etransitivity; eassumption.
   Qed.
 
   Global Instance Proper_eq_PermType_ptApp A B :
     Proper (eq_PermType ==> eq ==> eq ==> eq_Perms) (ptApp A B).
   Proof.
     intros T1 T2 eT a1 a2 ea b1 b2 eb. rewrite ea; rewrite eb.
-    destruct eT. split; [ apply H0 | apply H1 ].
+    destruct eT. split; [ apply H | apply H0 ].
   Qed.
 
   (** The meet on permission types is just the lifitng of that on Perms *)
@@ -190,7 +149,7 @@ Section permType.
   Lemma lte_meet_PermType {A B} (Ts:PermType A B -> Prop) T:
     Ts T -> lte_PermType (meet_PermType Ts) T.
   Proof.
-    intros ts_t a b. simpl. apply lte_meet_Perms. exists T; split; eauto.
+    intros ts_t a b. apply lte_meet_Perms. exists T; split; eauto.
   Qed.
 
   (** Meet is the greatest lower bound for PermType *)
@@ -241,7 +200,7 @@ Section permType.
     : PermType A X :=
     @fixPT A X (fun T => unmaprPT unfoldFP (F T)) _.
   Next Obligation.
-    intros T1 T2 leqT a x. simpl. apply prp. assumption.
+    intros T1 T2 leqT a x. apply prp. assumption.
   Defined.
 
   Lemma mu_fixed_point {A G X} `{FixedPoint G X}
@@ -282,6 +241,7 @@ Section permType.
     destruct x; auto.
   Defined.
 
+  (*
   Lemma reach_perm_proper {A} r (T : VPermType A) rw o :
     Proper (lte_PermType ==> lte_PermType)
            (fun U : VPermType (list A) => or (eqp r) (T ⋆ (ptr (rw, o, U)))).
@@ -400,13 +360,14 @@ Section permType.
       repeat intro. eapply mu_fixed_point in H0; auto.
       Unshelve. all: apply reach_perm_proper.
   Qed.
+   *)
 End permType.
 
-Notation "P ⊢ ti ⤳ ts ::: U" := (typing P (ptApp _ _ _ _ U) ti ts) (at level 60).
-Notation "xi :: T ▷ xs" := (ptApp _ _ _ _ T xi xs) (at level 35).
-Notation "T1 ⊕ T2" := (plusPT _ _ T1 T2) (at level 50).
-Notation "T1 ⊗ T2" := (timesPT _ _ T1 T2) (at level 40).
-Notation "T1 ⋆ T2" := (starPT _ _ T1 T2) (at level 40).
-Notation "'ex' ( x 'oftype' A ) T" := (existsPT _ _ (As:=A) (fun x => T)) (at level 70).
-Notation "T ∅ P" := (withPerms _ _ T P) (at level 40).
-Notation "'arr' ( rw , o , l , T )" := (arr_perm _ _ rw o l T) (at level 40).
+Notation "P ⊢ ti ⤳ ts ::: U" := (typing P (ptApp _ _ U) ti ts) (at level 60).
+Notation "xi :: T ▷ xs" := (ptApp _ _ T xi xs) (at level 35).
+Notation "T1 ⊕ T2" := (plusPT T1 T2) (at level 50).
+Notation "T1 ⊗ T2" := (timesPT T1 T2) (at level 40).
+Notation "T1 ⋆ T2" := (starPT T1 T2) (at level 40).
+Notation "'ex' ( x 'oftype' A ) T" := (existsPT (As:=A) (fun x => T)) (at level 70).
+Notation "T ∅ P" := (withPerms T P) (at level 40).
+(* Notation "'arr' ( rw , o , l , T )" := (arr_perm _ _ rw o l T) (at level 40). *)

@@ -6,10 +6,16 @@ From Coq Require Import
      Lia.
 
 From Heapster Require Import
-     Utils
-     Permissions.
+     Utils.
+
+From ITree Require Import
+     ITree
+     Events.Exception.
 
 Import ListNotations.
+Import ITreeNotations.
+
+Local Open Scope itree_scope.
 (* end hide *)
 
 (** * Memory model *)
@@ -24,23 +30,19 @@ Definition eqb (a b : addr) : bool :=
 Lemma eqb_spec : forall x y, Bool.reflect (x = y) (eqb x y).
 Proof.
   intros [x1 x2] [y1 y2]. destruct (eqb (x1, x2) (y1, y2)) eqn:?; constructor.
-  - unfold eqb in Heqb. simpl in Heqb. symmetry in Heqb. apply Bool.andb_true_eq in Heqb.
+  - unfold eqb in Heqb. cbn in Heqb. symmetry in Heqb. apply Bool.andb_true_eq in Heqb.
     destruct Heqb. symmetry in H, H0.
     apply (Bool.reflect_iff _ _ (Nat.eqb_spec _ _)) in H.
     apply (Bool.reflect_iff _ _ (Nat.eqb_spec _ _)) in H0. subst. auto.
-  - unfold eqb in Heqb. simpl in Heqb. apply Bool.andb_false_iff in Heqb.
-    destruct Heqb.
-    + intro. inversion H0. subst. rewrite Nat.eqb_refl in H. inversion H.
-    + intro. inversion H0. subst. rewrite Nat.eqb_refl in H. inversion H.
+  - unfold eqb in Heqb. cbn in Heqb. apply Bool.andb_false_iff in Heqb.
+    destruct Heqb; intro; inversion H0; subst; rewrite Nat.eqb_refl in H; inversion H.
 Qed.
 
 Lemma addr_dec : forall (a b : addr), {a = b} + {a <> b}.
 Proof.
   intros [a1 a2] [b1 b2].
-  destruct (Nat.eq_dec a1 b1); destruct (Nat.eq_dec a2 b2); subst; auto.
-  - right. intros H. inversion H; subst. apply n. reflexivity.
-  - right. intros H. inversion H; subst. apply n. reflexivity.
-  - right. intros H. inversion H; subst. apply n. reflexivity.
+  destruct (Nat.eq_dec a1 b1); destruct (Nat.eq_dec a2 b2); subst; auto;
+    (right; intros H; inversion H; subst; apply n; reflexivity).
 Qed.
 
 Lemma addr_neq_cases (b b' o o' : nat) :
@@ -109,7 +111,7 @@ Lemma allocated_ptr_block m b o :
   allocated m (b, o) = true ->
   b < length m.
 Proof.
-  unfold allocated. simpl. intros.
+  unfold allocated. cbn. intros.
   apply nth_error_Some. intro. rewrite H0 in H. inversion H.
 Qed.
 
@@ -118,7 +120,7 @@ Lemma allocated_ptr_offset m b o size bytes :
   nth_error m b = Some (Some (LBlock size bytes)) ->
   o < size.
 Proof.
-  unfold allocated. simpl. intros. rewrite H0 in H.
+  unfold allocated. unfold fst, snd. intros. rewrite H0 in H.
   rewrite <- (Bool.reflect_iff _ _ (Nat.ltb_spec0 _ _)) in H. auto.
 Qed.
 
@@ -149,19 +151,19 @@ Lemma write_success_read_neq m m' ptr v :
   forall ptr', ptr <> ptr' -> read m ptr' = read m' ptr'.
 Proof.
   destruct ptr as [b o].
-  unfold write. unfold read. simpl. intros.
+  unfold write. unfold read. cbn. intros.
   destruct (allocated m (b, o)) eqn:?; try solve [inversion H].
   destruct (nth_error m b) eqn:?; try solve [inversion H].
   destruct o0 eqn:?; try solve [inversion H].
-  destruct l. inversion H; subst; clear H. destruct ptr' as [b' o']. simpl.
+  destruct l. inversion H; subst; clear H. destruct ptr' as [b' o']. cbn.
   pose proof (allocated_ptr_block _ _ _ Heqb0).
   destruct (addr_neq_cases _ _ _ _ H0).
-  - unfold allocated. simpl. erewrite nth_error_replace_list_index_neq; eauto.
+  - unfold allocated. cbn. erewrite nth_error_replace_list_index_neq; eauto.
   - destruct (Nat.eq_dec b b').
-    + subst. unfold allocated. simpl. rewrite nth_error_replace_list_index_eq; auto.
+    + subst. unfold allocated, fst, snd. rewrite nth_error_replace_list_index_eq; auto.
       rewrite Heqo0. destruct (o' <? size) eqn:?; auto.
       rewrite <- Nat.eqb_neq in H1. rewrite Nat.eqb_sym. rewrite H1. auto.
-    + unfold allocated. simpl. erewrite nth_error_replace_list_index_neq; eauto.
+    + unfold allocated. cbn. erewrite nth_error_replace_list_index_neq; eauto.
 Qed.
 
 Lemma write_success_sizeof m m' ptr v :
@@ -169,15 +171,15 @@ Lemma write_success_sizeof m m' ptr v :
   forall ptr', sizeof m ptr' = sizeof m' ptr'.
 Proof.
   destruct ptr as [b o].
-  unfold write. unfold read. simpl. intros.
+  unfold write. unfold read. cbn. intros.
   destruct (allocated m (b, o)) eqn:?; try solve [inversion H].
   destruct (nth_error m b) eqn:?; try solve [inversion H].
   destruct o0 eqn:?; try solve [inversion H].
-  destruct l. inversion H; subst; clear H. destruct ptr' as [b' o']. simpl.
+  destruct l. inversion H; subst; clear H. destruct ptr' as [b' o']. cbn.
   pose proof (allocated_ptr_block _ _ _ Heqb0).
-  unfold sizeof. simpl. destruct (o' =? 0) eqn:?; auto.
+  unfold sizeof. cbn. destruct (o' =? 0) eqn:?; auto.
   destruct (Nat.eq_dec b b').
-  - subst. simpl. rewrite nth_error_replace_list_index_eq; auto.
+  - subst. cbn. rewrite nth_error_replace_list_index_eq; auto.
     rewrite Heqo0. auto.
   - erewrite nth_error_replace_list_index_neq; eauto.
 Qed.
@@ -187,13 +189,13 @@ Lemma write_success_length m m' ptr v :
   length m = length m'.
 Proof.
   destruct ptr as [b o].
-  unfold write. unfold read. simpl. intros.
+  unfold write. unfold read. cbn. intros.
   destruct (allocated m (b, o)) eqn:?; try solve [inversion H].
   destruct (nth_error m b) eqn:?; try solve [inversion H].
   destruct o0 eqn:?; try solve [inversion H].
   destruct l. inversion H; subst; clear H.
   pose proof (allocated_ptr_block _ _ _ Heqb0).
-  simpl. apply replace_list_index_length; auto.
+  cbn. apply replace_list_index_length; auto.
 Qed.
 
 (** ** Helper definitions *)
@@ -208,8 +210,8 @@ Definition mem_at (ptr : addr) (v : Value) : memory :=
 
 (** Properties about [mem_at]. *)
 Lemma allocated_mem_at ptr v : allocated (mem_at ptr v) ptr = true.
-  destruct ptr as [b o]. unfold allocated, mem_at. simpl.
-  induction b; simpl; auto. apply Nat.ltb_lt. lia.
+  destruct ptr as [b o]. unfold allocated, mem_at. cbn.
+  induction b; cbn; auto. apply Nat.ltb_lt. lia.
 Qed.
 
 Lemma nth_error_mem_at ptr v :
@@ -220,7 +222,7 @@ Lemma nth_error_mem_at ptr v :
                        then Some v
                        else None))).
 Proof.
-  destruct ptr as [b o]. simpl. induction b; auto.
+  destruct ptr as [b o]. cbn. induction b; auto.
 Qed.
 
 Lemma read_mem_at ptr v : read (mem_at ptr v) ptr = Some v.
@@ -234,8 +236,8 @@ Lemma write_mem_at ptr v v' : write (mem_at ptr v) ptr v' = Some (mem_at ptr v')
 Proof.
   destruct ptr as [b o]. unfold write.
   rewrite allocated_mem_at. rewrite nth_error_mem_at. f_equal.
-  unfold mem_at. simpl.
-  induction b; simpl; try solve [f_equal; auto].
+  unfold mem_at. cbn.
+  induction b; cbn; try solve [f_equal; auto].
   do 3 f_equal. apply functional_extensionality. intros.
   destruct (x =? o); auto.
 Qed.
@@ -255,9 +257,10 @@ Proof.
   assert (b < length m).
   { apply nth_error_Some. intro. rewrite H in H0. inversion H0. }
   revert H H0. revert b.
-  induction m; intros; simpl in *; try lia; auto.
-  destruct b; f_equal; [| apply IHm; auto; lia].
-  inversion H. rewrite Nat.sub_0_r.
+  induction m; intros; try solve [cbn in *; lia; auto].
+  unfold replace_list_index.
+  simpl. destruct b; f_equal; [| cbn in *; apply IHm; auto; lia].
+  inversion H. subst. rewrite Nat.sub_0_r.
   do 2 f_equal. apply functional_extensionality. intros.
   rewrite Nat.ltb_antisym. rewrite Bool.andb_negb_l. reflexivity.
 Qed.
@@ -267,7 +270,7 @@ Lemma replace_n_same m b size bytes :
   replace_n m b (S size) bytes (S size).
 Proof.
   unfold replace_n. do 4 f_equal. apply functional_extensionality. intros.
-  rewrite Nat.sub_diag. simpl. rewrite Bool.andb_true_r. reflexivity.
+  rewrite Nat.sub_diag. cbn. rewrite Bool.andb_true_r. reflexivity.
 Qed.
 
 Lemma read_replace_n_neq ptr' n b len m bytes :
@@ -279,8 +282,7 @@ Proof.
   destruct (allocated m ptr') eqn:?.
   2: { unfold allocated in *.
        erewrite <- nth_error_replace_list_index_neq; eauto. rewrite Heqb0; auto. }
-  pose proof (allocated_ptr_block _ _ _ Heqb0).
-  unfold allocated in *. simpl.
+  pose proof (allocated_ptr_block _ _ _ Heqb0). unfold allocated in *.
   rewrite <- nth_error_replace_list_index_neq; eauto. rewrite Heqb0; auto.
 Qed.
 
@@ -289,9 +291,131 @@ Lemma sizeof_replace_n ptr b m n size bytes :
   b < length m ->
   sizeof m ptr = sizeof (replace_n m b size bytes n) ptr.
 Proof.
-  simpl. intros Hb Hlt. unfold replace_n, sizeof. destruct (snd ptr =? 0); auto.
+  intros Hb Hlt. unfold replace_n, sizeof. destruct (snd ptr =? 0); auto.
   destruct (Nat.eq_dec (fst ptr) b).
-  * rewrite e in *. simpl. rewrite nth_error_replace_list_index_eq; auto.
+  * rewrite e in *. cbn. rewrite nth_error_replace_list_index_eq; auto.
     rewrite Hb. auto.
-  * simpl. erewrite <- nth_error_replace_list_index_neq; auto.
+  * erewrite <- nth_error_replace_list_index_neq; auto.
+Qed.
+
+(** * Memory Computations *)
+Section MemoryOps.
+  Context {Si Ss : Type}.
+  Context `{Hlens: Lens Si memory}.
+
+  Definition load (v : Value) : itree (sceE Si) Value :=
+    s <- trigger (Modify id);;
+    match v with
+    | VNum _ => throw tt
+    | VPtr p => match read (lget s) p with
+               | None => throw tt
+               | Some b => Ret b
+               end
+    end.
+
+  Definition store (ptr : Value) (v : Value) : itree (sceE Si) Si :=
+    match ptr with
+    | VNum _ => throw tt
+    | VPtr ptr => s <- trigger (Modify (fun s => match write (lget s) ptr v with
+                                            | None => s
+                                            | Some c => (lput s c)
+                                            end)) ;;
+                 match write (lget s) ptr v with
+                 | None => throw tt
+                 | Some c => Ret (lput s c)
+                 end
+    end.
+
+  Definition malloc (size : nat) : itree (sceE Si) Value :=
+    s <- trigger (Modify id);; (* do a read first to use length without subtraction *)
+    trigger (Modify (fun s =>
+                       (lput s ((lget s) ++
+                                         [Some (LBlock size
+                                                       (fun o => if o <? size
+                                                              then Some (VNum 0)
+                                                              else None))]))));;
+    Ret (VPtr (length (lget s), 0)).
+
+  Definition free (ptr : Value) : itree (sceE Si) unit :=
+    match ptr with
+    | VNum _ => throw tt
+    | VPtr ptr =>
+        if snd ptr =? 0
+        then
+          s <- trigger (Modify id);;
+          match nth_error (lget s) (fst ptr) with
+          | Some (Some (LBlock size bytes)) =>
+              trigger (Modify (fun s =>
+                                 (lput s (replace_list_index
+                                            (lget s)
+                                            (fst ptr)
+                                            (Some (LBlock size (fun o => if o <? size then None else bytes o)))))));;
+              Ret tt
+          | _ => throw tt
+          end
+        else throw tt
+    end.
+
+
+  (** * Array operations *)
+  Fixpoint split_leq {A} l1 (v : Vector.t A l1) :
+    forall l2, le l2 l1 -> (Vector.t A l2 * Vector.t A (l1 - l2)).
+  Proof.
+    destruct v; intros; destruct l2.
+    - split; apply Vector.nil.
+    - lia.
+    - split; [ apply Vector.nil | apply Vector.cons; assumption ].
+    - edestruct (split_leq _ n v l2) as [v1 v2].
+      + apply le_S_n; assumption.
+      + split; [ apply Vector.cons; assumption | assumption ].
+  Defined.
+
+  Fixpoint append_leq {A} l1 l2 (l: le l2 l1)
+           (v1:Vector.t A l2) (v2:Vector.t A (l1 - l2)) : Vector.t A l1.
+  Proof.
+    revert l2 l v1 v2. destruct l1; intros.
+    - constructor.
+    - destruct l2.
+      + apply v2.
+      + constructor; [ apply (Vector.hd v1) | ]. apply (append_leq _ l1 l2).
+        * apply le_S_n; assumption.
+        * apply (Vector.tl v1).
+        * apply v2.
+  Defined.
+
+  Arguments append_leq {A} !l1.
+  Arguments split_leq {A} l1 !v.
+
+
+  Definition trySplit {A l1 R S} (v : Vector.t A l1) l2
+             (f : Vector.t A l2 -> Vector.t A (l1 - l2) -> itree (sceE S) R) : itree (sceE S) R.
+    destruct (Compare_dec.le_lt_dec l2 l1).
+    - exact (f (fst (split_leq l1 v l2 l)) (snd (split_leq l1 v l2 l))).
+    - exact (throw tt).
+  Defined.
+
+End MemoryOps.
+
+
+Lemma split_leq_append_leq A l1 v l2 (l: le l2 l1) :
+  @append_leq A l1 l2 l (fst (split_leq l1 v l2 l)) (snd (split_leq l1 v l2 l)) = v.
+Proof.
+  revert l2 l; induction v; intros.
+  - cbn. reflexivity.
+  - destruct l2.
+    + cbn. reflexivity.
+    + cbn.
+      rewrite (surjective_pairing (split_leq n v l2 (le_S_n l2 n l))). cbn.
+      rewrite IHv. reflexivity.
+Qed.
+Lemma vector_tl_append A n m (v1 : Vector.t A (S n)) (v2 : Vector.t A m) :
+  Vector.tl (Vector.append v1 v2) = Vector.append (Vector.tl v1) v2.
+Proof.
+  revert v1. revert n. apply Vector.caseS. intros; auto.
+Qed.
+
+Lemma vector_hd_append A n m (v1 : Vector.t A (S n)) (v2 : Vector.t A m) :
+  Vector.hd (Vector.append v1 v2) = Vector.hd v1.
+Proof.
+  revert v1. revert n. apply Vector.caseS. intros; auto.
 Qed.

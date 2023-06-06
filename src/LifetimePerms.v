@@ -33,7 +33,6 @@ Open Scope list_scope.
 (* end hide *)
 
 Section LifetimePerms.
-
   Context {Si Ss : Type}.
   Context `{Hlens: Lens Si Lifetimes}.
 
@@ -43,12 +42,10 @@ Section LifetimePerms.
 
       rely '(x, _) '(y, _) :=
       length (lget x) = length (lget y) /\
-        (* Lifetimes_lte (lget x) (lget y) /\ *)
         (forall n', n' >= n -> statusOf n' (lget x) = statusOf n' (lget y));
 
       guar '(x, _) '(y, _) :=
       (exists (ls : Lifetimes), y = lput x ls) /\
-        (* Lifetimes_lte (lget x) (lget y) /\ *)
         (forall l, l < n ->
               statusOf l (lget x) = statusOf l (lget y));
     |}.
@@ -183,7 +180,7 @@ Section LifetimePerms.
     - etransitivity; eauto.
   Qed.
 
-  Lemma nonLifetime_sep_conj p q (Hp : nonLifetime p) (Hq : nonLifetime q) :
+  Lemma nonLifetime_sep_conj_perm p q (Hp : nonLifetime p) (Hq : nonLifetime q) :
     p ⊥ q ->
     nonLifetime (p ** q).
   Proof.
@@ -208,152 +205,44 @@ Section LifetimePerms.
     repeat intro. apply H0. apply H.
   Qed.
 
+  Definition nonLifetime_Perms P : Prop :=
+    forall p,
+      p ∈ P ->
+      exists p',
+        p' ∈ P /\
+          p' <= p /\
+          nonLifetime p' /\
+          guar_inv p'.
 
-  Definition nonLifetime' (p : @perm (Si * Ss)) : Prop :=
-    (* cannot change lifetimes *)
-    (forall x y, guar p x y -> lget (fst x) = lget (fst y)).
-      (*  /\ *)
-      (* (* must continue to tolerate states no matter the lifetime *) *)
-      (* (forall si ss si' ss' l1 l2, rely p (si, ss) (si', ss') -> *)
-      (*                         rely p ((lput si l1), ss) ((lput si' l2), ss')). *)
-
-  (* /\ *)
-  (*     (forall si si' ss ss' l s, guar p (si, ss) (si', ss') -> *)
-  (*                           guar p ((lput si (replace_list_index (lget si) l s)), ss) *)
-  (*                                ((lput si' (replace_list_index (lget si') l s)), ss')). *)
-
-  (*
-  Program Definition nonLifetimeify (p : @perm (Si * Ss)) : perm :=
-    {|
-      pre := pre p;
-      rely '(si, ss) '(si', ss') := exists l, rely p ((lput si l), ss) ((lput si' l), ss');
-      guar x y := guar p x y /\ lget (fst x) = lget (fst y);
-    |}.
-  Next Obligation.
-    constructor; repeat intro.
-    - destruct x. exists nil. reflexivity.
-    - destruct x, y, z. destruct H, H0.
-      eexists. etransitivity; eauto.
-  Qed.
-
-  Lemma nonLifetimeify_works :
-    nonLifetime (nonLifetimeify p).
-
-    Lemma nonLifetimeify_lte :
-      nonLifetimify p <= p.
-   *)
-
-  Lemma clos_trans_nonLifetime' p q (Hp : nonLifetime' p) (Hq : nonLifetime' q) x y :
-    Relation_Operators.clos_trans (Si * Ss) (guar p \2/ guar q) x y ->
-    lget (fst x) = lget (fst y).
+  Lemma nonLifetime_Perms_bottom :
+    nonLifetime_Perms bottom_Perms.
   Proof.
-    repeat intro. induction H.
-    - destruct H; [apply Hp | apply Hq]; auto.
-    - etransitivity; eauto.
+    repeat intro. exists bottom_perm. split; [| split; [| split]]; auto.
+    apply bottom_perm_is_bottom.
+    apply nonLifetime_bottom.
+    apply guar_inv_bottom.
   Qed.
 
-  Lemma nonLifetime'_sep_conj p q (Hp : nonLifetime' p) (Hq : nonLifetime' q) :
-    nonLifetime' (p ** q).
+  Lemma nonLifetime_Perms_sep_conj_Perms P Q :
+    nonLifetime_Perms P ->
+    nonLifetime_Perms Q ->
+    nonLifetime_Perms (P * Q).
   Proof.
-    repeat intro.
-    apply (clos_trans_nonLifetime' p q); auto.
+    intros HP HQ p0 (p & q & Hp & Hq & Hsep & Hlte).
+    destruct (HP _ Hp) as (p' & Hp' & Hpp' & Hnlp & Hguarp).
+    destruct (HQ _ Hq) as (q' & Hq' & Hqq' & Hnlq & Hguarq).
+    assert (p' ⊥ q').
+    {
+      eapply separate_antimonotone. 2: apply Hqq'.
+      symmetry. eapply separate_antimonotone. 2: apply Hpp'.
+      symmetry. auto.
+    }
+    exists (p' ** q'). split; [| split; [| split]].
+    - apply sep_conj_Perms_perm; auto.
+    - etransitivity; eauto. apply sep_conj_perm_monotone; auto.
+    - apply nonLifetime_sep_conj_perm; auto.
+    - apply guar_inv_sep_conj_perm; auto.
   Qed.
-
-  Lemma nonLifetime'_bottom : nonLifetime' bottom_perm.
-  Proof.
-    repeat intro; cbn in *; subst; auto.
-  Qed.
-
-  Lemma nonLifetime'_lte p q :
-    nonLifetime' p -> q <= p -> nonLifetime' q.
-  Proof.
-    repeat intro. apply H0 in H1. apply H; auto.
-  Qed.
-
-  Lemma nonLifetime'_sep_step p q :
-    nonLifetime' p -> sep_step p q -> nonLifetime' q.
-  Proof.
-    repeat intro. eapply sep_step_guar in H1; eauto.
-  Qed.
-
-  (* Definition lifetime_invariant x y := *)
-  (*   (forall n n', subsumes n' n (lget x) (lget x) -> *)
-  (*            subsumes n' n (lget y) (lget y)) /\ *)
-  (*     (forall n, lifetime_lte (lifetime (lget x) n) (lifetime (lget y) n)). *)
-
-  (* Instance lifetime_invariant_preorder : PreOrder lifetime_invariant. *)
-  (* Proof. *)
-  (*   split; [split; intuition |]. *)
-  (*   - intros ? ? ? [] []. split; auto; etransitivity; eauto. *)
-  (* Qed. *)
-
-  (* Definition monotonic_at (p : @perm C) (n : nat) x y : Prop := *)
-  (*   guar p x y -> lifetime_lte (lifetime (lget x) n) (lifetime (lget y) n). *)
-
-  (* Instance monotonic_at_reflexive p n : Reflexive (monotonic_at p n). *)
-  (* Proof. *)
-  (*   repeat intro. reflexivity. *)
-  (* Qed. *)
-
-  (* Lemma bottom_monotonic_at n : forall x y, monotonic_at bottom_perm n x y. *)
-  (* Proof. *)
-  (*   repeat intro. simpl in H. subst. reflexivity. *)
-  (* Qed. *)
-
-  (* Definition monotonic (P : Perms) (n : nat) : Prop := *)
-  (*   forall p, p ∈ P -> exists p', p' <= p /\ p' ∈ P /\ forall x y, monotonic_at p' n x y. *)
-
-  (* Lemma monotonic_bottom n : monotonic bottom_Perms n. *)
-  (* Proof. *)
-  (*   repeat intro. exists bottom_perm. split; [| split]. *)
-  (*   apply bottom_perm_is_bottom. auto. apply bottom_monotonic_at. *)
-  (* Qed. *)
-
-  (* Program Definition restrict_monotonic_at (p : perm) (n : nat) : @perm C := *)
-  (*   {| *)
-  (*     pre := pre p; *)
-  (*     rely := rely p; *)
-  (*     guar := fun x y => guar p x y /\ monotonic_at p n x y; *)
-  (*   |}. *)
-  (* Next Obligation. *)
-  (*   constructor; repeat intro. *)
-  (*   - split; intuition. *)
-  (*   - destruct H, H0. split; [etransitivity; eauto |]. intro. etransitivity; eauto. *)
-  (* Qed. *)
-  (* Next Obligation. *)
-  (*   respects. *)
-  (* Qed. *)
-
-  (* Lemma restrict_monotonic_at_monotone p p' n : *)
-  (*   p <= p' -> restrict_monotonic_at p n <= restrict_monotonic_at p' n. *)
-  (* Proof. *)
-  (*   intros []. constructor; intros; simpl; auto. destruct H. *)
-  (*   split; auto. intro. auto. *)
-  (* Qed. *)
-
-  (* Lemma restrict_monotonic_at_lte p n : restrict_monotonic_at p n <= p. *)
-  (* Proof. *)
-  (*   constructor; intros; simpl in *; intuition. *)
-  (* Qed. *)
-
-  (* Definition invariant_at (p : perm) (n : nat) : Prop := *)
-  (*   forall l1 l2 x y, guar p x y <-> guar p (replace_lifetime x n l1) (replace_lifetime y n l2). *)
-
-  (* Lemma invariant_l p n (Hinv : invariant_at p n) : *)
-  (*   forall l1 l2 x y, lifetime y n = Some l2 -> *)
-  (*                guar p x y <-> guar p (replace_lifetime x n l1) y. *)
-  (* Proof. *)
-  (*   intros. *)
-  (*   erewrite <- (replace_list_index_eq _ y n l2) at 2; auto. *)
-  (* Qed. *)
-
-  (* Lemma invariant_r p n (Hinv : invariant_at p n) : *)
-  (*   forall l1 l2 x y, lifetime x n = Some l1 -> *)
-  (*                guar p x y <-> guar p x (replace_lifetime y n l2). *)
-  (* Proof. *)
-  (*   intros. *)
-  (*   rewrite <- (replace_list_index_eq _ x n l1) at 2; auto. *)
-  (* Qed. *)
 
   (* Note: does not have permission to start or end the lifetime [n] *)
   Program Definition when
@@ -629,30 +518,8 @@ Section LifetimePerms.
       intros. apply H1. lia.
   Qed.
 
-  (* oh. this was not necessary all along *)
-  Lemma lifetimes_sep_gen p q l Hp Hq Hsep :
-    p ⊥ owned l q Hq ->
-    when l p Hp ⊥ owned l (p ** q) (nonLifetime_sep_conj _ _ Hp Hq Hsep).
-  Proof.
-    intros.
-    eapply when_owned_sep.
-    (* split; intros. *)
-    (* - destruct x, y. cbn in H0. *)
-    (*   decompose [and or] H0; [inversion H1; subst; intuition |]. clear H0. *)
-    (*   cbn. split; auto. intros []. *)
-    (*   + rewrite H0 in H1. inversion H1. *)
-    (*   + rewrite H0 in H1. inversion H1. *)
-    (* - cbn in H0. destruct x, y. *)
-    (*   decompose [and or] H0; [inversion H1; subst; intuition |]; clear H0. *)
-    (*   cbn. split; [| split]; auto. *)
-    (*   + intros. rewrite H1, H3. auto. *)
-    (*   + intros. rewrite H1 in H0. discriminate H0. *)
-  Abort.
-
-
-
   Lemma convert p q l Hp Hq Hsep :
-    when l p Hp ** owned l (p ** q) (nonLifetime_sep_conj _ _ Hp Hq Hsep) <=
+    when l p Hp ** owned l (p ** q) (nonLifetime_sep_conj_perm _ _ Hp Hq Hsep) <=
       p ** owned l q Hq.
   Proof.
     split; intros.
@@ -832,9 +699,8 @@ Section LifetimePerms.
         r1 ** owned l r2 Hr2 <= x /\
           (forall p, p ∈ P ->
                 p ⊥ r1 ** owned l r2 Hr2 ->
-                exists q, q ∈ Q /\
+                exists q, q ∈ Q /\ (* also that q is minimal *)
                        sep_step r2 q /\ (* means that q is also nonLifetime since r2 is *)
-                       (* r1 ⊥ p /\ (* this can't be true for all p... *) *)
                        (forall c1 c2, pre p ((lput c1 (replace_list_index (lget c1) l current)), c2) ->
                                  pre r1 ((lput c1 (replace_list_index (lget c1) l current)), c2) ->
                                  pre q ((lput c1 (replace_list_index (lget c1) l finished)), c2)));
@@ -1045,24 +911,29 @@ Section LifetimePerms.
     apply owned_sep_step; auto.
   Qed.
 
-  Lemma partial l P Q R :
+  Lemma partial l P Q R (HP: nonLifetime_Perms P) :
     P * lowned_Perms' l (P * Q) R ⊨ lowned_Perms' l Q R.
   Proof.
-    intros p0 (p & powned & Hp & (r1 & r2 & Hr1 & Hr2 & Hr2' & Hsep' & Hr2'' & Hlte' & Hf) & Hsep & Hlte).
-    assert (Hp' : nonLifetime p) by admit.
+    intros p0 (p' & powned & Hp' & (r1 & r2 & Hr1 & Hr2 & Hr2' & Hsep' & Hr2'' & Hlte' & Hf) & Hsep & Hlte).
+    destruct (HP _ Hp') as (p & Hp & Hpp' & Hnlp & Hguarp).
     exists (p ** r1), r2. eexists.
     {
-      apply nonLifetime_sep_conj; auto.
-      eapply separate_antimonotone. apply Hsep.
-      etransitivity; eauto. apply lte_l_sep_conj_perm.
+      apply nonLifetime_sep_conj_perm; auto.
+      eapply separate_antimonotone.
+      2: {
+        etransitivity. apply lte_l_sep_conj_perm. apply Hlte'.
+      }
+      symmetry. eapply separate_antimonotone; eauto. symmetry. auto.
     }
     exists Hr2, Hr2'. split.
     {
       symmetry. apply separate_sep_conj_perm.
-      - symmetry. eapply separate_antimonotone; eauto.
+      - eapply separate_antimonotone; eauto.
+        symmetry. eapply separate_antimonotone; eauto.
         etransitivity; eauto. apply lte_r_sep_conj_perm.
       - symmetry. auto.
-      - symmetry. eapply separate_antimonotone; eauto.
+      - eapply separate_antimonotone. 2: apply Hpp'.
+        symmetry. eapply separate_antimonotone; eauto.
         etransitivity; eauto. apply lte_l_sep_conj_perm.
     }
     split; [| split]; auto.
@@ -1078,7 +949,8 @@ Section LifetimePerms.
       eapply separate_antimonotone; eauto.
       apply lte_l_sep_conj_perm.
     - symmetry. apply separate_sep_conj_perm.
-      + symmetry. eapply separate_antimonotone; eauto.
+      + eapply separate_antimonotone; eauto.
+        symmetry. eapply separate_antimonotone; eauto.
       + symmetry. eapply separate_antimonotone; eauto. apply lte_r_sep_conj_perm.
       + eapply separate_antimonotone; eauto. apply lte_l_sep_conj_perm.
     - exists r. split; [| split]; auto.
@@ -1086,7 +958,7 @@ Section LifetimePerms.
       + destruct H0. split; [| split]; auto.
         symmetry. eapply separate_antimonotone; eauto. apply lte_l_sep_conj_perm.
       + apply H0.
-  Admitted.
+  Qed.
 
   Lemma owned_sep l p Hp q (Hq : nonLifetime q) (Hp' : guar_inv p) (Hq' : guar_inv q) :
     q ⊥ owned l p Hp ->
@@ -1129,7 +1001,7 @@ Section LifetimePerms.
   Lemma sep_owned l p q r (Hp : nonLifetime p) Hr Hq Hqr :
     p ⊥ q ->
     p ⊥ owned l r Hr ->
-    p ⊥ owned l (q ** r) (nonLifetime_sep_conj _ _ Hq Hr Hqr).
+    p ⊥ owned l (q ** r) (nonLifetime_sep_conj_perm _ _ Hq Hr Hqr).
   Proof.
     intros Hpq Hpo.
     split; intros [] [] ?.
@@ -1182,29 +1054,31 @@ Section LifetimePerms.
 
 keep the permission on the value separate?
    *)
-  Lemma foo l P Q R :
+  Lemma foo l P Q R (HP : nonLifetime_Perms P) :
     P * lowned_Perms' l Q R ⊨
     when_Perms l P * lowned_Perms' l (when_Perms l P * Q) (P * R).
   Proof.
-    intros p0 (p & powned & Hp & (r1 & r2 & Hr1 & Hr2 & Hr2' & Hsep' & Hr2'' & Hlte' & Hf) & Hsep & Hlte).
-    assert (Hp' : nonLifetime p) by admit.
-    assert (Hp'' : guar_inv p) by admit.
-    exists (when l p Hp').
+    intros p0 (p' & powned & Hp' & (r1 & r2 & Hr1 & Hr2 & Hr2' & Hsep' & Hr2'' & Hlte' & Hf) & Hsep & Hlte).
+    destruct (HP _ Hp') as (p & Hp & Hpp' & Hnlp & Hguarp).
+    exists (when l p Hnlp).
     assert (Hpr2 : p ⊥ r2).
     {
       eapply owned_sep; auto.
-      eapply separate_antimonotone; eauto.
-      etransitivity; eauto. apply lte_r_sep_conj_perm.
+      eapply separate_antimonotone.
+      2: {
+        etransitivity. apply lte_r_sep_conj_perm. eauto.
+      }
+      symmetry. eapply separate_antimonotone; eauto. symmetry. auto.
     }
-    eexists (r1 ** owned l (p ** r2) (nonLifetime_sep_conj _ _ Hp' Hr2 Hpr2)).
+    eexists (r1 ** owned l (p ** r2) (nonLifetime_sep_conj_perm _ _ Hnlp Hr2 Hpr2)).
     split; [| split; [| split]]; auto.
     - apply when_perm_Perms; auto.
-    - exists r1, (p ** r2), Hr1, (nonLifetime_sep_conj _ _ Hp' Hr2 Hpr2), (guar_inv_sep_conj_perm _ _ Hp'' Hr2').
+    - exists r1, (p ** r2), Hr1, (nonLifetime_sep_conj_perm _ _ Hnlp Hr2 Hpr2), (guar_inv_sep_conj_perm _ _ Hguarp Hr2').
       split; [| split; [| split]].
       3: reflexivity.
       {
-        apply sep_owned; auto. symmetry.
-        eapply separate_antimonotone. apply Hsep.
+        apply sep_owned; auto. eapply separate_antimonotone. 2: apply Hpp'.
+        symmetry. eapply separate_antimonotone. apply Hsep.
         etransitivity; eauto. apply lte_l_sep_conj_perm.
       }
       {
@@ -1229,19 +1103,30 @@ keep the permission on the value separate?
         apply Hsep_step. symmetry.
         (* we don't have p ⊥ r, best we can do is that p ⊥ owned r2, and r2 ~> r *)
         admit.
-      + admit. (* p ~ pr should be ok if they're both pointer permissions, but them being separate from r/r2 is a problem. we only have that p ⊥ owned r2 *)
+      + (* p ~ pr should be ok if they're both pointer permissions, but them being separate from r/r2 is a problem. we only have that p ⊥ owned r2 *)
+        etransitivity.
+        apply sep_step_sep_conj_r; auto. symmetry. auto.
+        eauto.
+        admit.
       + intros. split; [| split]; auto.
         * apply Hlte'' in H. destruct H as (? & ? & ?).
           apply Hlte''' in H. cbn in H.
           rewrite lGetPut in H. setoid_rewrite nth_error_replace_list_index_eq in H.
           admit. (* should be ok if pr is a ptr permission *)
         * apply Hpre; auto. apply Hlte''; auto.
-        * admit. (* we sort of have owned l r2 ⊥ when l r, but thta's true for any permissions inside the when and owned *)
+        * (* we sort of have owned l r2 ⊥ when l r, but thta's true for any permissions inside the when and owned *)
+          symmetry. apply Hsep_step. symmetry. auto.
+          admit.
     - apply separate_sep_conj_perm.
-      + apply sep_when; auto. eapply separate_antimonotone. apply Hsep. etransitivity; eauto.
+      + apply sep_when; auto.
+        symmetry.
+        eapply separate_antimonotone. 2: apply Hpp'.
+        symmetry.
+        eapply separate_antimonotone. apply Hsep. etransitivity; eauto.
         apply lte_l_sep_conj_perm.
       + apply when_owned_sep.
-      + symmetry. apply sep_owned; auto. symmetry. eapply separate_antimonotone. apply Hsep.
+      + symmetry. apply sep_owned; auto. eapply separate_antimonotone. 2: apply Hpp'.
+        symmetry. eapply separate_antimonotone. apply Hsep.
         etransitivity; eauto. apply lte_l_sep_conj_perm.
     - etransitivity; eauto.
       etransitivity. 2: apply sep_conj_perm_monotone; [reflexivity |].
@@ -1250,7 +1135,8 @@ keep the permission on the value separate?
       do 2 rewrite (sep_conj_perm_commut _ r1).
       do 2 rewrite sep_conj_perm_assoc.
       apply sep_conj_perm_monotone; [reflexivity |].
-      apply convert.
+      etransitivity. apply convert.
+      apply sep_conj_perm_monotone; [| reflexivity]; auto.
   Qed.
 
   (* Require Import Heapster.Typing. *)
