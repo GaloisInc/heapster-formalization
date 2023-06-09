@@ -23,7 +23,7 @@ Import ListNotations.
 (* end hide *)
 
 (** * Lens typeclass *)
-Class Lens (A B:Type) : Type :=
+Class Lens (A B : Type) : Type :=
   {
   lget: A -> B;
   lput: A -> B -> A;

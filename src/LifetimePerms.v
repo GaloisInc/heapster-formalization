@@ -11,24 +11,19 @@ From Coq Require Import
 
 From ITree Require Import
      ITree
-     Eq.Eqit
-     Events.Exception.
+     Eq.Eqit.
 
 From Heapster Require Import
      Utils
      Permissions
-     PermissionsSpred2
      Lifetime
      Typing
-     SepStep
-     MemoryPerms.
+     SepStep.
 
 From Paco Require Import
      paco.
 
 Import ListNotations.
-Import ITreeNotations.
-Local Open Scope itree_scope.
 Open Scope list_scope.
 (* end hide *)
 
@@ -65,9 +60,9 @@ Section LifetimePerms.
       + eexists. rewrite lPutPut. reflexivity.
       + intros. transitivity (statusOf l (lget (lput s x))); eauto.
   Qed.
-  Next Obligation.
-    destruct x, y. destruct H. rewrite <- H. auto.
-  Qed.
+  (* Next Obligation. *)
+  (*   destruct x, y. destruct H. rewrite <- H. auto. *)
+  (* Qed. *)
 
   Definition nonLifetime p : Prop :=
     forall n, p ⊥ lifetime_perm n.
@@ -288,16 +283,15 @@ Section LifetimePerms.
     - inversion H1; inversion H2; subst; auto.
     - inversion H1. subst. auto.
     - inversion H3. subst. auto.
-    - right. intuition. etransitivity; eauto.
+    - right. intuition; etransitivity; eauto.
   Qed.
   Next Obligation.
-    destruct x, y.
-    destruct H. intros. respects. apply H0.
+    intros. respects. apply H0.
     destruct H2.
     - rewrite H2 in H.
-      destruct (statusOf l (lget s)); auto; inversion H.
+      destruct (statusOf l (lget s1)); auto; inversion H.
     - rewrite H2 in H.
-      destruct (statusOf l (lget s)); [destruct s3 |]; auto; inversion H.
+      destruct (statusOf l (lget s1)); [destruct s3 |]; auto; inversion H.
   Qed.
 
   Lemma when_monotone n p1 p2 Hp1 Hp2 : p1 <= p2 -> when n p1 Hp1 <= when n p2 Hp2.
@@ -370,10 +364,10 @@ Section LifetimePerms.
       + right. split; [| split; [| split]]; auto; try (etransitivity; eauto).
         transitivity (statusOf l' (lget s1)); eauto.
   Qed.
-  Next Obligation.
-    destruct x, y.
-    destruct H. rewrite <- H. auto.
-  Qed.
+  (* Next Obligation. *)
+  (*   destruct x, y. *)
+  (*   destruct H. rewrite <- H. auto. *)
+  (* Qed. *)
 
   Lemma owned_sep_step l p1 p2 Hp1 Hp2 :
     sep_step p1 p2 -> sep_step (owned l p1 Hp1) (owned l p2 Hp2).
@@ -413,7 +407,7 @@ Section LifetimePerms.
     {|
       pre x :=
       let '(si, _) := x in
-      statusOf l (lget si) = Some finished /\
+      Some finished = statusOf l (lget si) /\
         pre p x;
 
       rely x y :=
@@ -445,11 +439,12 @@ Section LifetimePerms.
     - inversion H1; inversion H2; subst; auto.
     - inversion H1. subst. auto.
     - inversion H3. subst. auto.
-    - right. intuition. etransitivity; eauto.
+    - right. intuition; etransitivity; eauto.
   Qed.
   Next Obligation.
-    destruct x, y. intuition. rewrite H in H1.
-    destruct (statusOf l (lget s1)); [destruct s3 |]; auto; inversion H1.
+    rewrite <- H0 in H.
+    destruct (statusOf l (lget s)); [destruct s3 |]; auto; try inversion H.
+    split; auto. respects.
   Qed.
 
   Lemma when_finished_sep l p q Hp Hq : when l p Hp ⊥ lfinished l q Hq.
@@ -706,7 +701,7 @@ Section LifetimePerms.
                                  pre q ((lput c1 (replace_list_index (lget c1) l finished)), c2)));
     |}.
   Next Obligation.
-    destruct H as (r1 & r2 & Hr1 & Hr2 & Hr2' & Hsep & Hr2'' & Hlte & H).
+    rename H into r1, H1 into r2, H2 into Hr1, H3 into Hr2, H4 into Hr2', H5 into Hsep, H6 into Hr2'', H7 into Hlte, H8 into H.
     exists r1, r2, Hr1, Hr2, Hr2'. split; [| split; [| split]]; auto. etransitivity; eauto.
   Qed.
 
@@ -756,25 +751,6 @@ Section LifetimePerms.
       rewrite sep_conj_perm_commut. rewrite sep_conj_perm_bottom. reflexivity.
   Qed.
    *)
-
-  (* returns the new lifetime *)
-  Definition beginLifetime : itree (sceE Si) nat :=
-    s <- trigger (Modify id);;
-    trigger (Modify (fun s => lput s ((lget s) ++ [current])));;
-    Ret (length (lget s)).
-
-  Definition endLifetime (l : nat) : itree (sceE Si) unit :=
-    s <- trigger (Modify id);;
-    match nth_error (lget s) l with
-    | Some current =>
-        trigger (Modify (fun s =>
-                           (lput s (replace_list_index
-                                      (lget s)
-                                      l
-                                      finished))));;
-        Ret tt
-    | _ => throw tt
-    end.
 
   Lemma sep_step_owned_finished l p Hp :
     SepStep.sep_step
@@ -894,7 +870,7 @@ Section LifetimePerms.
       econstructor. 2: apply lfinished_perm_Perms; eauto.
       Unshelve. 2: eapply nonLifetime_sep_step; eauto.
       cbn. rewrite lGetPut.
-      split. apply nth_error_replace_list_index_eq.
+      split. symmetry. apply nth_error_replace_list_index_eq.
       apply Hpre; auto.
       - apply Hlte in Hpre''. cbn in H. rewrite replace_list_index_eq; auto.
         rewrite lPutGet. apply Hpre''.
@@ -1048,99 +1024,4 @@ Section LifetimePerms.
       apply Hpq; auto.
       destruct Hpo. specialize (sep_r _ _ H). cbn in sep_r. apply sep_r; auto.
   Qed.
-
-  (* P initially = write_Perms p
-     inside the owned P = read_Perms p
-
-keep the permission on the value separate?
-   *)
-  Lemma foo l P Q R (HP : nonLifetime_Perms P) :
-    P * lowned_Perms' l Q R ⊨
-    when_Perms l P * lowned_Perms' l (when_Perms l P * Q) (P * R).
-  Proof.
-    intros p0 (p' & powned & Hp' & (r1 & r2 & Hr1 & Hr2 & Hr2' & Hsep' & Hr2'' & Hlte' & Hf) & Hsep & Hlte).
-    destruct (HP _ Hp') as (p & Hp & Hpp' & Hnlp & Hguarp).
-    exists (when l p Hnlp).
-    assert (Hpr2 : p ⊥ r2).
-    {
-      eapply owned_sep; auto.
-      eapply separate_antimonotone.
-      2: {
-        etransitivity. apply lte_r_sep_conj_perm. eauto.
-      }
-      symmetry. eapply separate_antimonotone; eauto. symmetry. auto.
-    }
-    eexists (r1 ** owned l (p ** r2) (nonLifetime_sep_conj_perm _ _ Hnlp Hr2 Hpr2)).
-    split; [| split; [| split]]; auto.
-    - apply when_perm_Perms; auto.
-    - exists r1, (p ** r2), Hr1, (nonLifetime_sep_conj_perm _ _ Hnlp Hr2 Hpr2), (guar_inv_sep_conj_perm _ _ Hguarp Hr2').
-      split; [| split; [| split]].
-      3: reflexivity.
-      {
-        apply sep_owned; auto. eapply separate_antimonotone. 2: apply Hpp'.
-        symmetry. eapply separate_antimonotone. apply Hsep.
-        etransitivity; eauto. apply lte_l_sep_conj_perm.
-      }
-      {
-        apply sep_conj_Perms_perm; auto.
-      }
-      intros p1 (pw & q & (? & (pr & Hpr' & Hpr & ?) & Hlte''') & Hq' & Hsep''' & Hlte'') Hsep''; subst.
-      cbn in Hlte'''.
-      specialize (Hf _ Hq'). destruct Hf as (r & Hr & Hsep_step & Hpre).
-      {
-        symmetry in Hsep''.
-        eapply separate_antimonotone in Hsep''; eauto.
-        eapply separate_antimonotone in Hsep''; eauto.
-        2: apply lte_r_sep_conj_perm.
-        symmetry in Hsep''.
-        eapply separate_antimonotone in Hsep''; eauto.
-        apply sep_conj_perm_monotone. reflexivity.
-        apply owned_monotone. apply lte_r_sep_conj_perm.
-      }
-      exists (pr ** r). split; [| split].
-      + apply sep_conj_Perms_perm; auto.
-        symmetry.
-        apply Hsep_step. symmetry.
-        (* we don't have p ⊥ r, best we can do is that p ⊥ owned r2, and r2 ~> r *)
-        admit.
-      + (* p ~ pr should be ok if they're both pointer permissions, but them being separate from r/r2 is a problem. we only have that p ⊥ owned r2 *)
-        etransitivity.
-        apply sep_step_sep_conj_r; auto. symmetry. auto.
-        eauto.
-        admit.
-      + intros. split; [| split]; auto.
-        * apply Hlte'' in H. destruct H as (? & ? & ?).
-          apply Hlte''' in H. cbn in H.
-          rewrite lGetPut in H. setoid_rewrite nth_error_replace_list_index_eq in H.
-          admit. (* should be ok if pr is a ptr permission *)
-        * apply Hpre; auto. apply Hlte''; auto.
-        * (* we sort of have owned l r2 ⊥ when l r, but thta's true for any permissions inside the when and owned *)
-          symmetry. apply Hsep_step. symmetry. auto.
-          admit.
-    - apply separate_sep_conj_perm.
-      + apply sep_when; auto.
-        symmetry.
-        eapply separate_antimonotone. 2: apply Hpp'.
-        symmetry.
-        eapply separate_antimonotone. apply Hsep. etransitivity; eauto.
-        apply lte_l_sep_conj_perm.
-      + apply when_owned_sep.
-      + symmetry. apply sep_owned; auto. eapply separate_antimonotone. 2: apply Hpp'.
-        symmetry. eapply separate_antimonotone. apply Hsep.
-        etransitivity; eauto. apply lte_l_sep_conj_perm.
-    - etransitivity; eauto.
-      etransitivity. 2: apply sep_conj_perm_monotone; [reflexivity |].
-      2: apply Hlte'.
-      do 2 rewrite <- sep_conj_perm_assoc.
-      do 2 rewrite (sep_conj_perm_commut _ r1).
-      do 2 rewrite sep_conj_perm_assoc.
-      apply sep_conj_perm_monotone; [reflexivity |].
-      etransitivity. apply convert.
-      apply sep_conj_perm_monotone; [| reflexivity]; auto.
-  Qed.
-
-  (* Require Import Heapster.Typing. *)
-
-  (* Definition startLifetime : itree (sceE C) nat := *)
-  (*   ret 0. *)
 End LifetimePerms.

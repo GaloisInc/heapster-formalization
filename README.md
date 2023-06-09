@@ -1,7 +1,7 @@
 # heapster-formalization
 A Coq formalization of the Heapster type system
 
-Requires Coq 8.15, and the following opam packages:
+Requires Coq 8.17, and the following opam packages:
 - `coq-itree`
 - `coq-paco`
 - `coq-ext-lib`
