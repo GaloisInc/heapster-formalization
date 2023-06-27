@@ -580,11 +580,12 @@ Section MemoryPerms.
     match p with
     | VNum _ => top_Perms
     | VPtr p =>
-        meet_Perms (fun P => exists (v : Value), P = singleton_Perms (match rw with
-                                                    | R => read_perm p v
-                                                    | W => write_perm p v
-                                                    end) *
-                                     (v :: T ▷ a))
+        meet_Perms (fun P => exists (v : Value),
+                        P = singleton_Perms (match rw with
+                                             | R => read_perm p v
+                                             | W => write_perm p v
+                                             end) *
+                              (v :: T ▷ a))
     end.
 
   Definition ptr {A} '(rw, o, T) : VPermType A :=
