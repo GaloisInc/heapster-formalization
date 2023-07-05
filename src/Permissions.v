@@ -58,7 +58,6 @@ Section Permissions.
 
   (** Equality of permissions = the symmetric closure of the ordering. *)
   Definition eq_perm p q : Prop := p <= q /\ q <= p.
-
   Notation "p ≡≡ q" := (eq_perm p q) (at level 50).
 
   Lemma eq_perm_lte_1 : forall p q, p ≡≡ q -> p <= q.
@@ -607,6 +606,18 @@ Section Permissions.
       + destruct H2; [apply H | apply H0]; auto.
       + etransitivity; eauto.
     - split; [apply H | apply H0]; auto.
+  Qed.
+
+  Lemma separate_sep_conj_perm_4: forall p q r s,
+      p ⊥ q ->
+      p ⊥ r ->
+      p ⊥ s ->
+      q ⊥ r ->
+      q ⊥ s ->
+      r ⊥ s ->
+      p ** q ⊥ r ** s.
+  Proof.
+    intros. apply separate_sep_conj_perm; symmetry; auto; apply separate_sep_conj_perm; symmetry; auto.
   Qed.
 
   Lemma sep_conj_perm_assoc : forall p q r,

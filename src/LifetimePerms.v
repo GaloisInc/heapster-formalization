@@ -64,7 +64,6 @@ Section LifetimePerms.
   Definition pre_inv (p : @perm (Si * Ss)) : Prop :=
     forall si ss l s,
       pre p (si, ss) ->
-      (* if we instead let any changes happen, then p would not be nonLifetime *)
       pre p
         (lput si (replace_list_index (lget si) l s), ss).
 
@@ -321,6 +320,45 @@ Section LifetimePerms.
     - destruct x, y. destruct H; auto.
     - destruct x, y. intuition.
   Qed.
+
+  Lemma sep_when l p q Hp (Hq : nonLifetime q) :
+    p ⊥ q ->
+    when l p Hp ⊥ q.
+  Proof.
+    intros. split; intros [] [] ?.
+    - cbn. split; auto.
+      + pose proof (nonLifetime_guar _ Hq _ _ H0). cbn in H1. rewrite H1.
+        reflexivity.
+      + intros. apply H; auto.
+    - destruct H0. rewrite H0. reflexivity.
+      apply H. apply H0.
+  Qed.
+
+  Lemma when_lifetime_sep n n' p Hp :
+    n < n' ->
+    when n p Hp ⊥ lifetime_perm n'.
+  Proof.
+    intros Hlt.
+    split; intros [] [] ?.
+    - cbn. split.
+      + destruct H as (_ & ?). rewrite H; auto. reflexivity.
+      + intros. eapply Hp; eauto.
+    - destruct H.
+      + rewrite H. reflexivity.
+      + destruct H. cbn. setoid_rewrite H. split; [| split]; reflexivity.
+  Qed.
+
+  Lemma when_nonLifetime l p Hp :
+    nonLifetime (when l p Hp).
+  Proof.
+    repeat intro. split; intros [] [] ?.
+    - cbn. split.
+      + admit. (* lifetime_perm only goes forwards? *)
+      + intros. eapply Hp; eauto.
+    - destruct H.
+      + rewrite H. reflexivity.
+      + destruct H. cbn. setoid_rewrite H. split; [| split]; reflexivity.
+  Abort.
 
   Lemma when_separate l p q Hp Hq :
     p ⊥ q -> when l p Hp ⊥ when l q Hq.
@@ -592,20 +630,6 @@ Section LifetimePerms.
     - destruct x, y. decompose [and or] H; [inversion H0; subst; reflexivity |]; clear H.
       cbn. rewrite H1 in *. split; auto.
       intros. rewrite H in H0. discriminate H0.
-  Qed.
-
-  Lemma when_lifetime_sep n n' p Hp :
-    n < n' ->
-    when n p Hp ⊥ lifetime_perm n'.
-  Proof.
-    intros Hlt.
-    split; intros [] [] ?.
-    - cbn. split.
-      + destruct H as (_ & ?). rewrite H; auto. reflexivity.
-      + intros. eapply Hp; eauto.
-    - destruct H.
-      + rewrite H. reflexivity.
-      + destruct H. cbn. setoid_rewrite H. split; [| split]; reflexivity.
   Qed.
 
   Lemma owned_lifetime_sep n n' p Hp :
@@ -914,9 +938,9 @@ Section LifetimePerms.
 
   Lemma typing_begin :
     typing lifetime_Perms
-           (fun l _ => lowned_Perms l bottom_Perms bottom_Perms * lifetime_Perms)
-           beginLifetime
-           (Ret tt).
+      (fun l _ => lowned_Perms l bottom_Perms bottom_Perms * lifetime_Perms)
+      beginLifetime
+      (Ret tt).
   Proof.
     intros p' c1 c2 (? & (l & ?) & Hlte) Hpre; subst.
     unfold beginLifetime. unfold id.
@@ -1011,9 +1035,10 @@ Section LifetimePerms.
 
   Lemma partial l P Q R (HP: nonLifetime_Perms P) :
     P * lowned_Perms l (P * Q) R ⊨ lowned_Perms l Q R.
+    (* when l (ptr (eq y)) * lowned_Perms l (when l (ptr trueP) * Q) (ptr trueP * R) ⊨ lowned_Perms l Q (ptr (eq y) * R). *)
   Proof.
     intros p0 (p' & powned & Hp' & (r1 & r2 & Hr1 & Hr2 & Hr2' & Hsep' & Hr2'' & Hlte' & Hf) & Hsep & Hlte).
-    destruct (HP _ Hp') as (p & Hp & Hpp' & Hnlp & Hguarp).
+    destruct (HP _ Hp') as (p & Hp & Hpp' & Hnlp & Hguarp & Hprep).
     exists (p ** r1), r2. eexists.
     {
       apply nonLifetime_sep_conj_perm; auto.
@@ -1081,19 +1106,6 @@ Section LifetimePerms.
       apply sep_r.
       2: { rewrite lGetPut. apply nth_error_replace_list_index_eq. }
       apply Hq'; auto.
-  Qed.
-
-  Lemma sep_when l p q Hp (Hq : nonLifetime q) :
-    p ⊥ q ->
-    when l p Hp ⊥ q.
-  Proof.
-    intros. split; intros [] [] ?.
-    - cbn. split; auto.
-      + pose proof (nonLifetime_guar _ Hq _ _ H0). cbn in H1. rewrite H1.
-        reflexivity.
-      + intros. apply H; auto.
-    - destruct H0. rewrite H0. reflexivity.
-      apply H. apply H0.
   Qed.
 
   Lemma sep_owned l p q r (Hp : nonLifetime p) Hr Hq Hqr :

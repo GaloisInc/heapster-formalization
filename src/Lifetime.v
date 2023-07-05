@@ -155,7 +155,7 @@ Section LifetimeOps.
     trigger (Modify (fun s => lput s ((lget s) ++ [current])));;
     Ret (length (lget s)).
 
-  Definition endLifetime (l : nat) : itree (sceE Si) unit :=
+  Definition endLifetime (l : nat) : itree (sceE Si) nat :=
     s <- trigger (Modify id);;
     match nth_error (lget s) l with
     | Some current =>
@@ -164,7 +164,7 @@ Section LifetimeOps.
                                       (lget s)
                                       l
                                       finished))));;
-        Ret tt
+        Ret l
     | _ => throw tt
     end.
 End LifetimeOps.
