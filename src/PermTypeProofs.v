@@ -45,11 +45,11 @@ Section Rules.
 
   (** * Basic permission connective rules *)
 
-  Lemma Weak (A B : Type) P1 P2 (U1 U2 : @PermType Si Ss A B) ts ti :
+  Lemma Weak (A B : Type) P1 P2 (U1 U2 : @PermType Si Ss A B) ti ts :
     P1 ⊨ P2 ->
     (forall xi xs, xi :: U2 ▷ xs ⊨ xi :: U1 ▷ xs) ->
-    P2 ⊢ ts ⤳ ti ::: U2 ->
-    P1 ⊢ ts ⤳ ti ::: U1.
+    P2 ⊢ ti ⤳ ts ::: U2 ->
+    P1 ⊢ ti ⤳ ts ::: U1.
   Proof.
     intros. eapply typing_lte; eauto.
   Qed.

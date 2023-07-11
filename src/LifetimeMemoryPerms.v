@@ -64,6 +64,17 @@ Section Perms.
       split; reflexivity.
   Qed.
 
+  Lemma rely_inv_read_perm p v :
+    @rely_inv _ Ss _ (read_perm p v).
+  Proof.
+    repeat intro. cbn in *. do 2 rewrite HGetPut1. auto.
+  Qed.
+  Lemma rely_inv_write_perm p v :
+    @rely_inv _ Ss _ (write_perm p v).
+  Proof.
+    repeat intro. cbn in *. do 2 rewrite HGetPut1. auto.
+  Qed.
+
   Lemma guar_inv_read_perm p v :
     @guar_inv _ Ss _ (read_perm p v).
   Proof.
@@ -94,18 +105,19 @@ Section Perms.
   Proof.
     intros q Hq. destruct p as [b o]. destruct Hq as (? & (v & ?) & ?). subst.
     destruct H0 as (p & pt' & Hp & Ht' & Hsep & Hlte).
-    edestruct (HT v a _ Ht') as (pt & Ht & Hlte' & Hnlt & Hguart & Hpret).
+    edestruct (HT v a _ Ht') as (pt & Ht & Hlte' & Hnlt & Hrelyt & Hguart & Hpret).
     destruct rw.
     - assert (Hsep' : (read_perm (b, o + o') v) ⊥ pt).
       {
         eapply separate_antimonotone. 2: apply Hlte'.
         symmetry. eapply separate_antimonotone. 2: apply Hp. symmetry; auto.
       }
-      exists ((read_perm (b, o + o') v) ** pt). split; [| split; [| split; [| split]]].
+      exists ((read_perm (b, o + o') v) ** pt). split; [| split; [| split; [| split; [| split]]]].
       + eexists. split. eexists. reflexivity.
         cbn. do 2 eexists. split; [| split; [| split]]; eauto; reflexivity.
       + etransitivity; eauto. apply sep_conj_perm_monotone; auto.
       + apply nonLifetime_sep_conj_perm; auto. apply nonLifetime_read_perm.
+      + apply rely_inv_sep_conj_perm; auto. apply rely_inv_read_perm.
       + apply guar_inv_sep_conj_perm; auto. apply guar_inv_read_perm.
       + apply pre_inv_sep_conj_perm; auto. apply pre_inv_read_perm.
     - assert (Hsep' : (write_perm (b, o + o') v) ⊥ pt).
@@ -113,11 +125,12 @@ Section Perms.
         eapply separate_antimonotone. 2: apply Hlte'.
         symmetry. eapply separate_antimonotone. 2: apply Hp. symmetry; auto.
       }
-      exists ((write_perm (b, o + o') v) ** pt). split; [| split; [| split; [| split]]].
+      exists ((write_perm (b, o + o') v) ** pt). split; [| split; [| split; [| split; [| split]]]].
       + eexists. split. eexists. reflexivity.
         cbn. do 2 eexists. split; [| split; [| split]]; eauto; reflexivity.
       + etransitivity; eauto. apply sep_conj_perm_monotone; auto.
       + apply nonLifetime_sep_conj_perm; auto. apply nonLifetime_write_perm.
+      + apply rely_inv_sep_conj_perm; auto. apply rely_inv_write_perm.
       + apply guar_inv_sep_conj_perm; auto. apply guar_inv_write_perm.
       + apply pre_inv_sep_conj_perm; auto. apply pre_inv_write_perm.
   Qed.
@@ -142,6 +155,7 @@ Section Perms.
     repeat intro. exists bottom_perm. cbn. intuition.
     apply bottom_perm_is_bottom.
     apply nonLifetime_bottom.
+    apply rely_inv_bottom.
     apply guar_inv_bottom.
     apply pre_inv_bottom.
   Qed.
@@ -152,6 +166,7 @@ Section Perms.
     repeat intro. exists bottom_perm. cbn. intuition.
     apply bottom_perm_is_bottom.
     apply nonLifetime_bottom.
+    apply rely_inv_bottom.
     apply guar_inv_bottom.
     apply pre_inv_bottom.
   Qed.
@@ -164,8 +179,8 @@ Section Perms.
         meet_Perms (fun P => exists (v : Value),
                         P = singleton_Perms
                               (match rw with
-                               | R => when l (read_perm p v) (nonLifetime_read_perm _ _)
-                               | W => when l (write_perm p v) (nonLifetime_write_perm _ _)
+                               | R => when l (read_perm p v)
+                               | W => when l (write_perm p v)
                                end) *
                               (v :: T ▷ a))
     end.
@@ -182,8 +197,8 @@ Section Perms.
         meet_Perms (fun P => exists (v : Value),
                         P = singleton_Perms
                               (match rw with
-                               | R => lfinished l (read_perm p v) (nonLifetime_read_perm _ _)
-                               | W => lfinished l (write_perm p v) (nonLifetime_write_perm _ _)
+                               | R => lfinished l (read_perm p v)
+                               | W => lfinished l (write_perm p v)
                                end) *
                               (v :: T ▷ a))
     end.
@@ -193,121 +208,6 @@ Section Perms.
       ptApp := fun x a => finished_ptr_Perms l rw (offset x o) a T;
     |}.
 
-  (*
-  Lemma split_Perms_trueP b o l (P Q : @Perms (Si * Ss)) :
-    (VPtr (b, o)) :: ptr(W, 0, trueP) ▷ tt * lowned_Perms l P Q ⊨
-      (VPtr (b, o)) :: when_ptr l (W, 0, trueP) ▷ tt *
-      lowned_Perms l
-        ((VPtr (b, o)) :: when_ptr l (R, 0, trueP) ▷ tt * P)
-        (((VPtr (b, o)) :: ptr(W, 0, trueP) ▷ tt) * Q).
-  Proof.
-    intros p0 (p' & powned & Hp' & (r1 & r2 & Hr1 & Hr2 & Hr2' & Hsep' & Hr2'' & Hlte' & Hf) & Hsep & Hlte).
-    destruct (nonLifetime_ptr _ _ _ _ trueP nonLifetime_trueP _ Hp') as (p & Hp & Hpp' & Hnlp & Hguarp & Hprep).
-    destruct Hp as (? & (v & ?) & Hx); subst.
-    rewrite sep_conj_Perms_commut in Hx. rewrite sep_conj_Perms_bottom_identity in Hx.
-    exists (when l p Hnlp).
-    assert (Hpr2 : p ⊥ r2).
-    {
-      eapply owned_sep; auto.
-      eapply separate_antimonotone.
-      2: {
-        etransitivity. apply lte_r_sep_conj_perm. eauto.
-      }
-      symmetry. eapply separate_antimonotone; eauto. symmetry. auto.
-    }
-    eexists (r1 ** owned l (p ** r2) (nonLifetime_sep_conj_perm _ _ Hnlp Hr2 Hpr2)).
-    split; [| split; [| split]]; auto.
-    - eexists. split. eexists. reflexivity.
-      cbn in Hp'.
-      cbn. do 2 eexists. split; [| split; [| split]].
-      reflexivity. auto.
-      apply separate_bottom.
-      rewrite sep_conj_perm_bottom.
-      apply when_monotone. apply Hx.
-    - exists r1, (p ** r2), Hr1, (nonLifetime_sep_conj_perm _ _ Hnlp Hr2 Hpr2), (guar_inv_sep_conj_perm _ _ Hguarp Hr2').
-      split; [| split; [| split]].
-      3: reflexivity.
-      {
-        apply sep_owned; auto. eapply separate_antimonotone. 2: apply Hpp'.
-        symmetry. eapply separate_antimonotone. apply Hsep.
-        etransitivity; eauto. apply lte_l_sep_conj_perm.
-      }
-      {
-        apply sep_conj_Perms_perm; auto.
-        cbn. eexists. split. eexists. reflexivity.
-        rewrite sep_conj_Perms_commut. rewrite sep_conj_Perms_bottom_identity. apply Hx.
-      }
-      (** Precondition part *)
-      intros p1 (pw & q & (? & (v' & ?) & Hlte''') & Hq' & Hsep'' & Hlte'') Hsep'''; subst.
-      (* intros p1 (pw & q & (? & (pr & Hpr' & Hpr & ?) & Hlte''') & Hq' & Hsep''' & Hlte'') Hsep''; subst. *)
-      cbn in Hlte'''.
-      specialize (Hf _ Hq'). destruct Hf as (r & Hr & Hsep_step & Hpre).
-      {
-        symmetry in Hsep''.
-        eapply separate_antimonotone in Hsep''; eauto.
-        eapply separate_antimonotone in Hsep''; eauto.
-        2: apply lte_r_sep_conj_perm.
-        symmetry in Hsep''.
-        eapply separate_antimonotone in Hsep''; eauto.
-        apply sep_conj_perm_monotone. reflexivity.
-        apply owned_monotone. apply lte_r_sep_conj_perm.
-      }
-      destruct Hp as (? & (v & ?) & Hx). subst. rewrite Nat.add_0_r in Hx.
-      rewrite sep_conj_Perms_commut in Hx. rewrite sep_conj_Perms_bottom_identity in Hx.
-      cbn in Hx.
-
-      destruct Hpr as (? & (v' & ?) & Hx'). subst. rewrite Nat.add_0_r in Hx'.
-      rewrite sep_conj_Perms_commut in Hx'. rewrite sep_conj_Perms_bottom_identity in Hx'.
-      cbn in Hx'.
-      exists ((write_perm (b, o) v') ** r). split; [| split].
-      + apply sep_conj_Perms_perm; auto.
-        * cbn. eexists. split. eexists. reflexivity.
-          rewrite Nat.add_0_r.
-          rewrite sep_conj_Perms_commut. rewrite sep_conj_Perms_bottom_identity.
-          cbn. reflexivity.
-        * symmetry. eapply separate_write_perm.
-          apply Hsep_step.
-          eapply separate_antimonotone.
-          2: apply Hx.
-          symmetry. auto.
-      + etransitivity.
-        * apply sep_step_sep_conj_r; eauto. symmetry. auto.
-        * apply sep_step_sep_conj_l; eauto. symmetry. apply Hsep_step. symmetry. auto.
-          eapply sep_step_write_perm.
-          apply sep_step_lte'; eauto.
-      + intros. split; [| split]; auto.
-        * apply Hlte'' in H. destruct H as (? & ? & ?).
-          apply Hlte''' in H. cbn in H.
-          rewrite lGetPut in H. setoid_rewrite nth_error_replace_list_index_eq in H.
-          apply Hx' in H. cbn in *.
-          rewrite HGetPut1 in H |- *; auto. right. reflexivity.
-        * apply Hpre; auto. apply Hlte''; auto.
-        * symmetry. apply Hsep_step.
-          eapply separate_write_perm.
-          eapply separate_antimonotone. symmetry. apply Hpr2. apply Hx.
-    - apply separate_sep_conj_perm.
-      + apply sep_when; auto.
-        symmetry.
-        eapply separate_antimonotone. 2: apply Hpp'.
-        symmetry.
-        eapply separate_antimonotone. apply Hsep. etransitivity; eauto.
-        apply lte_l_sep_conj_perm.
-      + apply when_owned_sep.
-      + symmetry. apply sep_owned; auto. eapply separate_antimonotone. 2: apply Hpp'.
-        symmetry. eapply separate_antimonotone. apply Hsep.
-        etransitivity; eauto. apply lte_l_sep_conj_perm.
-    - etransitivity; eauto.
-      etransitivity. 2: apply sep_conj_perm_monotone; [reflexivity |].
-      2: apply Hlte'.
-      do 2 rewrite <- sep_conj_perm_assoc.
-      do 2 rewrite (sep_conj_perm_commut _ r1).
-      do 2 rewrite sep_conj_perm_assoc.
-      apply sep_conj_perm_monotone; [reflexivity |].
-      etransitivity. apply convert.
-      apply sep_conj_perm_monotone; [| reflexivity]; auto.
-  Qed.
-   *)
-
   Lemma split_Perms_T {A} b o o' l (P Q : @Perms (Si * Ss)) (T : VPermType A) xs
     (HT : forall xi xs, nonLifetime_Perms (xi :: T ▷ xs)) :
     (VPtr (b, o)) :: ptr(W, o', T) ▷ xs * lowned_Perms l P Q ⊨
@@ -316,13 +216,14 @@ Section Perms.
         ((VPtr (b, o) :: when_ptr l (R, o', trueP) ▷ tt) * P)
         ((VPtr (b, o) :: ptr(W, o', trueP) ▷ tt) * Q).
   Proof.
-    intros p0 (p' & powned & Hp' & (r1 & r2 & Hr1 & Hr2 & Hr2' & Hsep' & Hr2'' & Hlte' & Hf) & Hsep & Hlte).
+    intros p0 (p' & powned & Hp' & (r1 & r2 & Hsepr1 & Hnlr1 & Hnlr2 & Hrelyr2 & Hguarr2 & Hr2 & Hlte' & Hf) & Hsep & Hlte).
     destruct Hp' as (? & (v & ?) & Hv). subst.
     destruct Hv as (pw & pt & Hpw & Hpt & Hsep'' & Hlte'').
     destruct (HT _ _ _ Hpt) as (pt' & Hpt' & Hltept & Hnlpt & Hguarpt & Hprept).
     assert (Hsepwrite : write_perm (b, o + o') v ⊥ r2).
     {
-      eapply owned_sep; auto. apply nonLifetime_write_perm. apply guar_inv_write_perm.
+      eapply owned_sep; auto.
+      apply nonLifetime_write_perm. apply rely_inv_write_perm. apply guar_inv_write_perm.
       eapply separate_antimonotone.
       2: { etransitivity. apply lte_r_sep_conj_perm. eauto. }
       symmetry.
@@ -331,8 +232,8 @@ Section Perms.
       2: { etransitivity. apply lte_l_sep_conj_perm. eauto. }
       symmetry. auto.
     }
-    exists (when l (write_perm (b, o + o') v) (nonLifetime_write_perm _ _) ** pt').
-    exists (r1 ** owned l (write_perm (b, o + o') v ** r2) (nonLifetime_sep_conj_perm _ _ (nonLifetime_write_perm _ _) Hr2 Hsepwrite)).
+    exists (when l (write_perm (b, o + o') v) ** pt').
+    exists (r1 ** owned l (write_perm (b, o + o') v ** r2) (nonLifetime_sep_conj_perm _ _ (nonLifetime_write_perm _ _) Hnlr2 Hsepwrite)).
     split; [| split; [| split]].
     - cbn. eexists. split. eexists. reflexivity.
       cbn. do 2 eexists. split. reflexivity.
@@ -341,21 +242,21 @@ Section Perms.
       eapply separate_antimonotone. 2: apply Hltept.
       symmetry. eapply separate_antimonotone; eauto.
       symmetry; auto.
-    - exists r1, (write_perm (b, o + o') v ** r2), Hr1.
-      exists (nonLifetime_sep_conj_perm _ _ (nonLifetime_write_perm _ _) Hr2 Hsepwrite).
-      exists (guar_inv_sep_conj_perm _ _ (guar_inv_write_perm _ _) Hr2').
-      split; [| split; [| split]].
-      + apply sep_owned; auto. eapply separate_antimonotone. 2: apply Hpw.
-        eapply separate_antimonotone.
-        2: { etransitivity. apply lte_l_sep_conj_perm. apply Hlte''. }
-        symmetry. eapply separate_antimonotone; eauto.
-        etransitivity; eauto. apply lte_l_sep_conj_perm.
+    - exists r1, (write_perm (b, o + o') v ** r2), Hsepr1, Hnlr1.
+      exists (nonLifetime_sep_conj_perm _ _ (nonLifetime_write_perm _ _) Hnlr2 Hsepwrite).
+      exists (rely_inv_sep_conj_perm _ _ (rely_inv_write_perm _ _) Hrelyr2).
+      exists (guar_inv_sep_conj_perm _ _ (guar_inv_write_perm _ _) Hguarr2).
+      split; [| split]. 2: reflexivity.
+      (* + apply sep_owned. admit. admit. eapply separate_antimonotone. 2: apply Hpw. *)
+      (*   eapply separate_antimonotone. *)
+      (*   2: { etransitivity. apply lte_l_sep_conj_perm. apply Hlte''. } *)
+      (*   symmetry. eapply separate_antimonotone; eauto. *)
+      (*   etransitivity; eauto. apply lte_l_sep_conj_perm. *)
       + apply sep_conj_Perms_perm; auto.
         cbn. eexists. split. eexists. reflexivity.
         rewrite sep_conj_Perms_commut.
         rewrite sep_conj_Perms_bottom_identity.
         cbn. reflexivity.
-      + reflexivity.
       + intros p1 (pwhen & q & (? & (v' & ?) & Hlte''') & Hq' & Hsep''' & Hlte'''') Hsep''''; subst.
         rewrite sep_conj_Perms_commut in Hlte'''.
         rewrite sep_conj_Perms_bottom_identity in Hlte'''. cbn in Hlte'''.
@@ -417,7 +318,7 @@ Section Perms.
         eapply separate_antimonotone.
         2: { etransitivity. apply lte_r_sep_conj_perm. eauto. }
         symmetry. auto.
-      + apply sep_owned; auto.
+      + apply sep_sep_conj_perm_owned; auto.
         * eapply separate_antimonotone. 2: apply Hpw.
           symmetry. eapply separate_antimonotone; eauto.
         * eapply separate_antimonotone.
@@ -426,13 +327,7 @@ Section Perms.
           eapply separate_antimonotone.
           2: { etransitivity. apply lte_r_sep_conj_perm. eauto. }
           symmetry. auto.
-      + apply sep_owned; auto.
-        eapply separate_antimonotone. 2: apply Hpw.
-        eapply separate_antimonotone.
-        2: { etransitivity. apply lte_l_sep_conj_perm. eauto. }
-        symmetry. eapply separate_antimonotone.
-        2: { etransitivity. apply lte_l_sep_conj_perm. eauto. }
-        auto.
+      + apply Hsepr1.
     - (** Shuffling around permissions using <= *)
       etransitivity; eauto.
       etransitivity. 2: apply sep_conj_perm_monotone; [reflexivity |].
@@ -574,8 +469,8 @@ Section Perms.
     intros p' c1 c2 (pwt & lowned' & Hpwt & H & Hsep & Hlte) Hpre.
     destruct Hpwt as (? & (v & ?) & Hpwt); subst.
     destruct Hpwt as (pwhen & pt & Hpwhen & Hpt & Hsep' & Hlte').
-    destruct (HT _ _ _ Hpt) as (pt' & Hpt' & Hltept' & Hnlpt' & Hguarpt' & Hprept').
-    destruct H as (r1 & r2 & Hr1 & Hr2 & Hr2' & Hsep'' & Hr2'' & Hlte'' & Hf).
+    destruct (HT _ _ _ Hpt) as (pt' & Hpt' & Hltept' & Hnlpt' & Hrelypt' & Hguarpt' & Hprept').
+    destruct H as (r1 & r2 & Hsepr1 & Hnlr1 & Hnlr2 & Hrelyr2 & Hguarr2 & Hr2 & Hlte'' & Hf).
     unfold endLifetime. unfold id.
     rewritebisim @bind_trigger.
     pstep. econstructor; eauto; try reflexivity.
@@ -585,7 +480,7 @@ Section Perms.
     apply Hlte'' in Hpre. destruct Hpre as (_ & H & _).
     cbn in H. setoid_rewrite H.
     rewritebisim @bind_trigger.
-    specialize (Hf (when l (write_perm (b, o + 0) v) (nonLifetime_write_perm (b, o + 0) v))).
+    specialize (Hf (when l (write_perm (b, o + 0) v))).
     destruct Hf as (q & Hq & Hsep_step & Hpre).
     {
       eexists. split. eexists. reflexivity. cbn.
@@ -622,7 +517,7 @@ Section Perms.
       - apply Hlte''. apply Hlte. rewrite replace_list_index_eq; auto.
         rewrite lPutGet. auto.
     } subst. rename v' into v.
-    assert (Hsep''': owned l r2 Hr2 ⊥ pt'). {
+    assert (Hsep''': owned l r2 Hnlr2 ⊥ pt'). {
       eapply separate_antimonotone; eauto.
       eapply separate_antimonotone. 2: apply lte_r_sep_conj_perm.
       eapply separate_antimonotone; eauto.
@@ -648,7 +543,7 @@ Section Perms.
       econstructor.
       2: {
         cbn. eexists. split. eexists. reflexivity. cbn.
-        eexists (lfinished l q _). exists pt'. split; [| split; [| split]].
+        exists (lfinished l q), pt'. split; [| split; [| split]].
         - apply lfinished_monotone; eauto.
         - auto.
         - apply lfinished_separate'; auto.
@@ -683,7 +578,56 @@ Section Perms.
     eapply nonLifetime_sep_step. 2: eauto. auto.
   Qed.
 
-  Lemma partial_ptr b o l o' y P Q :
+  Lemma partial_ptr R1 R2 b o o' l y P Q (F : R1 -> R2 -> Perms) ti ts :
+    typing
+      (lowned_Perms l P ((VPtr (b, o) :: ptr(W, o', eqp y) ▷ tt) * Q))
+      F ti ts ->
+    typing
+      ((VPtr (b, o) :: when_ptr l (W, o', eqp y) ▷ tt) *
+         lowned_Perms l
+           ((VPtr (b, o) :: when_ptr l (R, o', trueP) ▷ tt) * P)
+           ((VPtr (b, o) :: ptr(W, o', trueP) ▷ tt) * Q))
+      F ti ts.
+  Proof.
+    intros Ht p0 si ss (pw' & powned & (? & (v & ?) & Hpw') & (r1 & r2 & Hsepr1 & Hnlr1 & Hnlr2 & Hrelyr2 & Hguarr2 & Hr2 & Hlte' & Hf) & Hsep & Hlte) Hpre; subst.
+    cbn in Hr2.
+    destruct Hpw' as (pw & p' & Hpw & ? & Hsep'' & Hlte''). cbn in H; subst.
+    assert (Hsep': r1 ⊥ when l (write_perm (b, o + o') v)).
+    {
+      eapply separate_antimonotone. 2: eauto.
+      eapply separate_antimonotone. 2: apply lte_l_sep_conj_perm.
+      eapply separate_antimonotone. 2: eauto. symmetry.
+      eapply separate_antimonotone. 2: apply lte_l_sep_conj_perm.
+      eapply separate_antimonotone. 2: eauto. auto.
+    }
+    destruct Hr2 as (p'' & q' & (? & ((v' & ?) & Hp'')) & Hq' & Hsep''' & Hlte'''); subst.
+    rewrite sep_conj_Perms_commut in Hp''. rewrite sep_conj_Perms_bottom_identity in Hp''.
+    (* assert (v' = v). *)
+    (* { *)
+    (*   apply Hlte in Hpre. destruct Hpre as (? & ? & _). *)
+
+    (*   apply Hlte' in H0. destruct H0 as (? & ? & _). *)
+    (*   cbn in H1. *)
+
+    (*   apply Hlte'' in H. destruct H as (? & _). *)
+    (*   apply Hpw in H. cbn in H. *)
+    (* } *)
+
+    apply Ht.
+Abort.
+
+  Lemma partial_ptr A b o l o' P Q (T : VPermType A) xs :
+    (VPtr (b, o) :: when_ptr l (R, o', T) ▷ xs) *
+      lowned_Perms l ((VPtr (b, o) :: when_ptr l (R, o', T) ▷ xs) * P) Q
+        ⊨
+        lowned_Perms l P Q.
+  Proof.
+    intros.
+
+  Qed.
+
+  Lemma partial_ptr b o l o' y P Q
+    (HQ : nonLifetime_Perms Q) :
     (VPtr (b, o) :: when_ptr l (W, o', eqp y) ▷ tt) *
           lowned_Perms l
             ((VPtr (b, o) :: when_ptr l (R, o', trueP) ▷ tt) * P)
@@ -691,6 +635,75 @@ Section Perms.
             ⊨
     lowned_Perms l P ((VPtr (b, o) :: ptr(W, o', eqp y) ▷ tt) * Q).
   Proof.
+    intros p0 (pw' & powned & (? & (v & ?) & Hpw') & (r1 & r2 & Hsepr1 & Hnlr1 & Hnlr2 & Hrelyr2 & Hguarr2 & Hr2 & Hlte' & Hf) & Hsep & Hlte); subst.
+    cbn in Hr2.
+    destruct Hpw' as (pw & p' & Hpw & ? & Hsep'' & Hlte''). cbn in H; subst.
+    assert (Hsep': r1 ⊥ when l (write_perm (b, o + o') v)).
+    {
+      eapply separate_antimonotone. 2: eauto.
+      eapply separate_antimonotone. 2: apply lte_l_sep_conj_perm.
+      eapply separate_antimonotone. 2: eauto. symmetry.
+      eapply separate_antimonotone. 2: apply lte_l_sep_conj_perm.
+      eapply separate_antimonotone. 2: eauto. auto.
+    }
+    destruct Hr2 as (p'' & q' & (? & ((v' & ?) & Hp'')) & Hq' & Hsep''' & Hlte'''); subst.
+    destruct (HQ _ Hq') as (q & Hq & Hqq' & Hnlq & Hrelyq & Hguarq & Hpreq).
+    exists (r1 ** when l (write_perm (b, o + o') v)).
+    exists r2.
+    (* exists (write_perm (b, o + o') v ** q). *)
+    eexists.
+    {
+      intros. symmetry.
+      apply separate_sep_conj_perm; symmetry; auto.
+      apply when_owned_sep.
+    }
+    eexists.
+    {
+      apply nonLifetime_sep_conj_perm; auto.
+      apply when_nonLifetime. apply nonLifetime_write_perm.
+    }
+    exists Hnlr2, Hrelyr2, Hguarr2.
+    (* eexists. Unshelve. *)
+    (* 2: { *)
+    (*   apply nonLifetime_sep_conj_perm; auto. apply nonLifetime_write_perm. admit. *)
+    (* } *)
+    (* eexists. *)
+    (* { *)
+    (*   apply rely_inv_sep_conj_perm; auto. apply rely_inv_write_perm. *)
+    (* } *)
+    (* eexists. *)
+    (* { *)
+    (*   apply guar_inv_sep_conj_perm; auto. apply guar_inv_write_perm. *)
+    (* } *)
+    split; [| split]; auto.
+    {
+      exists (write_perm (b, o + o') v), q. split; [| split; [| split]]; auto.
+      - eexists. split. eexists. reflexivity.
+        cbn. do 2 eexists. split; [| split; [| split]]; try reflexivity.
+        apply separate_bottom. rewrite sep_conj_perm_bottom. reflexivity.
+      - admit.
+      - reflexivity.
+    }
+    {
+      etransitivity; eauto.
+    }
+    intros q Hq Hsep''.
+    rewrite sep_conj_perm_assoc in Hsep''.
+    specialize (Hf (p ** q)).
+    destruct Hf as (r & Hr & Hsep_step & Hpre).
+    - apply sep_conj_Perms_perm; auto. symmetry.
+      eapply separate_antimonotone; eauto.
+      apply lte_l_sep_conj_perm.
+    - symmetry. apply separate_sep_conj_perm.
+      + symmetry. eapply separate_antimonotone; eauto.
+      + symmetry. eapply separate_antimonotone; eauto. apply lte_r_sep_conj_perm.
+      + eapply separate_antimonotone; eauto. apply lte_l_sep_conj_perm.
+    - exists r. split; [| split]; auto.
+      intros. apply Hpre.
+      + destruct H0. split; [| split]; auto.
+        symmetry. eapply separate_antimonotone; eauto. apply lte_l_sep_conj_perm.
+      + apply H0
+  Qed.
     intros p0 (pw' & powned & (? & (v & ?) & Hpw') & (r1 & r2 & Hr1 & Hr2 & Hr2' & Hsep' & Hr2'' & Hlte' & Hf) & Hsep & Hlte). subst.
     cbn in Hpw'.
     destruct Hpw' as (pw & p' & Hpw & ? & Hsep'' & Hlte''). subst.
