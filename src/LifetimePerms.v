@@ -1047,7 +1047,7 @@ Section LifetimePerms.
 
   Lemma typing_end l P Q :
     typing (P * (lowned_Perms l P Q))
-           (fun _ _ => lfinished_Perms l Q)
+           (fun l _ => lfinished_Perms l Q)
            (endLifetime l)
            (Ret tt).
   Proof.
