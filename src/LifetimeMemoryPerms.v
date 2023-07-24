@@ -681,7 +681,7 @@ Section Perms.
   Fixpoint finished_write_perms l (vals : list (nat * nat * nat * Value))
     : @perm (Si * Ss) :=
     match vals with
-    | nil => bottom_perm
+    | nil => lfinished l bottom_perm
     | cons v vals => let '(b, o, o', v') := v in
                     lfinished l (write_perm (b, o + o') v') **
                       (finished_write_perms l vals)
@@ -694,7 +694,7 @@ Section Perms.
   Proof.
     revert b o1 o2 v.
     induction not; cbn; intros.
-    - apply separate_bottom.
+    - apply lfinished_separate. apply separate_bottom.
     - destruct a as [[[b' o1'] o2'] v'].
       cbn. intros.
       apply separate_sep_conj_perm.
@@ -714,7 +714,7 @@ Section Perms.
     finished_write_perms l not ⊥ p.
   Proof.
     induction not.
-    - cbn. auto.
+    - cbn. intros _ H. apply lfinished_separate'; auto.
     - destruct a as [[[b o1] o2] v].
       intros Hpre Hsep. cbn.
       symmetry. apply separate_sep_conj_perm.
@@ -731,7 +731,7 @@ Section Perms.
     finished_write_perms l vals <= lfinished l (write_perms vals).
   Proof.
     induction vals.
-    - apply bottom_perm_is_bottom.
+    - reflexivity.
     - destruct a as [[[b o1] o2] v]. cbn.
       etransitivity. 2: apply lfinished_sep_conj_perm_dist.
       eapply sep_conj_perm_monotone; auto. reflexivity.
@@ -745,23 +745,7 @@ Section Perms.
                       finished_ptrs_T l vals
     end.
 
-  Lemma combine_finished_ptrs_T l not nop vals :
-    finished_write_perms l not ** star_list nop ∈ finished_ptrs_T l vals.
-  Proof.
-
-  Abort.
-
-  Definition unique_ptrs (vals : list (nat * nat * nat)) :=
-    forall i i', i < length vals ->
-            i' < length vals ->
-            i <> i' ->
-            match (nth_error vals i), (nth_error vals i') with
-            | Some (b, o1, o2), Some (b', o1', o2') => VPtr (b, o1 + o2) = VPtr (b', o1' + o2')
-            | _, _ => False
-            end.
-
   Lemma typing_end_ptr_n l vals vals'
-    (* (Huniq : unique_ptrs vals') *)
     (Hlen : length vals = length vals')
     (Heq : Forall (fun '((b, o1, o2, _), (b', o1', o2')) => b = b' /\ o1 = o1' /\ o2 = o2') (combine vals vals'))
     (HT: Forall (fun '(_, _, _, x) => forall (v : Value) (a : (projT1 x)), nonLifetime_Perms (v :: (fst (projT2 x)) ▷ a)) vals) :
@@ -788,12 +772,31 @@ Section Perms.
     pstep. econstructor; eauto; try reflexivity.
     setoid_rewrite Hcurrent.
     (* apply the function we got from the lowned to get the write ptrs *)
-    apply split_when_ptrs_T in Hpwhens.
+    apply split_when_ptrs_T in Hpwhens; auto.
     destruct Hpwhens as (not & nop & Hlen1 & Hlen2 & Heq1 & Heq2 & Heq3 & Hnop & Hlte'').
     edestruct Hf as (pptrs & Hpptrs & Hsepstep & Hpre').
     apply (when_read_perms_when_ptrs_trueP l not vals').
     { rewrite <- Hlen1. auto. }
-    { admit. } (* TODO: easy, manipulate the Foralls *)
+    {
+      clear Hf HT Hr2.
+      clear nop Hlen2 Heq2 Heq3 Hnop Hlte''.
+      revert vals not Hlen1 Heq1 Hlen Heq.
+      induction vals'; intros.
+      - destruct vals; try solve [inversion Hlen].
+        destruct not; try solve [inversion Hlen1].
+        constructor.
+      - destruct vals; try solve [inversion Hlen].
+        destruct not; try solve [inversion Hlen1].
+        destruct a as [[b o1] o2].
+        destruct p0 as [[[b' o1'] o2'] x].
+        inversion Heq; subst; clear Heq. rename H2 into Heq.
+        destruct H1 as (? & ? & ?); subst.
+        destruct p1 as [[[b' o1'] o2'] v].
+        inversion Heq1; subst; clear Heq1. rename H2 into Heq1.
+        destruct H1 as (? & ? & ?); subst.
+        rename b' into b, o1' into o1, o2' into o2.
+        constructor. auto. apply IHvals' with (vals := vals); auto.
+    }
     {
       eapply separate_antimonotone; eauto.
       symmetry.
@@ -805,7 +808,6 @@ Section Perms.
     destruct Hpptrs as (not' & Hlen3 & Heq4 & Hlte''').
     (* the values in the read perms from the when and the write perms
        from the lowned must be the same *)
-    (* TODO: not and not' values agree *)
     assert (not = not').
     {
       specialize (Hpre' si ss).
@@ -814,7 +816,7 @@ Section Perms.
         apply Hlte'' in Hpre. destruct Hpre as (Hpre & _).
         {
           clear HT Hf Hr2.
-          revert vals vals' not' nop (* Huniq *) Hlen Heq Hlen1 Hlen2 Heq1 Heq2 Hnop Heq3 Hlte'' Hlen3 Heq4 Hlte''' Hpre'.
+          revert vals vals' not' nop Hlen Heq Hlen1 Hlen2 Heq1 Heq2 Hnop Heq3 Hlte'' Hlen3 Heq4 Hlte''' Hpre'.
           induction not; intros.
           - destruct vals; try solve [inversion Hlen1].
             destruct vals'; try solve [inversion Hlen].
@@ -838,15 +840,13 @@ Section Perms.
             destruct H2 as (? & ? & ?); subst.
             f_equal.
             + f_equal; auto.
-              clear Hlen Hlen1 Hlen2 Hlen3 Heq Heq1 Heq2 Heq3 Heq4 IHnot (* Huniq *) Hlte Hlte' Hlte'' Hlte'''.
+              clear Hlen Hlen1 Hlen2 Hlen3 Heq Heq1 Heq2 Heq3 Heq4 IHnot Hlte Hlte' Hlte'' Hlte'''.
               destruct Hpre as (? & _), Hpre' as (? & _).
               cbn in H, H1. rewrite HGetPut1 in H1.
               rewrite H in H1; auto.
               inversion H1. auto.
             + apply IHnot with (vals := vals) (vals' := vals') (nop := nop); auto.
               * apply Hpre.
-              (* * intros i i' ? ? ?. specialize (Huniq (S i) (S i')). *)
-              (*   cbn in Huniq. apply Huniq; lia. *)
               * apply Hnop.
               * etransitivity; eauto. cbn.
                 apply sep_conj_perm_monotone; apply lte_r_sep_conj_perm.
@@ -917,18 +917,29 @@ Section Perms.
         assert (Heq' : Forall (fun '(b, o1, o2, _, (b', o1', o2')) => b = b' /\ o1 = o1' /\ o2 = o2')
                          (combine not vals')).
         {
-          (* revert vals' Huniq Hlen. *)
-          (* induction not. *)
-          (* - destruct vals'; inversion Hlen'; auto. *)
-          (* - destruct vals'; try solve [inversion Hlen']. *)
-          (*   destruct a as [[[? ?] ?] ?]. destruct p0 as [[? ?] ?]. *)
-          (*   cbn. constructor. *)
-          (*   2: { eapply IHnot; auto. *)
-          admit. (* again manipulate the Foralls *)
+          clear Hf HT Hr2.
+          clear nop Hlen2 Heq2 Heq3 Hnop Hlte'' Hlen3 Heq4 Hlte''' Hpre' Hpre'' Hlen'.
+          revert vals not Hlen1 Heq1 Hlen Heq.
+          induction vals'; intros.
+          - destruct vals; try solve [inversion Hlen].
+            destruct not; try solve [inversion Hlen1].
+            constructor.
+          - destruct vals; try solve [inversion Hlen].
+            destruct not; try solve [inversion Hlen1].
+            destruct a as [[b o1] o2].
+            destruct p0 as [[[b' o1'] o2'] x].
+            inversion Heq; subst; clear Heq. rename H2 into Heq.
+            destruct H1 as (? & ? & ?); subst.
+            destruct p1 as [[[b' o1'] o2'] v].
+            inversion Heq1; subst; clear Heq1. rename H2 into Heq1.
+            destruct H1 as (? & ? & ?); subst.
+            rename b' into b, o1' into o1, o2' into o2.
+            constructor. auto. apply IHvals' with (vals := vals); auto.
         }
         clear Hlen Heq Hlen1 Hlen3 Heq1 Heq3 Heq4 Hlte''' Hpre' Hr2 Hf.
-        revert vals' (* Huniq *) Hlen' Heq'.
-        induction not; cbn; intros; auto.
+        revert vals' Hlen' Heq'.
+        induction not; cbn; intros.
+        { split; auto. rewrite lGetPut. symmetry. apply nth_error_replace_list_index_eq. }
         destruct a as [[[b o1] o2] v]. cbn.
         assert (Hv : read (lget si) (b, o1 + o2) = Some v).
         {
@@ -944,8 +955,6 @@ Section Perms.
           -- etransitivity; eauto.
              cbn. rewrite sep_conj_perm_assoc. apply lte_r_sep_conj_perm.
           -- apply Hpre''.
-          (* -- intros i i' ? ? ?. specialize (Huniq (S i) (S i')). *)
-          (*    cbn in Huniq. apply Huniq; lia. *)
           -- cbn in Heq'. inversion Heq'; subst.
              apply H2.
         * eapply finished_write_perms_separate; apply Hpre''.
@@ -978,10 +987,137 @@ Section Perms.
         2: { etransitivity. apply lte_r_sep_conj_perm. eauto. }
         auto.
     - (* we can put everything back together again, hiding the values *)
-      cbn.
-  Abort.
+      clear Hf HT.
+      assert (Hpre'': pre (write_perms not) (lput si (replace_list_index (lget si) l finished), ss)).
+      {
+        apply Hlte'''. eapply Hpre'.
+        - apply Hlte''. apply Hlte. rewrite replace_list_index_eq; auto.
+          rewrite lPutGet. auto.
+        - apply Hlte'. apply Hlte. rewrite replace_list_index_eq; auto.
+          rewrite lPutGet. auto.
+      }
+      clear Hpre' Hr2.
+      revert vals' not nop Hlen1 Hlen2 Heq1 Heq2 Heq3 Hlen3 Heq4 Hnop Hlte'' Hlte''' Hpre'' Hlen Heq Hpre.
+      induction vals; intros.
+      + destruct not; try solve [inversion Hlen1].
+        destruct nop; try solve [inversion Hlen2].
+        cbn. eexists. split. exists bottom_perm. split; auto.
+        cbn. rewrite sep_conj_perm_bottom. reflexivity.
+      + destruct not; try solve [inversion Hlen1].
+        destruct nop; try solve [inversion Hlen2].
+        destruct vals'; try solve [inversion Hlen3].
+        destruct p0 as [[[b o1] o2] v'].
+        destruct p1 as [[p' x] v].
+        inversion Heq3; subst; clear Heq3. rename H2 into Heq3.
+        destruct a as [[[b' o1'] o2'] x'].
+        inversion Heq1; clear Heq1; subst. rename H2 into Heq1.
+        destruct H1 as (? & ? & ?). subst.
+        inversion Heq2; clear Heq2; subst. rename H2 into Heq2.
+        destruct p2 as [[b' o1'] o2'].
+        inversion Heq4; clear Heq4; subst. rename H2 into Heq4.
+        destruct H1 as (? & ? & ?). subst.
+        inversion Heq; subst; clear Heq. clear H1. rename H2 into Heq.
+        cbn.
+        exists (lfinished l (write_perm (b, o1 + o2) v) ** p'), (finished_write_perms l not ** star_list nop).
+        assert (star_list (cons (p', x, v) nop) <= pwhens).
+        {
+          etransitivity.
+          apply lte_r_sep_conj_perm. eauto.
+        }
+        split; [| split; [| split]].
+        * eexists. split. eexists. reflexivity.
+          cbn. do 2 eexists. split; [| split; [| split]].
+          4: reflexivity. reflexivity. apply Hnop.
+          apply lfinished_separate'. apply Hnop.
+          symmetry. eapply separate_antimonotone.
+          2: { etransitivity. apply lte_l_sep_conj_perm. eauto. }
+          symmetry. apply Hsepstep.
+          symmetry. eapply owned_sep; try apply Hnop; auto.
+          eapply separate_antimonotone.
+          2: { etransitivity. apply lte_r_sep_conj_perm. eauto. }
+          symmetry.
+          eapply separate_antimonotone.
+          2: { etransitivity. apply lte_l_sep_conj_perm. eauto. }
+          symmetry. auto.
+        * apply IHvals with (vals' := vals'); auto.
+          -- apply Hnop.
+          -- etransitivity. 2: apply Hlte''.
+             apply sep_conj_perm_monotone; apply lte_r_sep_conj_perm.
+          -- etransitivity; eauto. apply lte_r_sep_conj_perm.
+          -- apply Hpre''.
+        * apply separate_sep_conj_perm_4.
+          -- apply lfinished_separate'. apply Hnop.
+             (* copied from above *)
+             symmetry. eapply separate_antimonotone.
+             2: { etransitivity. apply lte_l_sep_conj_perm. eauto. }
+             symmetry. apply Hsepstep.
+             symmetry. eapply owned_sep; try apply Hnop; auto.
+             eapply separate_antimonotone.
+             2: { etransitivity. apply lte_r_sep_conj_perm. eauto. }
+             symmetry.
+             eapply separate_antimonotone.
+             2: { etransitivity. apply lte_l_sep_conj_perm. eauto. }
+             symmetry. auto.
+          -- eapply finished_write_perms_separate; apply Hpre''.
+          -- apply Hlte in Hpre. destruct Hpre as (Hpre & _).
+             apply Hlte'' in Hpre. destruct Hpre as (_ & Hpre & _).
+             destruct Hpre as (_ & Hpre & _).
+             destruct Hnop as (? & ? & ? & ? & ? & Hnop).
+             destruct (star_list_invs _ _ Hpre Hnop) as (? & ? & ? & ?).
+             apply lfinished_separate'; auto.
 
-  (* Idea: apply the exists precondition component, show that the returned ptr perm is equivalent to the when ptr perm. Then shuffle the inner permissions into the returned ptr perms. *)
+             symmetry. eapply separate_antimonotone.
+             2: { etransitivity. apply lte_l_sep_conj_perm. eauto. }
+             symmetry. apply Hsepstep.
+             symmetry. eapply owned_sep; try apply Hnop; auto.
+             eapply separate_antimonotone.
+             2: { etransitivity. apply lte_r_sep_conj_perm. eauto. }
+             symmetry.
+             eapply separate_antimonotone.
+             2: { etransitivity. apply lte_r_sep_conj_perm. eauto. }
+             symmetry. auto.
+          -- symmetry. eapply finished_write_perms_separate'. apply Hnop.
+             apply Hpre''.
+
+             symmetry. eapply separate_antimonotone.
+             2: { etransitivity. apply lte_r_sep_conj_perm. eauto. }
+             symmetry. apply Hsepstep.
+             symmetry. eapply owned_sep; try apply Hnop; auto.
+             eapply separate_antimonotone.
+             2: { etransitivity. apply lte_r_sep_conj_perm. eauto. }
+             symmetry.
+             eapply separate_antimonotone.
+             2: { etransitivity. apply lte_l_sep_conj_perm. eauto. }
+             symmetry. auto.
+          -- apply Hlte in Hpre. destruct Hpre as (Hpre & _).
+             apply Hlte'' in Hpre. destruct Hpre as (_ & Hpre & _).
+             apply Hpre.
+          -- apply Hlte in Hpre. destruct Hpre as (Hpre & _).
+             apply Hlte'' in Hpre. destruct Hpre as (_ & Hpre & _).
+             destruct Hpre as (_ & Hpre & _).
+             destruct Hnop as (? & ? & ? & ? & ? & Hnop).
+             destruct (star_list_invs _ _ Hpre Hnop) as (? & ? & ? & ?).
+             eapply finished_write_perms_separate'; auto.
+             apply Hpre''.
+
+             symmetry. eapply separate_antimonotone.
+             2: { etransitivity. apply lte_r_sep_conj_perm. eauto. }
+             symmetry. apply Hsepstep.
+             symmetry. eapply owned_sep; try apply Hnop; auto.
+             eapply separate_antimonotone.
+             2: { etransitivity. apply lte_r_sep_conj_perm. eauto. }
+             symmetry.
+             eapply separate_antimonotone.
+             2: { etransitivity. apply lte_r_sep_conj_perm. eauto. }
+             symmetry. auto.
+        * rewrite sep_conj_perm_assoc.
+          rewrite (sep_conj_perm_commut p').
+          rewrite sep_conj_perm_assoc.
+          rewrite (sep_conj_perm_commut _ p').
+          rewrite sep_conj_perm_assoc. reflexivity.
+          Unshelve. eapply nonLifetime_sep_step; eauto.
+  Qed.
+
   Lemma typing_end_ptr {A} l b o (T : VPermType A) xs (HT : forall v a, nonLifetime_Perms (v :: T ▷ a)) :
     typing (specConfig := Ss)
       ((VPtr (b, o)) :: when_ptr l (R, 0, T) ▷ xs *
