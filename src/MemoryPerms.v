@@ -246,6 +246,18 @@ Section MemoryPerms.
       + split; [| split]; (etransitivity; [apply H0; auto |]); apply H2; auto.
   Qed.
 
+  Lemma sep_step_read_perm l v v' :
+    sep_step (read_perm l v) (read_perm l v').
+  Proof.
+    repeat intro. split; apply H; auto.
+  Qed.
+
+  Lemma sep_step_write_perm l v v' :
+    sep_step (write_perm l v) (write_perm l v').
+  Proof.
+    repeat intro. split; apply H; auto.
+  Qed.
+
   Lemma read_separate ptr ptr' v v' :
     read_perm ptr v ⊥ read_perm ptr' v'.
   Proof.

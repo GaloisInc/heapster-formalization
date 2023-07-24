@@ -441,8 +441,8 @@ Section LifetimePerms.
   (*   - left. apply H *)
   (* Qed. *)
 
-  Lemma when_preserves_sep l p q :
-    p ⊥ q -> when l p ⊥ when l q.
+  Lemma when_preserves_sep l l' p q :
+    p ⊥ q -> when l p ⊥ when l' q.
   Proof.
     intros Hsep.
     split; intros [] [] ?.
