@@ -489,19 +489,17 @@ Section LifetimePerms.
       apply when_sep_conj_perm_dist; auto.
   Qed.
 
+  Instance Proper_lte_perm_when :
+    Proper (eq ==> lte_perm ==> lte_perm) when.
+  Proof.
+    repeat intro; subst. apply when_monotone; auto.
+  Qed.
 
-
-  (* Instance Proper_lte_perm_when : *)
-  (*   Proper (eq ==> lte_perm ==> eq ==> lte_perm) when. *)
-  (* Proof. *)
-  (*   repeat intro; subst. apply when_monotone; auto. *)
-  (* Qed. *)
-
-  (* Instance Proper_eq_perm_when : *)
-  (*   Proper (eq ==> eq_perm ==> eq_perm) when. *)
-  (* Proof. *)
-  (*   repeat intro; subst. split; apply when_monotone; auto. *)
-  (* Qed. *)
+  Instance Proper_eq_perm_when :
+    Proper (eq ==> eq_perm ==> eq_perm) when.
+  Proof.
+    repeat intro; subst. split; apply when_monotone; auto.
+  Qed.
 
   (* Gives us permission to end the lifetime [n], which gives us back [p] *)
   Program Definition owned
@@ -576,8 +574,8 @@ Section LifetimePerms.
     - destruct x, y. decompose [and or] H; auto 7.
   Qed.
 
-  (* Instance Proper_lte_perm_owned l ls Hls : *)
-  (*   Proper (lte_perm ==> lte_perm) (owned l ls Hls). *)
+  (* Instance Proper_lte_perm_owned : *)
+  (*   Proper (eq ==> lte_perm ==> eq ==> lte_perm) owned. *)
   (* Proof. *)
   (*   repeat intro; subst. apply owned_monotone; auto. *)
   (* Qed. *)
@@ -920,6 +918,30 @@ Section LifetimePerms.
   Next Obligation.
     rename H into r1, H1 into r2, H2 into Hsepr1, H3 into Hnlr1, H4 into Hnlr2, H5 into Hrelyr2, H6 into Hguarr2, H7 into Hr2, H8 into Hlte, H9 into Hpre.
     exists r1, r2, Hsepr1, Hnlr1, Hnlr2, Hrelyr2, Hguarr2. split; [| split]; auto. etransitivity; eauto.
+  Qed.
+
+  (* note that lowned_Perms is not monotone *)
+  Instance Proper_lte_Perms_lowned_Perms :
+    Proper (eq ==> eq_Perms ==> eq_Perms ==> eq_Perms) lowned_Perms.
+  Proof.
+    intros ? l ? P P' HP Q Q' HQ. subst.
+    split.
+    {
+      intros p' (r1 & r2 & Hsep & Hnlr1 & Hnlr2 & Hrelyr2 & Hguarr2 & Hr2 & Hlte & Hf).
+      exists r1, r2, Hsep, Hnlr1, Hnlr2, Hrelyr2, Hguarr2.
+      split. rewrite HQ. auto.
+      split. apply Hlte.
+      intros p Hp Hsep'. rewrite HP in Hp.
+      specialize (Hf _ Hp Hsep'). setoid_rewrite HQ. auto.
+    }
+    {
+      intros p' (r1 & r2 & Hsep & Hnlr1 & Hnlr2 & Hrelyr2 & Hguarr2 & Hr2 & Hlte & Hf).
+      exists r1, r2, Hsep, Hnlr1, Hnlr2, Hrelyr2, Hguarr2.
+      split. rewrite <- HQ. auto.
+      split. apply Hlte.
+      intros p Hp Hsep'. rewrite <- HP in Hp.
+      specialize (Hf _ Hp Hsep'). setoid_rewrite <- HQ. auto.
+    }
   Qed.
 
   Lemma lfinished_perm_Perms l p P :
