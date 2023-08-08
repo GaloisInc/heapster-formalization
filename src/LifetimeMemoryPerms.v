@@ -1362,17 +1362,17 @@ Section Perms.
     - rewrite sep_conj_perm_commut. apply sep_conj_perm_bottom.
   Qed.
 
+  Lemma sep_step_when_write_perm l p v v' :
+    sep_step (when (Ss := Ss) l (write_perm p v)) (when l (write_perm p v')).
+  Proof.
+    repeat intro. split; apply H; auto.
+  Qed.
+
   Lemma Lifetime_Store xi yi l x P Q :
-    xi :: when_ptr l (W, 0, eqp x) ▷ tt *
-    lowned_Perms l
-      (xi :: when_ptr l (R, 0, eqp x) ▷ tt * P)
-      (xi :: ptr(W, 0, eqp x) ▷ tt * Q) ⊢
+    xi :: when_ptr l (W, 0, eqp x) ▷ tt * lowned_Perms l P Q ⊢
     store xi yi ⤳
     Ret tt :::
-    trueP ∅ (xi :: when_ptr l (W, 0, eqp yi) ▷ tt *
-    lowned_Perms l
-      (xi :: when_ptr l (R, 0, eqp yi) ▷ tt * P)
-      (xi :: ptr(W, 0, eqp yi) ▷ tt * Q)).
+    trueP ∅ (xi :: when_ptr l (W, 0, eqp yi) ▷ tt * lowned_Perms l P Q).
   Proof.
     intros p' si ss H Hpre.
     destruct H as (pwhen & powned & Hpwhen & Hpowned & Hsep & Hlte).
@@ -1381,9 +1381,6 @@ Section Perms.
     destruct Hwrite as (pw & peq & Hwritelte & Heq & Hsep' & Hlte').
     cbn in Heq. subst.
     destruct Hpowned as (r1 & r2 & Hr1 & Hnlr1 & Hnlr2 & Hrelyr2 & Hguarr2 & Hr2 & Hlte'' & Hf).
-    destruct Hr2 as (pwrite' & q & (? & (v' & ?) & Hpwrite) & Hq & Hsep'' & Hlte'''); subst.
-    destruct Hpwrite as (pwrite & peq' & Hpwrite & Heq & Hsep''' & Hlte'''').
-    cbn in Heq. subst. rename v' into v.
     rewrite Nat.add_0_r in *.
     assert (Hcurrent : statusOf l (lget si) = Some current).
     {
@@ -1399,9 +1396,8 @@ Section Perms.
     }
     eapply (read_success_write _ _ _ yi) in Hread.
     destruct Hread as (c' & Hwrite).
-    assert (Hguar : guar p' (si, ss) ((lput si c'), ss)).
+    assert (Hguar : guar pwhen (si, ss) ((lput si c'), ss)).
     {
-      apply Hlte. constructor 1. left.
       apply Hlte'. constructor 1. left. apply Hwritelte. cbn. right.
       split; [| split]; auto.
       repeat rewrite lGetPut.
@@ -1413,63 +1409,49 @@ Section Perms.
     }
     pstep. unfold store.
     rewritebisim @bind_trigger.
-    econstructor; eauto.
+    econstructor; auto.
     3: {
-      rewrite Hwrite. constructor; eauto.
-      2: { exists bottom_perm.
-           eexists (when l (write_perm (b, o) yi) ** (r1 ** owned l ((write_perm (b, o) yi) ** q) _)).
-           split; [| split; [| split]]; auto.
-           - cbn; auto.
-           - do 2 eexists. split; [| split; [| split]].
-             4: reflexivity.
-             + eexists. split. eexists. reflexivity.
-               cbn. do 2 eexists. split; [| split; [| split]]; try reflexivity.
-               apply separate_bottom.
-               rewrite Nat.add_0_r.
-               apply sep_conj_perm_bottom.
-             + eexists r1, (write_perm (b, o) yi ** q). eexists.
-               apply Hr1. exists Hnlr1.
-               eexists. eexists. admit. eexists. admit. (* need that q satisfies the rely and guar invs *)
-               split; [| split].
-               2: reflexivity.
-               * do 2 eexists. split; [| split; [| split]]. 4: reflexivity.
-                 cbn. eexists. split. eexists. reflexivity. cbn.
-                 do 2 eexists. split; [| split; [| split]]; try reflexivity.
-                 apply separate_bottom.
-                 rewrite Nat.add_0_r.
-                 apply sep_conj_perm_bottom.
-                 auto.
-                 eapply sep_step_write_perm; eauto.
-                 symmetry. eapply separate_antimonotone.
-                 2: apply Hpwrite.
-                 eapply separate_antimonotone.
-                 2: apply lte_l_sep_conj_perm.
-                 eapply separate_antimonotone. 2: eauto.
-                 symmetry. auto.
-               * intros. exists (write_perm (b, o) yi ** q). split; [| split]. 2: reflexivity.
-                 apply sep_conj_Perms_perm; auto.
-                 eexists. split. eexists. reflexivity.
-                 rewrite Nat.add_0_r.
-                 do 2 eexists. split; [| split; [| split]]; cbn; try reflexivity.
-                 apply separate_bottom. apply sep_conj_perm_bottom.
-                 admit.
-                 intros.
-             (* need to use Hf here, but cannot get the sep_step result *)
-                 admit.
-             + admit.
-           - admit.
-           - reflexivity.
+      assert (when l (write_perm (b, o) yi) ⊥ powned).
+      {
+        eapply sep_step_when_write_perm.
+        symmetry. eapply separate_antimonotone.
+        2: apply Hwritelte.
+        eapply separate_antimonotone.
+        2: { etransitivity. apply lte_l_sep_conj_perm. eauto. }
+        symmetry. eauto.
       }
-      admit.
+      rewrite Hwrite. constructor; auto.
+      2: {
+        exists bottom_perm, (when l (write_perm (b, o) yi) ** powned).
+        split; [| split; [| split]].
+        - cbn. auto.
+        - apply sep_conj_Perms_perm; auto.
+          + eexists. split. eexists. reflexivity.
+            cbn. eexists. exists bottom_perm.
+            split; [| split; [| split]]; eauto; try reflexivity.
+            apply separate_bottom.
+            rewrite sep_conj_perm_bottom. rewrite Nat.add_0_r. reflexivity.
+          + exists r1, r2. exists Hr1, Hnlr1, Hnlr2, Hrelyr2, Hguarr2.
+            split; [| split]; auto.
+        - symmetry. apply separate_bottom.
+        - rewrite sep_conj_perm_commut.
+          rewrite sep_conj_perm_bottom. reflexivity.
+      }
+      split; [| split]; auto.
+      - cbn. intros. symmetry. eapply write_success_read_eq; rewrite lGetPut; eauto.
+      - respects.
+        2: { apply Hlte. apply Hpre. }
+        apply Hsep. apply Hguar.
     }
-    - rewrite Hwrite. auto.
-    - eapply sep_step_lte; eauto.
-      etransitivity.
-      + eapply sep_step_lte; [| reflexivity]. apply lte_l_sep_conj_perm.
-      + cbn in *. eapply sep_step_lte; eauto. intros ? []. constructor; auto.
-  Abort.
+    - rewrite Hwrite. apply Hlte. constructor. left. apply Hguar.
+    - eapply sep_step_lte; eauto. apply sep_step_sep_conj_l; auto.
+      cbn in *. eapply sep_step_lte; eauto.
+      eapply sep_step_lte. apply lte_l_sep_conj_perm.
+      eapply sep_step_lte; eauto.
+      intros ? []. constructor; auto.
+  Qed.
 
-  Lemma weaken b o o' l A (T : VPermType A) xs :
+  Lemma weaken_when_ptr b o o' l A (T : VPermType A) xs :
     VPtr (b, o) :: when_ptr l (W, o', T) ▷ xs ⊨
     VPtr (b, o) :: when_ptr l (R, o', T) ▷ xs.
   Proof.
@@ -1554,7 +1536,7 @@ Section Perms.
     }
     2: {
       apply sep_conj_Perms_monotone. 2: reflexivity.
-      apply weaken.
+      apply weaken_when_ptr.
     }
     rewrite (sep_conj_Perms_commut _ (lowned_Perms' _ _ _)).
     rewrite sep_conj_Perms_assoc.
@@ -1568,7 +1550,7 @@ Section Perms.
     }
     2: {
       apply sep_conj_Perms_monotone. reflexivity.
-      apply weaken.
+      apply weaken_when_ptr.
     }
     rewrite sep_conj_Perms_commut.
     rewrite partial'.
@@ -1579,82 +1561,4 @@ Section Perms.
       constructor. apply nonLifetime_IsNat.
       constructor.
   Qed.
-
-  Lemma ex3_typing b o xs :
-    typing
-      (lifetime_Perms * (VPtr (b, o)) :: ptr (W, 0, IsNat Si Ss) ▷ xs)
-      (fun l _ => lifetime_Perms * (VPtr (b, o)) :: finished_ptr l (W, 0, IsNat Si Ss) ▷ xs)
-      (l <- beginLifetime ;; Ret tt ;; endLifetime l)
-      (Ret tt ;; Ret tt ;; Ret tt).
-  Proof.
-    eapply typing_bind.
-    { apply typing_frame. apply typing_begin. }
-    intros. unfold id.
-    rewrite sep_conj_Perms_commut.
-    rewrite sep_conj_Perms_assoc.
-    setoid_rewrite (sep_conj_Perms_commut lifetime_Perms).
-    apply typing_frame.
-
-    eapply typing_bind with (Q := (fun _ _ => (VPtr (b, o) :: when_ptr r1 (W, 0, IsNat Si Ss) ▷ xs *
-     lowned_Perms r1 (VPtr (b, o) :: when_ptr r1 (R, 0, trueP) ▷ tt * bottom_Perms)
-       (VPtr (b, o) :: ptr (W, 0, trueP) ▷ tt * bottom_Perms)))).
-    {
-      eapply typing_lte with (Q := fun _ _ => VPtr (b, o) :: when_ptr r1 (W, 0, IsNat Si Ss) ▷ xs *
-   lowned_Perms r1 (VPtr (b, o) :: when_ptr r1 (R, 0, trueP) ▷ tt * bottom_Perms)
-     (VPtr (b, o) :: ptr (W, 0, trueP) ▷ tt * bottom_Perms)).
-      2: {
-        apply split_Perms_T.
-        repeat intro.
-        cbn in *. subst. exists bottom_perm.
-        split; [| split; [| split; [| split]]]; auto.
-        apply bottom_perm_is_bottom.
-        apply nonLifetime_bottom.
-        apply guar_inv_bottom.
-        apply pre_inv_bottom.
-      }
-
-      apply typing_ret. reflexivity.
-      reflexivity.
-    }
-    intros _ _. apply typing_end_ptr.
-
-    eapply typing_bind with (Q:=(fun _ _ : unit =>
-                                   VPtr (b, o) :: ptr (W, 1, IsNat Si Ss) ▷ xs2 *
-                                     lowned_Perms r1 bottom_Perms bottom_Perms *
-                                     VPtr (b, o) :: ptr (W, 0, IsNat Si Ss) ▷ xs1)).
-    { rewrite <- sep_conj_Perms_assoc.
-      rewrite (sep_conj_Perms_commut _ (lowned_Perms _ _ _)).
-      rewrite sep_conj_Perms_commut.
-      apply typing_frame.
-      eapply typing_lte.
-      2: { rewrite sep_conj_Perms_commut. eapply split_Perms_T. admit. }
-      apply typing_ret.
-      reflexivity.
-    }
-    { rewrite
-      }
-
-    eapply typing_lte with (Q:=(fun _ _ : unit =>
-                                  VPtr (b, o) :: ptr (W, 0, IsNat Si Ss) ▷ xs1 *
-                                    VPtr (b, o) :: ptr (W, 1, IsNat Si Ss) ▷ xs2)).
-    3: reflexivity.
-    2: {
-      rewrite <- sep_conj_Perms_assoc.
-      etransitivity.
-      apply lte_r_sep_conj_Perms.
-      apply split_Perms_T.
-      admit.
-    }
-    eapply typing_lte with (Q:=(fun _ _ : unit =>
-                                  VPtr (b, o) :: ptr (W, 0, IsNat Si Ss) ▷ xs1 *
-                                    VPtr (b, o) :: ptr (W, 1, IsNat Si Ss) ▷ xs2)).
-    3: reflexivity.
-    2: {
-      apply split_Perms_T.
-      admit.
-    }
-
-
-  Qed.
-
 End Perms.
