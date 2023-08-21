@@ -644,6 +644,23 @@ Section LifetimePerms.
       apply H; auto.
   Qed.
 
+  Lemma lfinished_sep_step l p q :
+    sep_step p q -> sep_step (lfinished l p) (lfinished l q).
+  Proof.
+    split.
+    - intros [] [] ?.
+      apply H0 in H1.
+      cbn in *.
+      destruct H1. split; auto.
+      intros. eapply sep_step_rely; eauto.
+    - intros [] [] ?.
+      destruct H1. rewrite H1. reflexivity.
+      destruct H1 as (? & ? & ?).
+      apply H0. right.
+      split; [| split]; auto.
+      eapply sep_step_guar; eauto.
+  Qed.
+
   Lemma lfinished_separate l p q :
     p ⊥ q -> lfinished l p ⊥ lfinished l q.
   Proof.
@@ -1054,7 +1071,7 @@ Section LifetimePerms.
       + rewrite app_length. rewrite Hpre. reflexivity.
       + apply owned_lifetime_sep. symmetry. apply separate_bottom. lia.
     - apply sep_conj_Perms_perm.
-      + exists bottom_perm, bottom_perm. eexists.
+      + cbn. exists bottom_perm, bottom_perm. eexists.
         { intros. symmetry. apply separate_bottom. }
         exists nonLifetime_bottom, nonLifetime_bottom, rely_inv_bottom, guar_inv_bottom.
         split; [| split].
@@ -1069,7 +1086,7 @@ Section LifetimePerms.
 
   Lemma typing_end l P Q :
     typing (P * (lowned_Perms l P Q))
-           (fun l _ => lfinished_Perms l Q)
+           (fun _ _ => lfinished_Perms l Q)
            (endLifetime l)
            (Ret tt).
   Proof.
