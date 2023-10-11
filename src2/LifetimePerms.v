@@ -489,6 +489,39 @@ Section LifetimePerms.
   Program Definition lowned_Perms' l ls Hsub (P Q : @Perms2 (Si * Ss)) : Perms2 :=
     {|
       in_Perms2 := fun spred x =>
+                     exists c Hspred r1 r2 Hnlr2,
+                       r2 ∈2 Q /\
+                         hlte_perm2 (Si * Ss) spred (interp_LifetimeClauses c) Hspred
+                           (r1 ** owned c l ls (Hsub c) r2 Hnlr2) x /\
+                         forall (p : @perm {x : Si * Ss | interp_LifetimeClauses c x}),
+                           p ∈2 P ->
+                           exists (q : @perm {x : Si * Ss | interp_LifetimeClauses c x}),
+                             q ∈2 Q /\
+                               sep_step _ (interp_LifetimeClauses c) (interp_LifetimeClauses c) (fun _ H => H) r2 q /\
+                               (forall c1 c2 (Hc : interp_LifetimeClauses c (c1, c2)),
+                                   pre p ((lput c1 (replace_list_index (lget c1) l current)), c2) ->
+                                   pre r1 ((lput c1 (replace_list_index (lget c1) l current)), c2) ->
+                                   pre q ((lput c1 (replace_list_index (lget c1) l finished)), c2));
+    |}.
+  Next Obligation.
+    cbn.
+  Admitted.
+  Next Obligation.
+  Admitted.
+  Next Obligation.
+  Admitted.
+  Next Obligation.
+    rename H into c, H1 into Hspred'.
+    exists c. eexists. Unshelve.
+    2: { intros. apply Hspred'. apply Hspred. apply H. }
+    exists H2, H3, H4. split; auto. split; auto.
+    - eapply hlte_perm2_transitive; eauto.
+    - intros. (* eapply H7. apply H7. *)
+  Admitted.
+
+  Program Definition lowned_Perms'' l ls Hsub (P Q : @Perms2 (Si * Ss)) : Perms2 :=
+    {|
+      in_Perms2 := fun spred x =>
                      exists c Hspred,
                      forall (p : @perm {x : Si * Ss | interp_LifetimeClauses c x}),
                        p ∈2 P ->
@@ -577,8 +610,8 @@ Section LifetimePerms.
   Qed.
 
   Lemma obvious l ls Hsub P Q :
-    entails (lowned_Perms' l ls Hsub bottom_Perms2 Q)
-            (lowned_Perms' l ls Hsub P Q).
+    entails (lowned_Perms'' l ls Hsub bottom_Perms2 Q)
+            (lowned_Perms'' l ls Hsub P Q).
   Proof.
     intros c p' H. cbn in H.
     destruct H as (c' & Hspred & ?).
@@ -594,15 +627,22 @@ Section LifetimePerms.
       (Ret tt).
   Proof.
     intros c p' c1 c2 Hc (p & lowned' & Hp & Hl & Hlte) Hpre.
+    cbn in Hl.
     destruct Hl as (c' & Hspred & Hl).
-    specialize (Hl (restrict _ _ _ Hspred p) Hp). destruct Hl as (Hspred & q & Hq' & Hq & Hhlte & Hpre').
+    (* specialize (Hl (restrict _ _ _ Hspred p) Hp). destruct Hl as (Hspred & q & Hq' & Hq & Hhlte & Hpre'). *)
+    destruct Hl as (r1 & r2 & Hnlr2 & Hr2 & Hhltge & Hf).
     unfold endLifetime. unfold id.
     rewritebisim @bind_trigger.
     pstep. econstructor; eauto; try reflexivity. cbn. reflexivity.
 
     pose proof Hpre as Hpre''.
-    apply Hlte in Hpre. destruct Hpre as (_ & ? & _). apply Hhlte in H. rewrite H.
+    apply Hlte in Hpre. destruct Hpre as (_ & ? & _). apply Hhlte in H.
+    cbn in H. destruct H as (_ & ? & _). unfold lifetime in H. setoid_rewrite H.
+
     rewritebisim @bind_trigger.
+    (* specialize (Hf (restrict _ _ _ Hspred p)). *)
+
+
     econstructor; unfold id. eauto.
     cbn in *. apply Hlte. constructor 1. right.
     apply Hhlte. cbn. right.
