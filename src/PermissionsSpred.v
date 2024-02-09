@@ -45,7 +45,7 @@ Section Permissions.
       rely_inc : forall x y, spred p x -> rely q x y -> rely p x y;
       guar_inc : forall x y, spred p x -> guar p x y -> guar q x y;
       pre_inc : forall x, pre q x -> pre p x;
-      spred_inc : forall x, spred p x -> spred q x;
+      spred_inc : forall x, spred p x -> spred q x; (* smaller perm = bigger spred? *)
     }.
 
   (* begin hide *)
@@ -482,7 +482,7 @@ Section Permissions.
       rely := fun x y => rely p x y /\ rely q x y;
       guar := fun x y => clos_refl_trans _ (fun x y => (guar p x y /\ spred q y) \/
                                               (guar q x y /\ spred p y)) x y;
-      pre := fun x => pre p x /\ pre q x /\ p ⊥ q;
+      pre := fun x => pre p x /\ pre q x /\ p ⊥ q; (* sep in spred? *)
       spred := fun x => spred p x /\ spred q x;
     |}.
   Next Obligation.
@@ -623,15 +623,15 @@ Section Permissions.
     repeat intro. split; apply sep_conj_perm_monotone; auto.
   Qed.
 
-  (* Lemma sep_conj_perm_bottom' : forall p, p ** bottom_perm <= p. *)
-  (* Proof. *)
-  (*   constructor; intros. *)
-  (*   - split; [| split]; simpl; intuition. apply separate_bottom. *)
-  (*   - repeat split; auto. *)
-  (*   - induction H. *)
-  (*     + destruct H; auto. inversion H. reflexivity. *)
-  (*     + etransitivity; eauto. *)
-  (* Qed. *)
+  Lemma sep_conj_perm_bottom' : forall p, p ** bottom_perm <= p.
+  Proof.
+    constructor; intros.
+    - split; [| split]; simpl; intuition.
+    - repeat split; auto.
+    - induction H.
+      + destruct H; auto. inversion H. reflexivity.
+      + etransitivity; eauto.
+  Qed.
 
   (* Lemma sep_conj_perm_bottom : forall p, p ** bottom_perm ≡≡ p. *)
   (* Proof. *)

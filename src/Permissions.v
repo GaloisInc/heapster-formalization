@@ -987,7 +987,7 @@ Section Permissions.
   (* Lemma μ_least {A} : forall (F : (A -> Perms) -> A -> Perms) Hmon X, *)
   (*     F X -≡- X -> *)
   (*     μ F Hmon -⊑- X. *)
-  (* Proof. *)
+v  (* Proof. *)
   (*   intros. unfold μ. apply lte_meet_A_Perms. apply H. *)
   (* Qed. *)
 
