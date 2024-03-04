@@ -46,17 +46,20 @@ Section step.
   Qed.
 
   (** * Preserves separability *)
+  Definition inv_strengthen (p q : perm) : Prop :=
+    forall x, inv q x -> inv p x.
   Definition sep_step (p q : perm) : Prop :=
+    inv_strengthen p q /\
     forall r, p ⊥ r -> q ⊥ r.
 
   Global Instance sep_step_refl : Reflexive sep_step.
   Proof.
-    repeat intro; auto.
+    split; repeat intro; auto.
   Qed.
 
   Global Instance sep_step_trans : Transitive sep_step.
   Proof.
-    repeat intro. auto.
+    repeat intro. destruct H, H0. split; auto. repeat intro; auto.
   Qed.
 
   Program Definition bottom_perm : perm :=
@@ -64,7 +67,7 @@ Section step.
       pre x := True;
       rely x y := True;
       guar := eq;
-      inv x := True;
+      inv x := False;
     |}.
   Next Obligation.
     constructor; repeat intro; subst; auto.
@@ -72,7 +75,9 @@ Section step.
 
   Lemma bottom_perm_is_bottom : forall p, sep_step p bottom_perm.
   Proof.
-    split; intros; cbn in *; subst; auto. reflexivity.
+    split.
+    - repeat intro. inversion H.
+    - split; intros; cbn in *; subst; auto; reflexivity.
   Qed.
 
   Lemma separate_bottom : forall p, p ⊥ bottom_perm.
@@ -94,9 +99,11 @@ Section step.
 
   Lemma top_perm_is_top : forall p, sep_step top_perm p.
   Proof.
-    split; intros; cbn in *.
-    - apply H in H2; cbn; auto. cbn in H2. subst. reflexivity.
-    - apply H; cbn; auto.
+    split.
+    - repeat intro. cbn. auto.
+    - split; intros; cbn in *.
+      + apply H in H2; cbn; auto. cbn in H2. subst. reflexivity.
+      + apply H; cbn; auto.
   Qed.
 
   Program Definition sym_guar_perm (p : perm) : perm :=
@@ -158,28 +165,40 @@ Section step.
   (*   destruct H1; auto. *)
   (* Qed. *)
 
+  (* Invariant gets smaller *)
+  Lemma sep_step_inv : forall p q x,
+      sep_step p q ->
+      inv q x ->
+      inv p x.
+  Proof.
+    intros. apply H; auto.
+  Qed.
+
 
   (* guar gets smaller *)
-  Lemma sep_step_guar : forall p q x y, sep_step p q ->
-                                  (* inv p x -> *)
-                                  inv q x ->
-                                  guar q x y ->
-                                  guar p x y.
+  Lemma sep_step_guar : forall p q x y,
+      sep_step p q ->
+      (* inv p x -> *)
+      inv q x ->
+      guar q x y ->
+      guar p x y.
   Proof.
-    intros. specialize (H (sym_guar_perm' p) (separate_sym_guar' p)).
+    intros. destruct H as (? & H). specialize (H (sym_guar_perm' p) (separate_sym_guar' p)).
     apply H; cbn; auto.
   Qed.
 
   (* rely gets bigger *)
-  Lemma sep_step_rely : forall p q x y, sep_step p q ->
-                                   inv q x ->
-                                   (* inv p x -> *)
-                                   rely p x y ->
-                                   rely q x y.
+  Lemma sep_step_rely : forall p q x y,
+      sep_step p q ->
+      inv q x ->
+      (* inv p x -> *)
+      rely p x y ->
+      rely q x y.
   Proof.
-    intros. specialize (H (sym_guar_perm' p) (separate_sym_guar' _)).
+    intros. destruct H as (? & H). specialize (H (sym_guar_perm' p) (separate_sym_guar' _)).
     apply H; cbn; auto.
   Qed.
+
 (*
   Program Definition sym_guar_inv_perm (p : perm) : perm :=
     {|
@@ -303,6 +322,11 @@ Section step.
   Lemma sep_conj_perm_commut p q :
     sep_step (p ** q) (q ** p).
   Proof.
+    split.
+    {
+      repeat intro. cbn in *. destruct H as (? & ? & ?). split; [| split]; auto.
+      symmetry. auto.
+    }
     split; repeat intro.
     - destruct H1 as (? & ? & ?). apply H in H2; auto.
       2: { split; [| split]; auto. symmetry. auto. }
@@ -316,6 +340,43 @@ Section step.
       + etransitivity; eauto.
   Qed.
 
+  Lemma separate_sep_conj_perm_l: forall p q r, p ⊥ q ** r -> p ⊥ q.
+  Proof.
+    intros. destruct H. constructor; intros.
+    - apply sep_l0; auto. admit. constructor. left. auto.
+    - apply sep_r0; auto. split; [| split]; auto.
+  Abort.
+
+  Lemma sep_step_frame p q r (Hsep : p ⊥ r) :
+    sep_step p q -> sep_step (p ** r) (q ** r).
+  Proof.
+    intros. split.
+    - repeat intro. destruct H0 as (? & ? & ?). split; [| split]; auto.
+      apply H; auto.
+    - intros. split. cbn.
+      + intros. split.
+        * apply H0 in H3; auto.
+          eapply sep_step_rely; eauto. apply H2. apply H3.
+          destruct H2 as (? & ? & ?). split; [| split]; auto.
+          apply H; auto.
+        * apply H0; auto. destruct H2 as (? & ? & ?). split; [| split]; auto.
+          apply H; auto.
+      + intros. apply H0; auto.
+        * destruct H1 as (? & ? & ?). split; [| split]; auto.
+          apply H; auto.
+        * destruct H1 as (? & ? & ?).
+          induction H3.
+          -- destruct H3; auto. constructor. left. eapply sep_step_guar; eauto.
+             constructor. right. auto.
+          -- etransitivity; eauto.
+             pose proof (inv_clos_trans _ _ _ _ H1 H4 H5 H3_).
+             destruct H3.
+             apply IHclos_trans2; auto.
+             destruct H0.
+             eapply inv_rely; eauto. apply sep_r0; auto. split; auto.
+             apply H. auto.
+  Qed.
+
   Lemma clos_trans_guar_eq p x y :
     clos_trans config (fun x y : config => x = y \/ guar p x y) x y ->
     guar p x y.
@@ -327,14 +388,23 @@ Section step.
 
   Lemma sep_conj_perm_bottom : forall p, sep_step (p ** bottom_perm) p.
   Proof.
-    split; intros; cbn in *; subst; auto.
-    - apply H in H2; auto. destruct H2; auto.
-      split; [| split]; cbn; auto. apply separate_bottom.
-    - apply H; auto. split; [| split]; cbn; auto. apply separate_bottom.
-      constructor. left. auto.
-  Qed.
+  Abort.
+  (*   split. *)
+  (*   { *)
+  (*     repeat intro. cbn in *. admit. *)
+  (*   } *)
+  (*   split; intros; cbn in *; subst; auto. *)
+  (*   - apply H in H2; auto. destruct H2; auto. *)
+  (*     split; [| split]; cbn; auto. apply separate_bottom. *)
+  (*   - apply H; auto. split; [| split]; cbn; auto. apply separate_bottom. *)
+  (*     constructor. left. auto. *)
+  (* Qed. *)
   Lemma sep_conj_perm_bottom' : forall p, sep_step p (p ** bottom_perm).
   Proof.
+    split.
+    {
+      repeat intro. cbn in *. destruct H as (_ & ? & _). inversion H.
+    }
     split; intros; cbn in *; subst; auto.
     - split; auto. apply H; auto. apply H1.
     - apply H; auto. apply H0.
