@@ -1296,7 +1296,67 @@ Section LifetimePerms.
       apply Hpq; auto.
       destruct Hpo. specialize (sep_r _ _ H). cbn in sep_r. apply sep_r; auto.
   Qed.
-(*
+
+
+  Section MemoryPerms.
+    From Heapster Require Import
+      PermType
+      PermTypeProofs
+      MemoryPerms.
+
+    Context `{Hlens': Lens Si memory}.
+
+    Lemma Load' l xi yi xs rw R S :
+      lowned_Perms l R S * when_Perms l (xi :: ptr (rw, 0, eqp yi) ▷ xs) ⊢
+        load xi ⤳
+        (Ret tt : itree (sceE Ss) unit) :::
+        eqp yi ∅ (lowned_Perms l R S * when_Perms l (xi :: ptr (rw, 0, eqp yi) ▷ xs)).
+    Proof.
+      repeat intro. pstep. unfold load. rewritebisim @bind_trigger.
+      econstructor; eauto; try reflexivity.
+      destruct H as (powned & pwhen & Howned & Hwhen & Hsep & Hlte).
+      destruct Hwhen as (? & (pptr' & Hptr' & ?) & Hwhen); subst.
+      destruct xi as [? | [b o]]; try contradiction.
+      destruct Hptr' as (? & (v & ?) & ?); subst.
+      destruct H1 as (pptr & peq & Hpptr & Hpeq & Hsep' & Hlte').
+      cbn in Hpptr, Hpeq, Hwhen. subst.
+
+      destruct Howned as (r1 & r2 & Hsepr1 & Hnlr1 & Hnlr2 & Hrelyr2 & Hguarr2 & Hr2 & Hlte'' & Hf).
+
+      assert (read (lget c1) (b, o) = Some v).
+      {
+        apply Hlte in H0. cbn in H0. destruct H0 as (Hpreowned & Hprewhen & _).
+        apply Hwhen in Hprewhen. cbn in Hprewhen.
+        apply Hlte'' in Hpreowned. destruct Hpreowned as (_ & Hpreowned & _).
+        cbn in Hpreowned. apply Hlte' in Hprewhen; auto.
+        rewrite Nat.add_0_r in Hpptr.
+        destruct Hprewhen. apply Hpptr in H.
+        destruct rw; auto.
+      }
+      rewrite H. constructor; auto.
+      (* TODO: these exists are kind of weird *)
+      exists bottom_perm, ((r1 ** owned l r2 Hnlr2) ** when l pptr').
+      split; [| split; [| split]]; auto.
+      - cbn. auto.
+      - apply sep_conj_Perms_perm; auto.
+        + exists r1, r2, Hsepr1, Hnlr1, Hnlr2, Hrelyr2, Hguarr2.
+          split; [| split]; auto. reflexivity.
+        + apply when_perm_Perms; auto.
+          cbn. eexists. split; eauto.
+          cbn. exists pptr, bottom_perm. split; [| split; [| split]]; eauto.
+          apply separate_bottom.
+          rewrite sep_conj_perm_bottom.
+          etransitivity; eauto.
+          apply lte_l_sep_conj_perm.
+        + eapply separate_antimonotone; eauto. symmetry.
+          eapply separate_antimonotone; eauto. symmetry. auto.
+      - symmetry. apply separate_bottom.
+      - rewrite sep_conj_perm_commut. rewrite sep_conj_perm_bottom.
+        etransitivity; eauto.
+        apply sep_conj_perm_monotone; auto.
+    Qed.
+
+  (*
   Lemma typing_when R1 R2 l P Q R S t s :
     typing
       P Q t s ->
@@ -1306,7 +1366,7 @@ Section LifetimePerms.
   Proof.
     repeat intro.
     destruct H0 as (? & ? & ? & ? & ? & ?).
-    destruct H0 as (? & (? & ? & ? & ?) & ?). subst.
+    destruct H0 as (? & (? & ? & ?) & ?). subst.
     cbn in *.
     red in H.
     apply H4 in H1. destruct H1 as (? & ? & ?). apply H6 in H1. cbn in H1.
@@ -1317,8 +1377,8 @@ Section LifetimePerms.
     red in H.
 
   Qed.
- *)
-
+   *)
+  End MemoryPerms.
 
 
 End LifetimePerms.

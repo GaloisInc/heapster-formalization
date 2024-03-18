@@ -851,7 +851,8 @@ Section MemoryPerms.
     }
     rewrite H1. constructor; auto.
     (* TODO: these exists are kind of weird *)
-    cbn. exists bottom_perm, x. split; [| split; [| split]]; auto.
+    exists bottom_perm, x. split; [| split; [| split]]; auto.
+    - cbn. auto.
     - cbn. eexists. split; eauto.
       cbn. exists x, bottom_perm. split; [| split; [| split]]; eauto.
       apply separate_bottom.

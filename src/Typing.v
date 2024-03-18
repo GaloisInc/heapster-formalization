@@ -189,6 +189,30 @@ Section bisim.
       + destruct (H2 b2). eexists. right. eapply CIH; eauto. pclearbot. apply H3.
   Qed.
 
+  (* fails because smaller permission has a weaker precondition *)
+  Lemma sbuter_lte' {R1 R2} p p' Q Q' (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) c1 c2 :
+    p <= p' ->
+    pre p' (c1, c2) -> (* what if we add this *)
+    sbuter p Q t c1 s c2 -> (forall r1 r2, Q r1 r2 ⊨ Q' r1 r2) -> sbuter p' Q' t c1 s c2.
+  Proof.
+    revert p p' Q Q' t s c1 c2. pcofix CIH. intros p p' Q Q' t s c1 c2 Hp' Hpre Htyping Hlte.
+    punfold Htyping. pstep.
+    revert Hp' Hpre.
+    induction Htyping; pclearbot; intros; try solve [econstructor; eauto].
+    - constructor; eauto. Fail apply Hp'. eapply Perms_upwards_closed; eauto. apply Hlte. auto.
+    - econstructor 6; eauto.
+      2: {
+        eapply IHHtyping; auto.
+        (* need commuting square *)
+  Abort.
+  (*   - econstructor 4; auto. *)
+  (*     + apply Hp'; auto. *)
+  (*     + apply Hp'; auto. *)
+  (*   - econstructor 11; eauto; intros. *)
+  (*     + destruct (H1 b1). eexists. right. eapply CIH; eauto. pclearbot. apply H3. *)
+  (*     + destruct (H2 b2). eexists. right. eapply CIH; eauto. pclearbot. apply H3. *)
+  (* Qed. *)
+
   (** * Typing *)
   Definition typing {R1 R2} P Q (t : itree (sceE config) R1) (s : itree (sceE specConfig) R2) :=
     forall p c1 c2, p ∈ P -> pre p (c1, c2) -> sbuter p Q t c1 s c2.
